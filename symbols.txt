@@ -1,0 +1,16 @@
+# Swing Trading Watchlist (one ticker per line, or comma-separated)
+SNDK
+NVDA
+AAPL
+AMD
+MSFT
+TSLA
+QQQ
+META
+IONQ
+MU
+SMHC
+KXIAY
+LITE
+QLD
+SOXL

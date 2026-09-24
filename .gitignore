@@ -1,0 +1,18 @@
+# Git Ignore for Swing Trading Quantitative System
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# Local packages and large binaries
+R_libs/
+.DS_Store
+
+# Temporary log files (keep folder, ignore daily run logs)
+logs/scan_*.log
+logs/signal_*.log
+logs/launchd_*.log
+
+# Keep sample data, ignore large transient downloads
+data/*.rds
+!data/data_sndk.rds
