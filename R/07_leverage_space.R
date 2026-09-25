@@ -69,10 +69,10 @@ build_joint_scenario_matrix <- function(symbols, lookback_days = 120) {
 #'
 #' @param events Numeric matrix of joint return scenarios (T rows, K cols).
 #' @param max_leverage Maximum aggregate portfolio leverage allowed (default: 1.0 = 100% equity).
-#' @param safety_factor Fraction of optimal f to apply for downside protection (default: 0.35).
+#' @param safety_factor Fraction of optimal f to apply for downside protection (default: 0.50).
 #' @return A list containing optimal_f, safe_f, ghpr, max_losses, weights, and diagnostics.
 #' @export
-vince_optimal_f <- function(events, max_leverage = 1.0, safety_factor = 0.35) {
+vince_optimal_f <- function(events, max_leverage = 1.0, safety_factor = 0.50) {
   events <- as.matrix(events)
   T_obs  <- nrow(events)
   K      <- ncol(events)

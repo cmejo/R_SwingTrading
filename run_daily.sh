@@ -17,8 +17,8 @@ mkdir -p "$PROJECT_DIR/logs" "$PROJECT_DIR/output"
 
 echo "[$(date)] Reading watchlist from $PROJECT_DIR/symbols.txt..." >> "$LOG_FILE"
 
-# 1. Execute Daily Multi-Asset Scanner (Max Positions: 5)
-/opt/homebrew/bin/Rscript daily_signal.R --symbols_file="$PROJECT_DIR/symbols.txt" --capital=10000 --max_pos=5 2>&1 | tee -a "$LOG_FILE" > "$LATEST_TICKET"
+# 1. Execute Daily Multi-Asset Scanner (Max Positions: 5 | Vince Safe f: 0.50)
+/opt/homebrew/bin/Rscript daily_signal.R --symbols_file="$PROJECT_DIR/symbols.txt" --capital=10000 --max_pos=5 --sizing_mode=vince --safety_factor=0.50 2>&1 | tee -a "$LOG_FILE" > "$LATEST_TICKET"
 
 # 2. Automated Monthly Strategy Evaluation (Runs every Friday or if evaluation file is missing)
 DAY_OF_WEEK=$(date +%u) # 5 = Friday

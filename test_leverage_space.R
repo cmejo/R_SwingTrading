@@ -25,7 +25,7 @@ for (sym in colnames(events)) {
 }
 
 cat("\n2. Solving Optimal f Vector (L-BFGS-B Optimization)...\n")
-vince_out <- vince_optimal_f(events, max_leverage = 1.0, safety_factor = 0.35)
+vince_out <- vince_optimal_f(events, max_leverage = 1.0, safety_factor = 0.50)
 
 cat(sprintf("   -> Convergence Code: %d (0 = Successful Convergence)\n", vince_out$convergence))
 cat(sprintf("   -> Portfolio Geometric Holding Period Return (GHPR): %.4f (Expected Growth: %+.2f%% / day)\n\n",
@@ -36,7 +36,7 @@ f_table <- data.frame(
   Symbol = colnames(events),
   Max_Loss = sprintf("%.2f%%", abs(vince_out$max_losses) * 100),
   Optimal_f = sprintf("%.4f", vince_out$optimal_f),
-  Safe_f_35Pct = sprintf("%.4f", vince_out$safe_f),
+  Safe_f_50Pct = sprintf("%.4f", vince_out$safe_f),
   Portfolio_Weight = sprintf("%.1f%%", vince_out$weights * 100)
 )
 print(f_table, row.names = FALSE)

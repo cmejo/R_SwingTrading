@@ -38,7 +38,7 @@ TRAIN_WINDOW   <- 500   # Rolling historical training window (bars) to prevent r
 MACRO_GATE     <- TRUE  # Top-down market regime filter (QQQ)
 EARNINGS_DAYS  <- 7     # Disqualify stocks reporting earnings within N trading days (~10 calendar days)
 SIZING_MODE    <- "vince" # Position sizing engine: "vince" (Leverage Space) or "equal"
-SAFETY_FACTOR  <- 0.35    # Safe f scaling factor for Ralph Vince Leverage Space model
+SAFETY_FACTOR  <- 0.50    # Aggressive Safe f scaling factor for Ralph Vince Leverage Space model
 VINCE_LOOKBACK <- 120     # Lookback days for joint scenario return matrix
 
 # Read symbols & portfolio management CLI args
