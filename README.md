@@ -8,10 +8,12 @@ A statistical swing trading system implemented in pure **R**, utilizing moderniz
 
 1. **Linear Model Moving Average (`lmMA`)**: Replaces simple moving averages with rolling linear regressions (`TTR::rollSFM`) to decouple trend direction (instantaneous slope $\beta$) and trend level ($\alpha + \beta t$) with minimal lag.
 2. **GARCH(1,1) Volatility Modeling**: Models time-varying conditional variance $\sigma_t$ and standardized return shocks ($\epsilon_t / \sigma_t$) via quasi-maximum likelihood estimation (`tseries::garch`).
-3. **Machine Learning Classifier**: Fits an ElasticNet regularized logistic regression ($\alpha = 0.5$) with a noise-filtering "Zone of Indifference" ($42\% < P(\text{Up}) < 58\%$).
-4. **Multi-Stock Portfolio Scanner**: Reads [`symbols.txt`](symbols.txt), models each stock independently, ranks opportunities by probability $P(\text{Up})$, and allocates capital across top candidates.
-5. **Dynamic Risk Control**: Computes dynamic $-2\sigma$ Stop-Loss and $+3\sigma$ Take-Profit price levels with a 1.50 : 1 reward-to-risk ratio.
-6. **Native macOS Automation**: Automated weekday background runner (`launchd`) at 4:30 PM ET pushing desktop notifications and updating order tickets.
+3. **Macro Market Regime Gate (`QQQ`)**: Top-down market trend filter. When `QQQ` is above its 50-day `lmMA` with positive slope, full Risk-On allocation (5 positions) is allowed. In Defensive mode, positions are automatically constrained to 2 and minimum entry probability is raised to $P(\text{Up}) \ge 65\%$.
+4. **Earnings Date Blackout Filter**: Queries upcoming earnings dates via calendar events. Stocks reporting within 7 trading days (~10 calendar days) are blocked from new purchases to avoid binary gap risk.
+5. **Multi-Timeframe Trend Synergy**: Aggregates daily data to weekly bars to calculate weekly `lmMA` slope ($\beta_{weekly}$). Daily buy signals are disqualified if fighting a secular weekly downtrend.
+6. **Automated Rolling Walk-Forward Retraining**: Re-estimates ElasticNet models over a rolling 500-trading-day window (~2 years) to adapt to changing volatility regimes without regime decay.
+7. **Dynamic Risk Control**: Computes dynamic $-2\sigma$ Stop-Loss and $+3\sigma$ Take-Profit price levels with a 1.50 : 1 reward-to-risk ratio.
+8. **Native macOS & GitHub Automation**: Automated weekday background runner (`launchd`) at 4:30 PM ET pushing desktop notifications and GitHub Actions workflow delivering email alerts to your inbox.
 
 ---
 

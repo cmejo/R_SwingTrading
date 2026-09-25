@@ -70,3 +70,62 @@ load_stock_data <- function(symbol = "SNDK",
   
   return(data_xts)
 }
+
+#' Retrieve Next Upcoming Earnings Date for Symbol
+#'
+#' Queries Yahoo Finance calendar events via authenticated session crumb
+#' and caches the result locally in `data/earnings_cache.rds`.
+#'
+#' @param symbol Ticker symbol.
+#' @param cache_file Path to cache RDS file.
+#' @return Character string (YYYY-MM-DD) or NA if unavailable.
+#' @export
+get_upcoming_earnings_date <- function(symbol, cache_file = "data/earnings_cache.rds") {
+  symbol <- toupper(symbol)
+  today_str <- as.character(Sys.Date())
+  
+  # Check local daily cache first (use if valid non-NA date checked today)
+  cache <- if (file.exists(cache_file)) tryCatch(readRDS(cache_file), error = function(e) list()) else list()
+  if (!is.null(cache[[symbol]]) && !is.na(cache[[symbol]]$earnings_date) && identical(cache[[symbol]]$checked_on, today_str)) {
+    return(cache[[symbol]]$earnings_date)
+  }
+  
+  earn_date <- NA_character_
+  
+  tryCatch({
+    cookie_file <- tempfile(fileext = ".txt")
+    on.exit(unlink(cookie_file), add = TRUE)
+    
+    # Obtain initial session cookie
+    cmd1 <- sprintf("curl -s -c %s https://fc.yahoo.com > /dev/null", shQuote(cookie_file))
+    system(cmd1)
+    
+    # Fetch crumb
+    cmd2 <- sprintf("curl -s -b %s -A %s https://query1.finance.yahoo.com/v1/test/getcrumb",
+                    shQuote(cookie_file), shQuote("Mozilla/5.0"))
+    crumb <- system(cmd2, intern = TRUE)
+    
+    if (length(crumb) > 0 && nchar(crumb[1]) > 0 && !grepl("Too Many|Unauthorized|error", crumb[1], ignore.case = TRUE)) {
+      url <- sprintf("https://query2.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=calendarEvents&crumb=%s",
+                     symbol, crumb[1])
+      cmd3 <- sprintf("curl -s -b %s -A %s %s",
+                      shQuote(cookie_file), shQuote("Mozilla/5.0"), shQuote(url))
+      res <- system(cmd3, intern = TRUE)
+      parsed <- jsonlite::fromJSON(paste(res, collapse = ""))
+      
+      dates_df <- parsed$quoteSummary$result$calendarEvents$earnings$earningsDate[[1]]
+      if (!is.null(dates_df) && "fmt" %in% names(dates_df) && length(dates_df$fmt) > 0) {
+        earn_date <- as.character(dates_df$fmt[1])
+      }
+    }
+  }, error = function(e) {
+    # Non-blocking fallback
+  })
+  
+  # Save to cache
+  cache[[symbol]] <- list(earnings_date = earn_date, checked_on = today_str)
+  dir.create(dirname(cache_file), showWarnings = FALSE, recursive = TRUE)
+  tryCatch(saveRDS(cache, cache_file), error = function(e) NULL)
+  
+  return(earn_date)
+}

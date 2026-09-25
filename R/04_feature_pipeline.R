@@ -63,13 +63,31 @@ build_feature_dataset <- function(ohlcv,
   colnames(feat_rsq_fast)   <- "TrendQuality"
   colnames(feat_dist_pct)   <- "DistPct"
   
-  # 2. Z-Score (Residual distance from fast trend standardized by residual volatility)
+  # 2. Multi-Timeframe Weekly Trend Synergy
+  feat_slope_weekly <- xts(rep(0, nrow(price)), order.by = index(price))
+  colnames(feat_slope_weekly) <- "SlopeWeeklyPct"
+  tryCatch({
+    weekly_ohlcv <- to.weekly(ohlcv, indexAt = "endof", OHLC = TRUE)
+    w_price <- Cl(weekly_ohlcv)
+    if (nrow(w_price) >= 6) {
+      w_n <- min(10, nrow(w_price) - 1)
+      w_lm <- lmMA(w_price, n = w_n)
+      w_slope_pct <- (w_lm$slope / w_price) * 100
+      colnames(w_slope_pct) <- "SlopeWeeklyPct"
+      merged_w <- merge(price, w_slope_pct)
+      filled_w <- na.locf(merged_w$SlopeWeeklyPct, na.rm = FALSE)
+      feat_slope_weekly <- filled_w[index(price)]
+      colnames(feat_slope_weekly) <- "SlopeWeeklyPct"
+    }
+  }, error = function(e) NULL)
+
+  # 3. Z-Score (Residual distance from fast trend standardized by residual volatility)
   residuals <- price - dual_lm$fast_lm$fit
   resid_vol <- TTR::runSD(residuals, n = fast_n)
   feat_zscore <- residuals / resid_vol
   colnames(feat_zscore) <- "ZScore"
   
-  # 3. GARCH(1,1) Volatility Features
+  # 4. GARCH(1,1) Volatility Features
   if (use_garch) {
     garch_out <- compute_garch_volatility(price, train_idx = train_idx)
     feat_garch_vol   <- garch_out$annualized_vol
@@ -87,17 +105,18 @@ build_feature_dataset <- function(ohlcv,
   colnames(feat_garch_shock) <- "GARCH_Shock"
   colnames(feat_garch_pct)   <- "GARCH_VolPct"
   
-  # 4. Forward Target: Return k periods into future
+  # 5. Forward Target: Return k periods into future
   # (Price_{t+k} / Price_t - 1)
   fwd_price <- lag.xts(price, k = -look_ahead)
   target_ret <- (fwd_price - price) / price
   colnames(target_ret) <- "TargetRet"
   
-  # 5. Merge all into single xts
+  # 6. Merge all into single xts
   merged_xts <- merge(
     target_ret,
     feat_slope_fast,
     feat_slope_slow,
+    feat_slope_weekly,
     feat_rsq_fast,
     feat_dist_pct,
     feat_zscore,
@@ -117,6 +136,7 @@ build_feature_dataset <- function(ohlcv,
     TargetBinary = ifelse(as.numeric(clean_xts$TargetRet) > 0, 1, 0),
     SlopeFast = as.numeric(clean_xts$SlopeFast),
     SlopeSlow = as.numeric(clean_xts$SlopeSlow),
+    SlopeWeeklyPct = as.numeric(clean_xts$SlopeWeeklyPct),
     TrendQuality = as.numeric(clean_xts$TrendQuality),
     DistPct = as.numeric(clean_xts$DistPct),
     ZScore = as.numeric(clean_xts$ZScore),
@@ -125,7 +145,7 @@ build_feature_dataset <- function(ohlcv,
     GARCH_VolPct = as.numeric(clean_xts$GARCH_VolPct)
   )
   
-  feature_names <- c("SlopeFast", "SlopeSlow", "TrendQuality", "DistPct", 
+  feature_names <- c("SlopeFast", "SlopeSlow", "SlopeWeeklyPct", "TrendQuality", "DistPct", 
                      "ZScore", "GARCH_Vol", "GARCH_Shock", "GARCH_VolPct")
   
   cat(sprintf("[Pipeline] Complete. Result: %d valid observation rows across %d features.\n",
@@ -136,6 +156,7 @@ build_feature_dataset <- function(ohlcv,
     dates = dates,
     price = price[dates],
     dual_lm = dual_lm,
+    latest_weekly_slope_pct = as.numeric(tail(feat_slope_weekly, 1)),
     feature_names = feature_names
   ))
 }

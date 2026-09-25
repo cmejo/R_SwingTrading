@@ -2,10 +2,11 @@
 #' Multi-Stock Daily Signal Scanner & Execution Sizer ($10K Capital)
 #'
 #' Scans your watchlist, updates GARCH(1,1) and lmMA models for each stock,
-#' ranks opportunities by P(Up), and allocates capital to the top candidates.
+#' applies Macro Market Gate (QQQ), Earnings Blackout filter, Weekly Trend Synergy,
+#' and rolling Walk-Forward Retraining to generate actionable bracket order tickets.
 #'
 #' Usage:
-#'   Rscript daily_signal.R [--symbols=SNDK,NVDA,AAPL] [--capital=10000] [--max_pos=2]
+#'   Rscript daily_signal.R [--symbols=SNDK,NVDA,AAPL] [--capital=10000] [--max_pos=5]
 
 suppressPackageStartupMessages({
   library(xts)
@@ -24,14 +25,17 @@ source("R/04_feature_pipeline.R")
 source("R/05_logistic_model.R")
 
 # Default Parameters
-CAPITAL       <- 10000
-MAX_POSITIONS <- 5     # Max concurrent swing positions to hold (e.g., 5 positions @ $2,000 each)
-TARGET_VOL    <- 1.00  # High Growth Sizing (100% allocation of per-position capital)
-FAST_N        <- 20
-SLOW_N        <- 50
-LOOK_AHEAD    <- 5
-P_LONG        <- 0.58
-P_SHORT       <- 0.42
+CAPITAL        <- 10000
+MAX_POSITIONS  <- 5     # Max concurrent swing positions to hold (e.g., 5 positions @ $2,000 each)
+TARGET_VOL     <- 1.00  # High Growth Sizing (100% allocation of per-position capital)
+FAST_N         <- 20
+SLOW_N         <- 50
+LOOK_AHEAD     <- 5
+P_LONG         <- 0.58
+P_SHORT        <- 0.42
+TRAIN_WINDOW   <- 500   # Rolling historical training window (bars) to prevent regime decay
+MACRO_GATE     <- TRUE  # Top-down market regime filter (QQQ)
+EARNINGS_DAYS  <- 7     # Disqualify stocks reporting earnings within N trading days (~10 calendar days)
 
 # Read symbols & portfolio management CLI args
 SYMBOLS <- NULL
@@ -45,6 +49,9 @@ for (arg in args) {
   if (grepl("^--capital=", arg)) CAPITAL <- as.numeric(sub("^--capital=", "", arg))
   if (grepl("^--max_pos=", arg)) MAX_POSITIONS <- as.numeric(sub("^--max_pos=", "", arg))
   if (grepl("^--target_vol=", arg)) TARGET_VOL <- as.numeric(sub("^--target_vol=", "", arg))
+  if (grepl("^--train_window=", arg)) TRAIN_WINDOW <- as.numeric(sub("^--train_window=", "", arg))
+  if (grepl("^--macro_gate=", arg)) MACRO_GATE <- as.logical(sub("^--macro_gate=", "", arg))
+  if (grepl("^--earnings_days=", arg)) EARNINGS_DAYS <- as.numeric(sub("^--earnings_days=", "", arg))
   if (grepl("^--symbols_file=", arg)) SYMBOLS_FILE <- sub("^--symbols_file=", "", arg)
   if (grepl("^--symbol=", arg))  SYMBOLS <- strsplit(sub("^--symbol=", "", arg), "[, ]+")[[1]]
   if (grepl("^--symbols=", arg)) SYMBOLS <- strsplit(sub("^--symbols=", "", arg), "[, ]+")[[1]]
@@ -117,22 +124,71 @@ if (is.null(SYMBOLS)) {
 }
 
 cat("\n========================================================================================\n")
-cat(sprintf(" MULTI-ASSET QUANTITATIVE SWING SCANNER | CAPITAL: $%.2f | MAX POSITIONS: %d\n", CAPITAL, MAX_POSITIONS))
-cat(sprintf(" Watchlist (%d Symbols): %s\n", length(SYMBOLS), paste(SYMBOLS, collapse = ", ")))
-cat("========================================================================================\n\n")
+cat(" 1. MACRO MARKET REGIME GATE (QQQ 50-DAY TREND FILTER)\n")
+cat("========================================================================================\n")
+
+macro_info <- tryCatch({
+  qqq_ohlcv <- load_stock_data("QQQ")
+  qqq_price <- Cl(qqq_ohlcv)
+  qqq_lm <- lmMA(qqq_price, n = 50)
+  latest_qqq_close <- as.numeric(last(qqq_price))
+  latest_qqq_fit   <- as.numeric(last(qqq_lm$fit))
+  latest_qqq_slope <- as.numeric(last(qqq_lm$slope))
+  
+  is_bullish <- (latest_qqq_close >= latest_qqq_fit) && (latest_qqq_slope >= 0)
+  list(
+    close = latest_qqq_close,
+    fit = latest_qqq_fit,
+    slope = latest_qqq_slope,
+    is_bullish = is_bullish,
+    regime = if (is_bullish) "BULLISH (Risk-On)" else "DEFENSIVE (Risk-Off)"
+  )
+}, error = function(e) {
+  cat(sprintf("  -> Warning: Macro fetch failed (%s). Defaulting to Bullish.\n", e$message))
+  list(close = 0, fit = 0, slope = 0, is_bullish = TRUE, regime = "BULLISH (Default)")
+})
+
+if (MACRO_GATE && !macro_info$is_bullish) {
+  EFFECTIVE_MAX_POS <- min(2, MAX_POSITIONS)
+  EFFECTIVE_P_LONG  <- 0.65
+  cat(sprintf(" [Macro Gate Status] %s\n", macro_info$regime))
+  cat(sprintf("   QQQ Close: $%.2f | 50D lmMA Fit: $%.2f | Slope: %.3f\n", 
+              macro_info$close, macro_info$fit, macro_info$slope))
+  cat(sprintf("   -> DEFENSIVE ADJUSTMENT: Max active positions scaled to %d (from %d)\n", 
+              EFFECTIVE_MAX_POS, MAX_POSITIONS))
+  cat(sprintf("   -> RAISING CONVICTION BAR: Required P(Up) >= %.1f%% (from %.1f%%)\n\n", 
+              EFFECTIVE_P_LONG * 100, P_LONG * 100))
+} else {
+  EFFECTIVE_MAX_POS <- MAX_POSITIONS
+  EFFECTIVE_P_LONG  <- P_LONG
+  cat(sprintf(" [Macro Gate Status] %s\n", macro_info$regime))
+  cat(sprintf("   QQQ Close: $%.2f | 50D lmMA Fit: $%.2f | Slope: +%.3f\n", 
+              macro_info$close, macro_info$fit, macro_info$slope))
+  cat(sprintf("   -> Full Risk-On Allocation: Max Positions = %d | P(Up) >= %.1f%%\n\n", 
+              EFFECTIVE_MAX_POS, EFFECTIVE_P_LONG * 100))
+}
+
+cat("========================================================================================\n")
+cat(sprintf(" 2. SCANNING WATCHLIST (%d ASSETS) WITH WALK-FORWARD RETRAINING\n", length(SYMBOLS)))
+cat("========================================================================================\n")
 
 scan_results <- list()
 
 for (sym in SYMBOLS) {
-  cat(sprintf("[Scanning %s] Fetching data & updating models...\n", sym))
+  cat(sprintf("[Scanning %s] Fetching data, checking earnings & updating rolling model...\n", sym))
   
   res <- tryCatch({
+    # Upcoming earnings date check
+    earn_date <- get_upcoming_earnings_date(sym)
+    days_to_earn <- if (!is.na(earn_date)) as.numeric(as.Date(earn_date) - Sys.Date()) else NA_real_
+    is_earnings_blackout <- (!is.na(days_to_earn) && days_to_earn >= 0 && days_to_earn <= (EARNINGS_DAYS + 3))
+
     ohlcv <- load_stock_data(symbol = sym)
     price <- Cl(ohlcv)
     latest_date <- as.character(index(last(price)))
     latest_close <- as.numeric(last(price))
     
-    # Feature engineering
+    # Feature engineering with weekly trend synergy
     pipeline_out <- build_feature_dataset(
       ohlcv = ohlcv,
       fast_n = FAST_N,
@@ -143,10 +199,14 @@ for (sym in SYMBOLS) {
     
     df_model <- pipeline_out$model_data
     feat_names <- pipeline_out$feature_names
+    weekly_slope_pct <- pipeline_out$latest_weekly_slope_pct
+    is_weekly_bullish <- (!is.na(weekly_slope_pct) && weekly_slope_pct > 0)
     
-    # Train ElasticNet model
-    X_train <- as.matrix(df_model[, feat_names])
-    y_train <- df_model$TargetBinary
+    # Automated Rolling Walk-Forward Retraining (last TRAIN_WINDOW observations)
+    n_obs <- nrow(df_model)
+    train_slice <- if (n_obs > TRAIN_WINDOW) tail(df_model, TRAIN_WINDOW) else df_model
+    X_train <- as.matrix(train_slice[, feat_names])
+    y_train <- train_slice$TargetBinary
     set.seed(42)
     cv_fit <- cv.glmnet(X_train, y_train, alpha = 0.5, family = "binomial", type.measure = "deviance")
     
@@ -157,9 +217,12 @@ for (sym in SYMBOLS) {
     zscore <- residuals / resid_vol
     garch_out <- compute_garch_volatility(price)
     
+    feat_slope_weekly <- xts(rep(weekly_slope_pct, nrow(price)), order.by = index(price))
+    
     all_feats <- merge(
       SlopeFast = dual_lm$fast_lm$slope,
       SlopeSlow = dual_lm$slow_lm$slope,
+      SlopeWeeklyPct = feat_slope_weekly,
       TrendQuality = dual_lm$fast_lm$r.squared,
       DistPct = dual_lm$dist_pct,
       ZScore = zscore,
@@ -175,13 +238,34 @@ for (sym in SYMBOLS) {
     # Model forward probability
     pred_prob <- as.numeric(predict(cv_fit, newx = latest_feat_matrix, s = "lambda.min", type = "response"))
     
-    # Volatility & Levels
+    # Volatility & Bracket Levels
     curr_ann_vol <- as.numeric(latest_feats$GARCH_Vol)
     curr_daily_vol <- curr_ann_vol / sqrt(252)
     stop_loss_price <- latest_close * (1 - 2.0 * curr_daily_vol)
     take_profit_price <- latest_close * (1 + 3.0 * curr_daily_vol)
     
-    signal_status <- if (pred_prob >= P_LONG) "BUY" else if (pred_prob <= P_SHORT) "CASH" else "HOLD"
+    # Signal Assignment with Multi-Timeframe & Earnings Gate
+    signal_status <- "HOLD"
+    gate_note <- "Normal"
+    
+    if (pred_prob <= P_SHORT) {
+      signal_status <- "CASH"
+      gate_note <- "Bearish Model"
+    } else if (pred_prob >= EFFECTIVE_P_LONG) {
+      if (is_earnings_blackout) {
+        signal_status <- "BLACKOUT"
+        gate_note <- sprintf("Earnings in %dd (%s)", as.integer(days_to_earn), earn_date)
+      } else if (!is_weekly_bullish) {
+        signal_status <- "COUNTER_TREND"
+        gate_note <- sprintf("Weekly Bear (%.2f%%)", weekly_slope_pct)
+      } else {
+        signal_status <- "BUY"
+        gate_note <- "Synergy Confirmed"
+      }
+    } else {
+      signal_status <- "HOLD"
+      gate_note <- sprintf("Below %.0f%% Cutoff", EFFECTIVE_P_LONG * 100)
+    }
     
     data.frame(
       Symbol = sym,
@@ -189,6 +273,10 @@ for (sym in SYMBOLS) {
       Close = latest_close,
       Prob_Up = pred_prob,
       Signal = signal_status,
+      Gate_Note = gate_note,
+      Weekly_Slope = weekly_slope_pct,
+      Earnings_Date = ifelse(is.na(earn_date), "None/ETF", earn_date),
+      Days_To_Earn = ifelse(is.na(days_to_earn), -999, days_to_earn),
       GARCH_AnnVol = curr_ann_vol,
       Daily_Vol = curr_daily_vol,
       Stop_Loss = stop_loss_price,
@@ -218,6 +306,8 @@ rownames(df_scan) <- 1:nrow(df_scan)
 # Formatted Leaderboard
 cat("\n========================================================================================\n")
 cat("               MULTI-ASSET SWING TRADING OPPORTUNITY LEADERBOARD\n")
+cat(sprintf(" Macro Gate: %s | Max Positions: %d | Buy Threshold: P(Up) >= %.1f%%\n",
+            macro_info$regime, EFFECTIVE_MAX_POS, EFFECTIVE_P_LONG * 100))
 cat("========================================================================================\n")
 
 summary_table <- data.frame(
@@ -226,6 +316,14 @@ summary_table <- data.frame(
   Price      = sprintf("$%.2f", df_scan$Close),
   P_Up       = sprintf("%.1f%%", df_scan$Prob_Up * 100),
   Signal     = df_scan$Signal,
+  Weekly     = sprintf("%s%.1f%% [%s]", 
+                       ifelse(df_scan$Weekly_Slope >= 0, "+", ""),
+                       df_scan$Weekly_Slope, 
+                       ifelse(df_scan$Weekly_Slope > 0, "BULL", "BEAR")),
+  Earnings   = ifelse(df_scan$Days_To_Earn >= 0 & df_scan$Days_To_Earn <= 90, 
+                      sprintf("%s (%dd)", df_scan$Earnings_Date, as.integer(df_scan$Days_To_Earn)),
+                      df_scan$Earnings_Date),
+  Filter_Note= df_scan$Gate_Note,
   GARCH_Vol  = sprintf("%.1f%%", df_scan$GARCH_AnnVol * 100),
   Stop_Loss  = sprintf("$%.2f (-%.1f%%)", df_scan$Stop_Loss, 2.0 * df_scan$Daily_Vol * 100),
   Take_Profit= sprintf("$%.2f (+%.1f%%)", df_scan$Take_Profit, 3.0 * df_scan$Daily_Vol * 100)
@@ -244,7 +342,7 @@ n_held <- length(held_syms)
 total_invested_val <- 0
 
 if (n_held > 0) {
-  cat(sprintf(" Active Open Positions (%d of %d slots used):\n\n", n_held, MAX_POSITIONS))
+  cat(sprintf(" Active Open Positions (%d of %d active slots used):\n\n", n_held, EFFECTIVE_MAX_POS))
   
   for (h_sym in held_syms) {
     p_info <- port_state$positions[[h_sym]]
@@ -263,6 +361,13 @@ if (n_held > 0) {
                 ifelse(unrealized_pnl >= 0, "+", "-"), abs(unrealized_pnl),
                 ifelse(unrealized_pct >= 0, "+", "-"), abs(unrealized_pct)))
     
+    # Check if earnings are approaching for held stock
+    h_row <- df_scan[df_scan$Symbol == h_sym, ]
+    if (nrow(h_row) > 0 && h_row$Days_To_Earn >= 0 && h_row$Days_To_Earn <= 10) {
+      cat(sprintf("    ⚠️ EARNINGS WARNING: %s reports earnings in %d days (%s)! Consider tightening stop.\n",
+                  h_sym, as.integer(h_row$Days_To_Earn), h_row$Earnings_Date))
+    }
+    
     if (cur_sig == "CASH") {
       cat(sprintf("    *** ACTION REQUIRED: Model signal flipped to CASH (P(Up): %s). SELL at Market Open! ***\n", cur_prob))
     } else {
@@ -275,12 +380,12 @@ if (n_held > 0) {
 }
 
 cash_available <- max(0, CAPITAL - total_invested_val)
-empty_slots <- max(0, MAX_POSITIONS - n_held)
+empty_slots <- max(0, EFFECTIVE_MAX_POS - n_held)
 
 cat(sprintf(" TOTAL ACCOUNT VALUE:    $%.2f\n", total_invested_val + cash_available))
 cat(sprintf(" INVESTED IN EQUITIES:   $%.2f (%.1f%%)\n", total_invested_val, total_invested_val / CAPITAL * 100))
 cat(sprintf(" AVAILABLE CASH BALANCE: $%.2f (%.1f%%)\n", cash_available, cash_available / CAPITAL * 100))
-cat(sprintf(" AVAILABLE CASH SLOTS:   %d of %d\n", empty_slots, MAX_POSITIONS))
+cat(sprintf(" AVAILABLE CASH SLOTS:   %d of %d (Regime Limit: %d)\n", empty_slots, EFFECTIVE_MAX_POS, EFFECTIVE_MAX_POS))
 
 # ========================================================================================
 # ACTIONABLE CAPITAL DEPLOYMENT (ORDERS TO FILL EMPTY CASH SLOTS)
@@ -290,7 +395,7 @@ cat(sprintf("              RECOMMENDED ORDERS FOR EMPTY CASH SLOTS (%d AVAILABLE
 cat("========================================================================================\n")
 
 if (empty_slots > 0) {
-  # Candidate buys excluding already held positions
+  # Candidate buys excluding already held positions and passing all gates
   unowned_buys <- df_scan[df_scan$Signal == "BUY" & !(df_scan$Symbol %in% held_syms), ]
   n_actionable <- min(nrow(unowned_buys), empty_slots)
   
@@ -306,6 +411,8 @@ if (empty_slots > 0) {
       cat(sprintf("--- ORDER TICKET #%d: %s (P(Up): %.1f%%) ---\n", i, row$Symbol, row$Prob_Up * 100))
       cat(sprintf("  Action:              BUY %d SHARES at Market Open\n", shares))
       cat(sprintf("  Estimated Outlay:    $%.2f (Cash remaining in slot: $%.2f)\n", invested, slot_capital - invested))
+      cat(sprintf("  Multi-Timeframe:     Weekly Trend +%.2f%% [BULLISH SYNERGY]\n", row$Weekly_Slope))
+      cat(sprintf("  Earnings Safe:       Next report %s (%d days out)\n", row$Earnings_Date, as.integer(row$Days_To_Earn)))
       cat(sprintf("  GTC Stop-Loss:       $%.2f (-%.2f%%) [Risk: $%.2f]\n", 
                   row$Stop_Loss, 2.0 * row$Daily_Vol * 100, shares * (row$Close - row$Stop_Loss)))
       cat(sprintf("  GTC Take-Profit:     $%.2f (+%.2f%%) [Gain: $%.2f]\n", 
@@ -313,10 +420,12 @@ if (empty_slots > 0) {
       cat(sprintf("  Reward / Risk Ratio: 1.50 : 1.0\n\n"))
     }
   } else {
-    cat(" No unowned symbols currently meet BUY criteria (P(Up) >= 58%).\n")
+    cat(sprintf(" No unowned symbols currently meet all BUY criteria (P(Up) >= %.1f%%, Weekly Bullish, No Earnings).\n",
+                EFFECTIVE_P_LONG * 100))
     cat(" RECOMMENDATION: Retain available cash buffer in money market / cash.\n")
   }
 } else {
-  cat(" All portfolio slots are currently filled. No new purchases needed.\n")
+  cat(sprintf(" All %d active portfolio slots are currently filled or constrained by Macro Regime.\n", EFFECTIVE_MAX_POS))
+  cat(" No new purchases needed today.\n")
 }
 cat("========================================================================================\n\n")

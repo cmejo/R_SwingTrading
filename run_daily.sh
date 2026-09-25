@@ -29,14 +29,15 @@ if [ "$DAY_OF_WEEK" -eq 5 ] || [ ! -f "$MONTHLY_EVAL" ]; then
 fi
 
 # 3. Extract summary for desktop notification
-TOP_TICKET=$(grep -e "ORDER TICKET #1:" "$LATEST_TICKET" | tr '\n' ' ' | sed 's/  */ /g')
-ACTIVE_BUYS=$(grep -e "Active High-Conviction Candidates:" "$LATEST_TICKET" | sed 's/.*: *//')
+MACRO_STATUS=$(grep -m 1 "Macro Gate:" "$LATEST_TICKET" | sed 's/.*Macro Gate: \([^ |]*\).*/\1/' || echo "Active")
+N_BUYS=$(grep -c "ORDER TICKET #" "$LATEST_TICKET" || echo "0")
+TOP_TICKET=$(grep -m 1 "ORDER TICKET #1:" "$LATEST_TICKET" | sed 's/--- //;s/ ---//' || echo "")
 
-if [ -n "$TOP_TICKET" ]; then
-  NOTIF_TITLE="Swing Scanner: ${ACTIVE_BUYS} Buy Signal(s) Active"
-  NOTIF_MSG="${TOP_TICKET}"
+if [ "$N_BUYS" -gt 0 ] && [ -n "$TOP_TICKET" ]; then
+  NOTIF_TITLE="Swing Scanner [${MACRO_STATUS}]: ${N_BUYS} Order(s)"
+  NOTIF_MSG="${TOP_TICKET} | Check LATEST_TICKET.txt"
 else
-  NOTIF_TITLE="Swing Scanner: 100% Cash Buffer"
+  NOTIF_TITLE="Swing Scanner [${MACRO_STATUS}]: 100% Cash Buffer"
   NOTIF_MSG="No symbols triggered BUY criteria today. Maintain cash position."
 fi
 
