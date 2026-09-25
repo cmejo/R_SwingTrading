@@ -23,6 +23,7 @@ source("R/02_trend_lmMA.R")
 source("R/03_volatility_garch.R")
 source("R/04_feature_pipeline.R")
 source("R/05_logistic_model.R")
+source("R/07_leverage_space.R")
 
 # Default Parameters
 CAPITAL        <- 10000
@@ -36,6 +37,9 @@ P_SHORT        <- 0.42
 TRAIN_WINDOW   <- 500   # Rolling historical training window (bars) to prevent regime decay
 MACRO_GATE     <- TRUE  # Top-down market regime filter (QQQ)
 EARNINGS_DAYS  <- 7     # Disqualify stocks reporting earnings within N trading days (~10 calendar days)
+SIZING_MODE    <- "vince" # Position sizing engine: "vince" (Leverage Space) or "equal"
+SAFETY_FACTOR  <- 0.35    # Safe f scaling factor for Ralph Vince Leverage Space model
+VINCE_LOOKBACK <- 120     # Lookback days for joint scenario return matrix
 
 # Read symbols & portfolio management CLI args
 SYMBOLS <- NULL
@@ -52,6 +56,9 @@ for (arg in args) {
   if (grepl("^--train_window=", arg)) TRAIN_WINDOW <- as.numeric(sub("^--train_window=", "", arg))
   if (grepl("^--macro_gate=", arg)) MACRO_GATE <- as.logical(sub("^--macro_gate=", "", arg))
   if (grepl("^--earnings_days=", arg)) EARNINGS_DAYS <- as.numeric(sub("^--earnings_days=", "", arg))
+  if (grepl("^--sizing_mode=", arg)) SIZING_MODE <- tolower(sub("^--sizing_mode=", "", arg))
+  if (grepl("^--safety_factor=", arg)) SAFETY_FACTOR <- as.numeric(sub("^--safety_factor=", "", arg))
+  if (grepl("^--vince_lookback=", arg)) VINCE_LOOKBACK <- as.numeric(sub("^--vince_lookback=", "", arg))
   if (grepl("^--symbols_file=", arg)) SYMBOLS_FILE <- sub("^--symbols_file=", "", arg)
   if (grepl("^--symbol=", arg))  SYMBOLS <- strsplit(sub("^--symbol=", "", arg), "[, ]+")[[1]]
   if (grepl("^--symbols=", arg)) SYMBOLS <- strsplit(sub("^--symbols=", "", arg), "[, ]+")[[1]]
@@ -400,17 +407,63 @@ if (empty_slots > 0) {
   n_actionable <- min(nrow(unowned_buys), empty_slots)
   
   if (n_actionable > 0) {
-    slot_capital <- cash_available / empty_slots
-    cat(sprintf(" Available Cash per Slot: $%.2f\n\n", slot_capital))
+    candidate_syms <- unowned_buys$Symbol[1:n_actionable]
+    vince_alloc <- NULL
+    
+    # Ralph Vince Leverage Space Model Sizing
+    if (SIZING_MODE == "vince") {
+      cat(sprintf(" Sizing Engine: Ralph Vince Leverage Space Model (Safe f = %.2f, %d-Day Scenarios)\n",
+                  SAFETY_FACTOR, VINCE_LOOKBACK))
+      tryCatch({
+        joint_events <- build_joint_scenario_matrix(candidate_syms, lookback_days = VINCE_LOOKBACK)
+        avail_syms <- intersect(candidate_syms, colnames(joint_events))
+        if (length(avail_syms) >= 1) {
+          sub_events <- joint_events[, avail_syms, drop = FALSE]
+          vince_opt <- vince_optimal_f(sub_events, max_leverage = 1.0, safety_factor = SAFETY_FACTOR)
+          cur_px_map <- setNames(unowned_buys$Close[match(avail_syms, unowned_buys$Symbol)], avail_syms)
+          vince_alloc <- vince_portfolio_allocation(vince_opt, total_cash = cash_available, current_prices = cur_px_map)
+          cat(sprintf(" -> Optimized Portfolio GHPR: %.4f (Expected Geometric Growth: %+.2f%% / day)\n\n",
+                      vince_opt$ghpr, vince_opt$expected_growth_pct))
+        }
+      }, error = function(e) {
+        cat(sprintf(" -> Leverage Space note: %s. Using Equal-Weight slots.\n\n", e$message))
+        vince_alloc <<- NULL
+      })
+    }
+    
+    slot_capital_equal <- cash_available / empty_slots
+    if (is.null(vince_alloc)) {
+      cat(sprintf(" Sizing Mode: Equal-Weight Cash Allocation ($%.2f per slot)\n\n", slot_capital_equal))
+    }
     
     for (i in 1:n_actionable) {
       row <- unowned_buys[i, ]
-      shares <- floor(slot_capital / row$Close)
-      invested <- shares * row$Close
+      
+      if (!is.null(vince_alloc) && row$Symbol %in% vince_alloc$Symbol) {
+        v_row <- vince_alloc[vince_alloc$Symbol == row$Symbol, ]
+        shares <- v_row$Shares
+        invested <- v_row$Actual_Outlay
+        allocated_cash <- v_row$Dollar_Allocation
+        opt_f_val <- v_row$Optimal_f
+        safe_f_val <- v_row$Safe_f
+        max_loss_val <- v_row$Max_Loss
+        weight_pct <- v_row$Weight * 100
+        sizing_note <- sprintf("Vince Optimal f: %.4f | Safe f: %.4f | Max Loss: %s",
+                               opt_f_val, safe_f_val, max_loss_val)
+        alloc_note  <- sprintf("Target Allocation: %.1f%% ($%.2f) -> Actual Outlay: $%.2f (Cash Left: $%.2f)",
+                               weight_pct, allocated_cash, invested, v_row$Cash_Left)
+      } else {
+        shares <- floor(slot_capital_equal / row$Close)
+        invested <- shares * row$Close
+        sizing_note <- "Equal-Weight Slot Allocation"
+        alloc_note  <- sprintf("Slot Budget: $%.2f -> Actual Outlay: $%.2f (Cash Left: $%.2f)",
+                               slot_capital_equal, invested, slot_capital_equal - invested)
+      }
       
       cat(sprintf("--- ORDER TICKET #%d: %s (P(Up): %.1f%%) ---\n", i, row$Symbol, row$Prob_Up * 100))
       cat(sprintf("  Action:              BUY %d SHARES at Market Open\n", shares))
-      cat(sprintf("  Estimated Outlay:    $%.2f (Cash remaining in slot: $%.2f)\n", invested, slot_capital - invested))
+      cat(sprintf("  Position Sizing:     %s\n", sizing_note))
+      cat(sprintf("  Capital Allocation:  %s\n", alloc_note))
       cat(sprintf("  Multi-Timeframe:     Weekly Trend +%.2f%% [BULLISH SYNERGY]\n", row$Weekly_Slope))
       cat(sprintf("  Earnings Safe:       Next report %s (%d days out)\n", row$Earnings_Date, as.integer(row$Days_To_Earn)))
       cat(sprintf("  GTC Stop-Loss:       $%.2f (-%.2f%%) [Risk: $%.2f]\n", 

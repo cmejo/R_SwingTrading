@@ -13,7 +13,8 @@ A statistical swing trading system implemented in pure **R**, utilizing moderniz
 5. **Multi-Timeframe Trend Synergy**: Aggregates daily data to weekly bars to calculate weekly `lmMA` slope ($\beta_{weekly}$). Daily buy signals are disqualified if fighting a secular weekly downtrend.
 6. **Automated Rolling Walk-Forward Retraining**: Re-estimates ElasticNet models over a rolling 500-trading-day window (~2 years) to adapt to changing volatility regimes without regime decay.
 7. **Dynamic Risk Control**: Computes dynamic $-2\sigma$ Stop-Loss and $+3\sigma$ Take-Profit price levels with a 1.50 : 1 reward-to-risk ratio.
-8. **Native macOS & GitHub Automation**: Automated weekday background runner (`launchd`) at 4:30 PM ET pushing desktop notifications and GitHub Actions workflow delivering email alerts to your inbox.
+8. **Ralph Vince Leverage Space Model (LSPM)**: Replaces arbitrary equal weighting with mathematical Geometric Holding Period Return ($\text{GHPR}$) optimization across joint scenario returns. Solves for the optimal leverage vector $\mathbf{f}^*$ scaled by fractional Safe $f$ to prevent portfolio ruin and maximize compounding growth.
+9. **Native macOS & GitHub Automation**: Automated weekday background runner (`launchd`) at 4:30 PM ET pushing desktop notifications and GitHub Actions workflow delivering email alerts to your inbox.
 
 ---
 
@@ -27,12 +28,14 @@ A statistical swing trading system implemented in pure **R**, utilizing moderniz
 │   ├── 03_volatility_garch.R  # GARCH(1,1) volatility & standardized residuals
 │   ├── 04_feature_pipeline.R  # Feature engineering & forward target calculation
 │   ├── 05_logistic_model.R    # Regularized logistic regression & classification
-│   └── 06_swing_backtest.R    # Swing backtest simulator, metrics & trade logger
+│   ├── 06_swing_backtest.R    # Swing backtest simulator, metrics & trade logger
+│   └── 07_leverage_space.R    # Ralph Vince Leverage Space Model (Optimal f / Safe f)
 ├── main.R                     # Full backtesting & diagnostic plotting pipeline
 ├── daily_signal.R             # Multi-asset live scanner & order ticket generator
 ├── monthly_review.R           # Monthly performance & health evaluation script
 ├── backtest_past_2_months.R   # 2-month out-of-sample backtest vs S&P 500 (SPY)
 ├── backtest_all_symbols.R     # Watchlist-wide backtest across all symbols in symbols.txt
+├── test_leverage_space.R      # Verification test for Leverage Space sizing
 ├── run_daily.sh               # Automation execution script with desktop alerts
 ├── install_automation.sh      # macOS launchd background scheduler installer
 ├── uninstall_automation.sh    # macOS launchd uninstaller
