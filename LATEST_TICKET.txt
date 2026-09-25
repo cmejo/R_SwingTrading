@@ -142,7 +142,10 @@ Warning message:
 [DataLoader] Cached data saved to data/data_smhc.rds
 [DataLoader] Loaded 65 bars for SMHC [2026-06-24 to 2026-09-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
-  -> Skipping SMHC: Series contains non-leading NAs
+[GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
+[GARCH] Fitted: a0=0.001436, a1=0.0000, b1=0.0532 (persistence=0.0532)
+[Pipeline] Complete. Result: 11 valid observation rows across 12 features.
+  -> Skipping SMHC: one multinomial or binomial class has 1 or 0 observations; not allowed
 [Scanning KXIAY] Fetching data, checking earnings & updating rolling model...
 [DataLoader] Attempting to fetch 'KXIAY' from Yahoo Finance (2020-01-01 to 2026-09-25)...
 [DataLoader] Successfully fetched 244 bars from Yahoo Finance.
@@ -190,15 +193,18 @@ Warning message:
 Warning messages:
 1: In sqrt(pred$e) : NaNs produced
 2: In sqrt(pred$e) : NaNs produced
-3: SMHC contains missing values. Some functions will not work if objects contain missing values in the middle of the series. Consider using na.omit(), na.approx(), na.fill(), etc to remove or replace them. 
+3: In garch(fit_sample, order = c(1, 1), trace = FALSE) :
+  singular information
+4: In lognet(x, is.sparse, y, weights, offset, alpha, nobs, nvars,  :
+  one multinomial or binomial class has fewer than 8  observations; dangerous ground
 
 ========================================================================================
                MULTI-ASSET SWING TRADING OPPORTUNITY LEADERBOARD
  Macro Gate: BULLISH (Risk-On) | Max Positions: 5 | Buy Threshold: P(Up) >= 58.0%
 ========================================================================================
  Rank Symbol    Price  P_Up    Signal RS_SPY       Weekly         Earnings
-    1    AMD  $629.26 77.7%       BUY +30.7% +1.5% [BULL] 2026-11-03 (39d)
-    2   SNDK $1753.62 68.0%       BUY +16.8% +3.2% [BULL] 2026-11-06 (42d)
+    1    AMD  $629.26 77.8%       BUY +30.7% +1.5% [BULL] 2026-11-03 (39d)
+    2   SNDK $1753.62 68.1%       BUY +16.8% +3.2% [BULL] 2026-11-06 (42d)
     3   MSFT  $497.93 63.6%       BUY  +0.2% +1.5% [BULL] 2026-10-28 (33d)
     4  KXIAY   $34.63 62.1%       BUY  +9.3% +1.9% [BULL]         None/ETF
     5   LITE  $929.04 60.4% RS_LAGGER  -1.2% +2.0% [BULL] 2026-11-05 (41d)
@@ -240,86 +246,10 @@ Warning messages:
  PORTFOLIO HEAT (RISK):  $0.00 of $500.00 max allowed (0.00% of equity)
 
 ========================================================================================
-              RECOMMENDED ORDERS FOR EMPTY CASH SLOTS (5 AVAILABLE)
+              FRIDAY 15:30 EVALUATION: CONDITIONAL WEEKEND HOLD REVIEW        
 ========================================================================================
- Sizing Engine: Ralph Vince Leverage Space Model (Safe f = 0.50, 120-Day Scenarios, Fractional: YES (Exact))
-[DataLoader] Attempting to fetch 'AMD' from Yahoo Finance (2020-01-01 to 2026-09-25)...
-[DataLoader] Successfully fetched 1691 bars from Yahoo Finance.
-[DataLoader] Cached data saved to data/data_amd.rds
-[DataLoader] Loaded 1691 bars for AMD [2020-01-02 to 2026-09-24]
-[DataLoader] Attempting to fetch 'SNDK' from Yahoo Finance (2020-01-01 to 2026-09-25)...
-[DataLoader] Successfully fetched 405 bars from Yahoo Finance.
-[DataLoader] Cached data saved to data/data_sndk.rds
-[DataLoader] Loaded 405 bars for SNDK [2025-02-13 to 2026-09-24]
-[DataLoader] Attempting to fetch 'MSFT' from Yahoo Finance (2020-01-01 to 2026-09-25)...
-[DataLoader] Successfully fetched 1691 bars from Yahoo Finance.
-[DataLoader] Cached data saved to data/data_msft.rds
-[DataLoader] Loaded 1691 bars for MSFT [2020-01-02 to 2026-09-24]
-[DataLoader] Attempting to fetch 'KXIAY' from Yahoo Finance (2020-01-01 to 2026-09-25)...
-[DataLoader] Successfully fetched 244 bars from Yahoo Finance.
-[DataLoader] Cached data saved to data/data_kxiay.rds
-[DataLoader] Loaded 244 bars for KXIAY [2025-10-06 to 2026-09-24]
- -> Optimized Portfolio GHPR: 1.0300 (Expected Geometric Growth: +3.00% / day)
+ Portfolio is 100% in cash. No open weekend exposure.
 
- [Heat Defense] Proposed risk ($530.50) exceeds available heat budget ($500.00). Scaling position size by 94.3%.
-
---- ORDER TICKET #1: AMD (P(Up): 77.7% | Sector: Semiconductors) ---
-  Action:              BUY 9.034 SHARES at Market (Monday Afternoon Execution)
-  Position Sizing:     Vince Optimal f: 0.4420 | Safe f: 0.2210 | Heat Scale: 94.3%
-  Capital Allocation:  Target Allocation: 56.8% ($5684.46) -> Actual Outlay: $5684.73
-  Relative Strength:   +30.70% vs SPY Benchmark [MARKET LEADER]
-  Multi-Timeframe:     Weekly Trend +1.54% [BULLISH SYNERGY]
-  Earnings Safe:       Next report 2026-11-03 (39 days out)
-  GTC Stop-Loss:       $578.52 (-8.06%) [Total Downside Risk: $458.37]
-  Multi-Tier Bracket Exits:
-    -> Tier 1 (50% = 4.517 shs): Target $705.37 (+12.09%, +1.5R) [Gain: $343.79] -> Lock in profits & move stop to Breakeven $629.26
-    -> Tier 2 (50% = 4.517 shs): Target $781.48 (+24.19%, +3.0R) [Gain: $687.58] -> Momentum runner
-    -> Chandelier Trailing Stop: Initial trigger at $565.32 (Trails Highest High - 2.5 x ATR(14) $25.58)
-  Reward / Risk Ratio: Tier 1: 1.50R | Tier 2: 3.00R (Combined Potential: +$1031.37 vs -$458.37 Risk)
-
---- ORDER TICKET #2: SNDK (P(Up): 68.0% | Sector: Semiconductors) ---
-  Action:              BUY 0.384 SHARES at Market (Monday Afternoon Execution)
-  Position Sizing:     Vince Optimal f: 0.0523 | Safe f: 0.0261 | Heat Scale: 94.3%
-  Capital Allocation:  Target Allocation: 6.7% ($672.33) -> Actual Outlay: $673.39
-  Relative Strength:   +16.81% vs SPY Benchmark [MARKET LEADER]
-  Multi-Timeframe:     Weekly Trend +3.17% [BULLISH SYNERGY]
-  Earnings Safe:       Next report 2026-11-06 (42 days out)
-  GTC Stop-Loss:       $1665.25 (-5.04%) [Total Downside Risk: $33.94]
-  Multi-Tier Bracket Exits:
-    -> Tier 1 (50% = 0.192 shs): Target $1886.18 (+7.56%, +1.5R) [Gain: $25.45] -> Lock in profits & move stop to Breakeven $1753.62
-    -> Tier 2 (50% = 0.192 shs): Target $2018.74 (+15.12%, +3.0R) [Gain: $50.90] -> Momentum runner
-    -> Chandelier Trailing Stop: Initial trigger at $1467.06 (Trails Highest High - 2.5 x ATR(14) $114.62)
-  Reward / Risk Ratio: Tier 1: 1.50R | Tier 2: 3.00R (Combined Potential: +$76.35 vs -$33.94 Risk)
-
---- ORDER TICKET #3: MSFT (P(Up): 63.6% | Sector: Software_MegaCap) ---
-  Action:              BUY 6.162 SHARES at Market (Monday Afternoon Execution)
-  Position Sizing:     Vince Optimal f: 0.2386 | Safe f: 0.1193 | Heat Scale: 94.3%
-  Capital Allocation:  Target Allocation: 30.7% ($3068.23) -> Actual Outlay: $3068.24
-  Relative Strength:   +0.17% vs SPY Benchmark [MARKET LEADER]
-  Multi-Timeframe:     Weekly Trend +1.55% [BULLISH SYNERGY]
-  Earnings Safe:       Next report 2026-10-28 (33 days out)
-  GTC Stop-Loss:       $496.68 (-0.25%) [Total Downside Risk: $7.73]
-  Multi-Tier Bracket Exits:
-    -> Tier 1 (50% = 3.081 shs): Target $499.81 (+0.38%, +1.5R) [Gain: $5.79] -> Lock in profits & move stop to Breakeven $497.93
-    -> Tier 2 (50% = 3.081 shs): Target $501.69 (+0.76%, +3.0R) [Gain: $11.58] -> Momentum runner
-    -> Chandelier Trailing Stop: Initial trigger at $470.48 (Trails Highest High - 2.5 x ATR(14) $10.98)
-  Reward / Risk Ratio: Tier 1: 1.50R | Tier 2: 3.00R (Combined Potential: +$17.37 vs -$7.73 Risk)
-
---- ORDER TICKET #4: KXIAY (P(Up): 62.1% | Sector: Hardware_Tech) ---
-  Action:              BUY 0 SHARES at Market (Monday Afternoon Execution)
-  Position Sizing:     Vince Optimal f: 0.0000 | Safe f: 0.0000 | Heat Scale: 94.3%
-  Capital Allocation:  Target Allocation: 0.0% ($0.00) -> Actual Outlay: $0.00
-  Relative Strength:   +9.31% vs SPY Benchmark [MARKET LEADER]
-  Multi-Timeframe:     Weekly Trend +1.95% [BULLISH SYNERGY]
-  Earnings Safe:       Next report None/ETF (-999 days out)
-  GTC Stop-Loss:       $32.19 (-7.06%) [Total Downside Risk: $0.00]
-  Multi-Tier Bracket Exits:
-    -> Tier 1 (50% = 0 shs): Target $38.29 (+10.58%, +1.5R) [Gain: $0.00] -> Lock in profits & move stop to Breakeven $34.63
-    -> Tier 2 (50% = 0 shs): Target $41.96 (+21.17%, +3.0R) [Gain: $0.00] -> Momentum runner
-    -> Chandelier Trailing Stop: Initial trigger at $28.56 (Trails Highest High - 2.5 x ATR(14) $2.43)
-  Reward / Risk Ratio: Tier 1: 1.50R | Tier 2: 3.00R (Combined Potential: +$0.00 vs -$0.00 Risk)
-
-[AlertSystem] Notice: Webhooks not configured. Skipping push alert for '📈 New Weekly Swing Signals'.
-  (To enable mobile alerts, set DISCORD_WEBHOOK_URL or TELEGRAM_BOT_TOKEN & TELEGRAM_CHAT_ID in .env)
+ -> NEXT WEEKLY BUYS: Fresh opportunities will be scanned and executed MONDAY at 14:00 EDT.
 ========================================================================================
 

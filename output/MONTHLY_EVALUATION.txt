@@ -10,7 +10,7 @@
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
 [GARCH] Fitted: a0=0.001840, a1=0.2587, b1=0.3648 (persistence=0.6235)
-[Pipeline] Complete. Result: 351 valid observation rows across 9 features.
+[Pipeline] Complete. Result: 351 valid observation rows across 12 features.
 ------------------------------------------------------------------------
  EVALUATION PERIOD: 2026-08-06 to 2026-09-17 (30 Trading Days)
 ------------------------------------------------------------------------
