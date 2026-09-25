@@ -225,12 +225,131 @@ def execute_ibkr(tickets: List[Dict[str, Any]], host: str, port: int, client_id:
         print(f"[IBKR Bridge] Connection error: {e}")
         sys.exit(1)
 
+def load_dot_env(env_file: str = ".env"):
+    if os.path.exists(env_file):
+        with open(env_file, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip("'\"")
+                    if k not in os.environ:
+                        os.environ[k] = v
+
+load_dot_env()
+
+class SchwabTraderAPI:
+    """Official Charles Schwab Trader REST & OAuth2 Client."""
+    TOKEN_FILE = "schwab_token.json"
+    BASE_URL = "https://api.schwabapi.com/trader/v1"
+    AUTH_URL = "https://api.schwabapi.com/v1/oauth/authorize"
+    TOKEN_URL = "https://api.schwabapi.com/v1/oauth/token"
+
+    def __init__(self, app_key: str = None, secret: str = None):
+        self.app_key = app_key or os.environ.get("SCHWAB_APP_KEY", "")
+        self.secret = secret or os.environ.get("SCHWAB_SECRET", "")
+        self.redirect_uri = os.environ.get("SCHWAB_REDIRECT_URI", "https://127.0.0.1")
+
+    def get_auth_url(self) -> str:
+        return f"{self.AUTH_URL}?client_id={self.app_key}&redirect_uri={self.redirect_uri}"
+
+    def exchange_code(self, code_or_url: str) -> Dict[str, Any]:
+        import base64
+        import time
+        import requests
+        code = code_or_url.strip()
+        if "code=" in code:
+            code = code.split("code=")[1].split("&")[0]
+        code = code.replace("%40", "@")
+
+        auth_header = base64.b64encode(f"{self.app_key}:{self.secret}".encode()).decode()
+        headers = {
+            "Authorization": f"Basic {auth_header}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        data = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": self.redirect_uri
+        }
+        resp = requests.post(self.TOKEN_URL, headers=headers, data=data)
+        if resp.status_code != 200:
+            raise Exception(f"Token exchange failed ({resp.status_code}): {resp.text}")
+        token_data = resp.json()
+        token_data["expires_at"] = time.time() + token_data.get("expires_in", 1800) - 60
+        with open(self.TOKEN_FILE, "w") as f:
+            json.dump(token_data, f, indent=2)
+        return token_data
+
+    def get_valid_token(self) -> str:
+        import base64
+        import time
+        import requests
+        if not os.path.exists(self.TOKEN_FILE):
+            raise Exception(f"No token file found at {self.TOKEN_FILE}. Run: python3 execute_broker.py --broker=schwab --auth")
+        with open(self.TOKEN_FILE, "r") as f:
+            token_data = json.load(f)
+
+        if time.time() >= token_data.get("expires_at", 0):
+            refresh_token = token_data.get("refresh_token")
+            if not refresh_token:
+                raise Exception("Refresh token missing. Re-authenticate via --auth.")
+            auth_header = base64.b64encode(f"{self.app_key}:{self.secret}".encode()).decode()
+            headers = {
+                "Authorization": f"Basic {auth_header}",
+                "Content-Type": "application/x-www-form-urlencoded"
+            }
+            data = {
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token
+            }
+            resp = requests.post(self.TOKEN_URL, headers=headers, data=data)
+            if resp.status_code != 200:
+                raise Exception(f"Token refresh failed ({resp.status_code}): {resp.text}")
+            new_data = resp.json()
+            new_data["expires_at"] = time.time() + new_data.get("expires_in", 1800) - 60
+            with open(self.TOKEN_FILE, "w") as f:
+                json.dump(new_data, f, indent=2)
+            return new_data["access_token"]
+        return token_data["access_token"]
+
+    def get_account_hashes(self) -> List[Dict[str, str]]:
+        import requests
+        token = self.get_valid_token()
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = requests.get(f"{self.BASE_URL}/accounts/accountNumbers", headers=headers)
+        if resp.status_code != 200:
+            raise Exception(f"Failed to fetch Schwab account numbers ({resp.status_code}): {resp.text}")
+        return resp.json()
+
+    def place_order(self, account_hash: str, order_payload: Dict[str, Any]) -> Any:
+        import requests
+        token = self.get_valid_token()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        api_payload = {k: v for k, v in order_payload.items() if k != "broker"}
+        resp = requests.post(f"{self.BASE_URL}/accounts/{account_hash}/orders", headers=headers, json=api_payload)
+        if resp.status_code not in [200, 201]:
+            raise Exception(f"Order submission failed ({resp.status_code}): {resp.text}")
+        return resp.headers.get("Location", "ORDER_SUBMITTED")
+
+    def get_account_details(self, account_hash: str) -> Dict[str, Any]:
+        import requests
+        token = self.get_valid_token()
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = requests.get(f"{self.BASE_URL}/accounts/{account_hash}?fields=positions", headers=headers)
+        if resp.status_code != 200:
+            raise Exception(f"Failed to fetch account positions ({resp.status_code}): {resp.text}")
+        return resp.json()
+
 def execute_schwab(tickets: List[Dict[str, Any]], dry_run: bool):
     print("\n[Schwab Bridge] Initializing Charles Schwab Trader API Bridge...")
     
     app_key = os.environ.get("SCHWAB_APP_KEY", "")
     secret = os.environ.get("SCHWAB_SECRET", "")
-    acct_id = os.environ.get("SCHWAB_ACCOUNT_ID", "SIMULATED_ACCOUNT_12345")
 
     if dry_run:
         print("[Schwab Bridge] MODE: DRY RUN (Simulation only. No orders transmitted).")
@@ -242,10 +361,118 @@ def execute_schwab(tickets: List[Dict[str, Any]], dry_run: bool):
         return
 
     if not app_key or not secret:
-        print("[Schwab Bridge] Error: SCHWAB_APP_KEY and SCHWAB_SECRET environment variables required for live submission.")
+        print("[Schwab Bridge] Error: SCHWAB_APP_KEY and SCHWAB_SECRET required in .env or environment.")
+        print("  Configure .env with:")
+        print("    SCHWAB_APP_KEY=\"your_schwab_app_key\"")
+        print("    SCHWAB_SECRET=\"your_schwab_secret\"")
         sys.exit(1)
 
-    print("[Schwab Bridge] Ready for live REST submission with configured Schwab credentials.")
+    try:
+        schwab = SchwabTraderAPI(app_key, secret)
+        hashes = schwab.get_account_hashes()
+        if not hashes:
+            print("[Schwab Bridge] No linked Schwab trading accounts found.")
+            sys.exit(1)
+        acct_hash = hashes[0]["hashValue"]
+        acct_num = hashes[0]["accountNumber"]
+        print(f"[Schwab Bridge] Connected to Schwab Account: ***{acct_num[-4:]} (Hash: {acct_hash[:8]}...)")
+
+        for t in tickets:
+            payload = build_schwab_payload(t)
+            print(f"[Schwab Bridge] Submitting Live Bracket for {t['symbol']} ({t['shares']} shares)...")
+            res = schwab.place_order(acct_hash, payload)
+            print(f"[Schwab Bridge] Order Submitted Successfully: {res}")
+    except Exception as e:
+        print(f"[Schwab Bridge] Execution error: {e}")
+        sys.exit(1)
+
+def sync_schwab(portfolio_file: str, dry_run: bool):
+    import datetime
+    print(f"\n[Schwab Sync] Reconciling Schwab account with {portfolio_file}...")
+    if not os.path.exists(portfolio_file):
+        port_data = {
+            "total_capital": 10000.0,
+            "cash_balance": 10000.0,
+            "max_positions": 5,
+            "peak_equity": 10000.0,
+            "last_updated": str(datetime.datetime.now()),
+            "positions": [],
+            "closed_trades": []
+        }
+    else:
+        with open(portfolio_file, "r") as f:
+            port_data = json.load(f)
+
+    if dry_run:
+        print("[Schwab Sync] MODE: DRY RUN (Simulating portfolio sync with Charles Schwab)")
+        print(f"[Schwab Sync] Recorded Cash Balance: ${port_data.get('cash_balance', 0):.2f}")
+        print(f"[Schwab Sync] Recorded Total Equity: ${port_data.get('total_capital', 0):.2f}")
+        print(f"[Schwab Sync] Open Positions in Local Portfolio: {len(port_data.get('positions', []))}")
+        print("\n[Schwab Sync] Dry-run reconciliation check complete.")
+        return
+
+    app_key = os.environ.get("SCHWAB_APP_KEY", "")
+    secret = os.environ.get("SCHWAB_SECRET", "")
+    if not app_key or not secret:
+        print("[Schwab Sync] Error: SCHWAB_APP_KEY and SCHWAB_SECRET required.")
+        sys.exit(1)
+
+    try:
+        schwab = SchwabTraderAPI(app_key, secret)
+        hashes = schwab.get_account_hashes()
+        acct_hash = hashes[0]["hashValue"]
+        details = schwab.get_account_details(acct_hash)
+        
+        sec_acct = details.get("securitiesAccount", {})
+        balances = sec_acct.get("currentBalances", {})
+        cash = balances.get("cashAvailableForTrading", balances.get("cashBalance", 10000.0))
+        liquidation_val = balances.get("liquidationValue", 10000.0)
+
+        port_data["cash_balance"] = round(float(cash), 2)
+        port_data["total_capital"] = round(float(liquidation_val), 2)
+        port_data["peak_equity"] = max(port_data.get("peak_equity", float(liquidation_val)), float(liquidation_val))
+
+        positions = sec_acct.get("positions", [])
+        active_symbols = set()
+        for p in positions:
+            sym = p.get("instrument", {}).get("symbol", "")
+            long_qty = float(p.get("longQuantity", 0))
+            if sym and long_qty > 0:
+                active_symbols.add(sym)
+                avg_px = float(p.get("averagePrice", 0))
+                existing = [pos for pos in port_data["positions"] if pos["symbol"] == sym]
+                if existing:
+                    existing[0]["shares"] = long_qty
+                    existing[0]["cost_basis"] = round(long_qty * avg_px, 2)
+                else:
+                    port_data["positions"].append({
+                        "symbol": sym,
+                        "shares": long_qty,
+                        "entry_price": avg_px,
+                        "entry_date": str(datetime.date.today()),
+                        "stop_loss": round(avg_px * 0.95, 2),
+                        "take_profit": round(avg_px * 1.10, 2),
+                        "cost_basis": round(long_qty * avg_px, 2),
+                        "status": "OPEN"
+                    })
+
+        remaining = [pos for pos in port_data["positions"] if pos["symbol"] in active_symbols]
+        closed = [pos for pos in port_data["positions"] if pos["symbol"] not in active_symbols]
+        for c in closed:
+            c["exit_date"] = str(datetime.date.today())
+            c["reason"] = "SCHWAB_SYNC_CLOSED"
+            port_data["closed_trades"].append(c)
+
+        port_data["positions"] = remaining
+        port_data["last_updated"] = str(datetime.datetime.now())
+
+        with open(portfolio_file, "w") as f:
+            json.dump(port_data, f, indent=2)
+
+        print(f"[Schwab Sync] SUCCESS: Synchronized {len(port_data['positions'])} positions, ${port_data['cash_balance']:.2f} cash.")
+    except Exception as e:
+        print(f"[Schwab Sync] Error: {e}")
+        sys.exit(1)
 
 def sync_ibkr(portfolio_file: str, host: str, port: int, client_id: int, dry_run: bool):
     import datetime
@@ -353,6 +580,7 @@ def main():
     parser.add_argument("--ticket_file", default="LATEST_TICKET.txt", help="Path to latest ticket file")
     parser.add_argument("--portfolio_file", default="portfolio.json", help="Path to portfolio state file")
     parser.add_argument("--sync", action="store_true", help="Synchronize local portfolio state with live broker")
+    parser.add_argument("--auth", action="store_true", help="Authenticate with Charles Schwab OAuth2")
     parser.add_argument("--port", type=int, default=7497, help="IBKR TWS/Gateway port (7497 Paper, 7496 Live)")
     parser.add_argument("--host", default="127.0.0.1", help="IBKR Host IP")
     parser.add_argument("--client_id", type=int, default=1, help="IBKR Client ID")
@@ -365,12 +593,35 @@ def main():
     print("================================================================================")
     print(f" Target Broker: {args.broker.upper()} | Mode: {'DRY RUN (Preview)' if dry_run else 'LIVE ACTION'}")
     
+    if args.auth:
+        if args.broker != "schwab":
+            print("[Auth] --auth is used for Charles Schwab OAuth2.")
+            sys.exit(0)
+        app_key = os.environ.get("SCHWAB_APP_KEY", "")
+        secret = os.environ.get("SCHWAB_SECRET", "")
+        if not app_key or not secret:
+            print("[Schwab Auth] Error: Set SCHWAB_APP_KEY and SCHWAB_SECRET in environment or .env first.")
+            sys.exit(1)
+        api = SchwabTraderAPI(app_key, secret)
+        print("\n================ Charles Schwab OAuth2 Authorization ================")
+        print("1. Open this URL in your web browser:")
+        print(f"\n   {api.get_auth_url()}\n")
+        print("2. Log in with your Charles Schwab username/password and approve the application.")
+        print("3. Schwab will redirect your browser to 127.0.0.1 (it may display a connection error or blank page).")
+        print("4. Copy the ENTIRE URL from your browser's address bar (containing 'code=...') and paste it below:\n")
+        pasted_url = input("Paste redirected URL: ").strip()
+        if pasted_url:
+            api.exchange_code(pasted_url)
+            print(f"\n[Schwab Auth] SUCCESS: OAuth2 tokens saved to {api.TOKEN_FILE}!")
+        print("================================================================================")
+        sys.exit(0)
+
     if args.sync:
         print(f" Operation: PORTFOLIO RECONCILIATION (--sync) with {args.portfolio_file}")
         if args.broker == "ibkr":
             sync_ibkr(args.portfolio_file, args.host, args.port, args.client_id, dry_run)
         else:
-            print("[Schwab Sync] Live Schwab account reconciliation available via REST balance query.")
+            sync_schwab(args.portfolio_file, dry_run)
         print("\n================================================================================")
         return
 
