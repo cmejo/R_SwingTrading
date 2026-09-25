@@ -3,34 +3,13 @@
  MONTHLY STRATEGY HEALTH EVALUATION | SNDK (PAST 30 DAYS)
 ========================================================================
 
-[DataLoader] Attempting to fetch 'SNDK' from Yahoo Finance (2020-01-01 to 2026-09-24)...
-[DataLoader] Successfully fetched 404 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'SNDK' from Yahoo Finance (2020-01-01 to 2026-09-25)...
+[DataLoader] Successfully fetched 405 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_sndk.rds
-[DataLoader] Loaded 404 bars for SNDK [2025-02-13 to 2026-09-23]
+[DataLoader] Loaded 405 bars for SNDK [2025-02-13 to 2026-09-24]
+Warning message:
+SNDK contains missing values. Some functions will not work if objects contain missing values in the middle of the series. Consider using na.omit(), na.approx(), na.fill(), etc to remove or replace them. 
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
-[GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.001468, a1=0.2925, b1=0.4364 (persistence=0.7290)
-[Pipeline] Complete. Result: 350 valid observation rows across 8 features.
-------------------------------------------------------------------------
- EVALUATION PERIOD: 2026-08-05 to 2026-09-16 (30 Trading Days)
-------------------------------------------------------------------------
-                               Strategy Cumulative_Return Annualized_Return
- ML Swing Strategy (GARCH Vol-Targeted)            14.81%           232.12%
-                 Classic MA Trend Cross            -0.53%            -4.54%
-                        Buy & Hold SNDK            12.55%           179.34%
- Annualized_Vol Sharpe_Ratio Max_Drawdown Calmar_Ratio Win_Rate Profit_Factor
-         78.52%         2.96       15.14%        15.33    48.3%          1.40
-         67.80%        -0.07       17.13%        -0.26    43.5%          1.05
-         84.54%         2.12       17.13%        10.47    48.3%          1.33
-
-========================================================================
- STRATEGY HEALTH VERDICT: [ACCEPTABLE (CHOPPY / TRANSITIONAL REGIME)]
-========================================================================
- ! Strategy is profitable but experiencing lower edge due to sideways market action.
- ! Drawdown (15.14%) exceeded 15%. Consider lowering position sizing to 70%.
-========================================================================
-
-null device 
-          1 
-[Chart] Monthly evaluation plot saved to 'output/monthly_review.png'
-
+Error in runCov(Ra, Rb, n) : Series contains non-leading NAs
+Calls: build_feature_dataset -> calculate_dual_lmMA -> lmMA -> rollSFM -> runCov
+Execution halted
