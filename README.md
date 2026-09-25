@@ -31,6 +31,8 @@ A statistical swing trading system implemented in pure **R**, utilizing moderniz
 ├── main.R                     # Full backtesting & diagnostic plotting pipeline
 ├── daily_signal.R             # Multi-asset live scanner & order ticket generator
 ├── monthly_review.R           # Monthly performance & health evaluation script
+├── backtest_past_2_months.R   # 2-month out-of-sample backtest vs S&P 500 (SPY)
+├── backtest_all_symbols.R     # Watchlist-wide backtest across all symbols in symbols.txt
 ├── run_daily.sh               # Automation execution script with desktop alerts
 ├── install_automation.sh      # macOS launchd background scheduler installer
 ├── uninstall_automation.sh    # macOS launchd uninstaller
@@ -45,19 +47,29 @@ A statistical swing trading system implemented in pure **R**, utilizing moderniz
 ### Prerequisites
 Requires R (>= 4.0) with packages:
 ```R
-install.packages(c("xts", "zoo", "quantmod", "TTR", "glmnet", "tseries"))
+install.packages(c("xts", "zoo", "quantmod", "TTR", "glmnet", "tseries", "jsonlite"))
 ```
 
-### Running the Backtest
-To execute the complete pipeline and generate publication-quality diagnostic charts:
+### Running the Backtests
+To execute the complete strategy backtest and generate diagnostic charts:
 ```bash
 Rscript main.R
 ```
 
-### Running the Live Scanner
-To scan your watchlist and generate actionable order tickets for a $10,000 account:
+To run the out-of-sample backtest over the **past 2 months benchmarked against the S&P 500 (`SPY`)**:
 ```bash
-Rscript daily_signal.R --capital=10000 --max_pos=2
+Rscript backtest_past_2_months.R
+```
+
+To backtest the strategy against **all stocks in `symbols.txt`**:
+```bash
+Rscript backtest_all_symbols.R
+```
+
+### Running the Live Scanner
+To scan your watchlist and generate actionable order tickets for a $10,000 account across 5 positions:
+```bash
+Rscript daily_signal.R --capital=10000 --max_pos=5
 ```
 
 ### Automated Daily Scheduling (macOS)
