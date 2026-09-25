@@ -105,13 +105,37 @@ build_feature_dataset <- function(ohlcv,
   colnames(feat_garch_shock) <- "GARCH_Shock"
   colnames(feat_garch_pct)   <- "GARCH_VolPct"
   
-  # 5. Forward Target: Return k periods into future
+  # 5. Volume & Institutional Accumulation Features
+  vol <- tryCatch({
+    Vo(ohlcv)
+  }, error = function(e) {
+    xts(rep(1, nrow(price)), order.by = index(price))
+  })
+  colnames(vol) <- "Volume"
+  
+  # 20-day Volume Surge Ratio
+  vol_ma <- TTR::runMean(vol, n = fast_n)
+  feat_vol_ratio <- vol / (vol_ma + 1e-6)
+  colnames(feat_vol_ratio) <- "VolumeRatio"
+  
+  # On-Balance Volume (OBV) Standardized Trend Slope
+  obv <- tryCatch({
+    TTR::OBV(price, vol)
+  }, error = function(e) {
+    xts(rep(0, nrow(price)), order.by = index(price))
+  })
+  obv_lm <- calculate_dual_lmMA(obv, fast_n = fast_n, slow_n = slow_n)$fast_lm
+  obv_sd <- TTR::runSD(obv, n = fast_n)
+  feat_obv_slope <- obv_lm$slope / (obv_sd + 1e-6)
+  colnames(feat_obv_slope) <- "OBV_Slope"
+
+  # 6. Forward Target: Return k periods into future
   # (Price_{t+k} / Price_t - 1)
   fwd_price <- lag.xts(price, k = -look_ahead)
   target_ret <- (fwd_price - price) / price
   colnames(target_ret) <- "TargetRet"
   
-  # 6. Merge all into single xts
+  # 7. Merge all into single xts
   merged_xts <- merge(
     target_ret,
     feat_slope_fast,
@@ -122,7 +146,9 @@ build_feature_dataset <- function(ohlcv,
     feat_zscore,
     feat_garch_vol,
     feat_garch_shock,
-    feat_garch_pct
+    feat_garch_pct,
+    feat_vol_ratio,
+    feat_obv_slope
   )
   
   # Clean NA created by rolling windows & lookahead
@@ -142,11 +168,13 @@ build_feature_dataset <- function(ohlcv,
     ZScore = as.numeric(clean_xts$ZScore),
     GARCH_Vol = as.numeric(clean_xts$GARCH_Vol),
     GARCH_Shock = as.numeric(clean_xts$GARCH_Shock),
-    GARCH_VolPct = as.numeric(clean_xts$GARCH_VolPct)
+    GARCH_VolPct = as.numeric(clean_xts$GARCH_VolPct),
+    VolumeRatio = as.numeric(clean_xts$VolumeRatio),
+    OBV_Slope = as.numeric(clean_xts$OBV_Slope)
   )
   
   feature_names <- c("SlopeFast", "SlopeSlow", "SlopeWeeklyPct", "TrendQuality", "DistPct", 
-                     "ZScore", "GARCH_Vol", "GARCH_Shock", "GARCH_VolPct")
+                     "ZScore", "GARCH_Vol", "GARCH_Shock", "GARCH_VolPct", "VolumeRatio", "OBV_Slope")
   
   cat(sprintf("[Pipeline] Complete. Result: %d valid observation rows across %d features.\n",
               nrow(df_model), length(feature_names)))

@@ -8,13 +8,17 @@ A statistical swing trading system implemented in pure **R**, utilizing moderniz
 
 1. **Linear Model Moving Average (`lmMA`)**: Replaces simple moving averages with rolling linear regressions (`TTR::rollSFM`) to decouple trend direction (instantaneous slope $\beta$) and trend level ($\alpha + \beta t$) with minimal lag.
 2. **GARCH(1,1) Volatility Modeling**: Models time-varying conditional variance $\sigma_t$ and standardized return shocks ($\epsilon_t / \sigma_t$) via quasi-maximum likelihood estimation (`tseries::garch`).
-3. **Macro Market Regime Gate (`QQQ`)**: Top-down market trend filter. When `QQQ` is above its 50-day `lmMA` with positive slope, full Risk-On allocation (5 positions) is allowed. In Defensive mode, positions are automatically constrained to 2 and minimum entry probability is raised to $P(\text{Up}) \ge 65\%$.
-4. **Earnings Date Blackout Filter**: Queries upcoming earnings dates via calendar events. Stocks reporting within 7 trading days (~10 calendar days) are blocked from new purchases to avoid binary gap risk.
-5. **Multi-Timeframe Trend Synergy**: Aggregates daily data to weekly bars to calculate weekly `lmMA` slope ($\beta_{weekly}$). Daily buy signals are disqualified if fighting a secular weekly downtrend.
-6. **Automated Rolling Walk-Forward Retraining**: Re-estimates ElasticNet models over a rolling 500-trading-day window (~2 years) to adapt to changing volatility regimes without regime decay.
-7. **Dynamic Risk Control**: Computes dynamic $-2\sigma$ Stop-Loss and $+3\sigma$ Take-Profit price levels with a 1.50 : 1 reward-to-risk ratio.
-8. **Ralph Vince Leverage Space Model (LSPM)**: Replaces arbitrary equal weighting with mathematical Geometric Holding Period Return ($\text{GHPR}$) optimization across joint scenario returns. Solves for the optimal leverage vector $\mathbf{f}^*$ scaled by fractional Safe $f$ to prevent portfolio ruin and maximize compounding growth.
-9. **Native macOS & GitHub Automation**: Automated weekday background runner (`launchd`) at 4:30 PM ET pushing desktop notifications and GitHub Actions workflow delivering email alerts to your inbox.
+3. **Volume & Institutional Accumulation Pipeline**: Incorporates 20-day Volume Ratio ($Vol_t / \text{SMA}_{20}(Vol)$) and standardized On-Balance Volume slope ($\beta_{OBV}$) into the ElasticNet model, expanding the feature space to 11 predictors to detect institutional accumulation prior to price breakouts.
+4. **Dynamic VIX Volatility Regime Switcher**: Queries CBOE Volatility Index (`^VIX`) to toggle between `NORMAL` (<20), `ELEVATED` (20-28), and `CRISIS` (>28) market states. Automatically throttles maximum position slots (5 $\rightarrow$ 3 $\rightarrow$ 1) and scales the Ralph Vince Safe $f$ multiplier (0.50 $\rightarrow$ 0.30 $\rightarrow$ 0.15) while tightening probability thresholds.
+5. **Sector & Cluster Concentration Defense**: Enforces strict portfolio diversification by capping exposure at a maximum of 2 active positions per sector (e.g. Semiconductors, Software, Hardware), preventing catastrophic sector-specific drawdowns.
+6. **Multi-Tier Profit Bracket Exits**: Generates two-tier exit orders on every trade ticket:
+   - **Tier 1 (50% scale-out @ $+1.5R$)**: Locks in initial gains and triggers an automatic stop-loss ratchet to Breakeven (entry price) for a zero-downside trade.
+   - **Tier 2 (50% runner @ $+3.0R$)**: Captures multi-week trend momentum runs.
+7. **Automated Multi-Broker Execution Bridge**: Python & R CLI bridge (`execute_broker.py` / `execute_orders.R`) supporting automated bracket staging and transmission for both **Interactive Brokers (IBKR)** via TWS/Gateway (`ib_insync`) and **Charles Schwab Trader API** (OAuth2 REST API) with safe `--dry_run=TRUE` payload verification.
+8. **Macro Market Regime Gate (`QQQ`)**: Top-down market trend filter. When `QQQ` is above its 50-day `lmMA` with positive slope, full Risk-On allocation is allowed; otherwise triggers defensive risk reduction.
+9. **Earnings Date Blackout Filter**: Blocks purchases within 7 trading days (~10 calendar days) of earnings releases to eliminate binary earnings risk.
+10. **Ralph Vince Leverage Space Model (LSPM)**: Geometric Holding Period Return ($\text{GHPR}$) optimization across joint scenario returns, finding the optimal leverage vector $\mathbf{f}^*$ scaled by dynamic Safe $f$ to maximize long-term geometric compounding.
+11. **Native macOS & GitHub Automation**: Automated weekday background runner (`launchd`) at Monday 2:00 PM (entry scan) and Friday 3:30 PM (weekend review) with desktop notifications and GitHub Actions integration.
 
 ---
 
@@ -33,6 +37,8 @@ A statistical swing trading system implemented in pure **R**, utilizing moderniz
 │   └── portfolio_manager.R    # Active portfolio state tracking, P&L sync & exit checks
 ├── main.R                     # Full backtesting & diagnostic plotting pipeline
 ├── daily_signal.R             # Multi-asset live scanner & order ticket generator
+├── execute_broker.py          # Python execution bridge (IBKR & Charles Schwab API)
+├── execute_orders.R           # R CLI runner for automated broker execution
 ├── trade_manager.R            # CLI portfolio manager (record fills, exits & P&L)
 ├── monthly_review.R           # Monthly performance & health evaluation script
 ├── backtest_past_2_months.R   # 2-month out-of-sample backtest vs S&P 500 (SPY)
@@ -56,6 +62,10 @@ Requires R (>= 4.0) with packages:
 ```R
 install.packages(c("xts", "zoo", "quantmod", "TTR", "glmnet", "tseries", "jsonlite"))
 ```
+For Interactive Brokers automation (optional):
+```bash
+pip install ib_insync
+```
 
 ### Running the Backtests
 To execute the complete strategy backtest and generate diagnostic charts:
@@ -77,6 +87,21 @@ Rscript backtest_all_symbols.R
 To scan your watchlist and generate actionable order tickets for a $10,000 account across 5 positions:
 ```bash
 Rscript daily_signal.R --capital=10000 --max_pos=5 --fractional=TRUE
+```
+
+### Automated Broker Execution (IBKR & Schwab)
+To preview and validate staged bracket orders generated by `daily_signal.R`:
+```bash
+# Preview Interactive Brokers (IBKR) bracket payloads
+Rscript execute_orders.R --broker=ibkr --dry_run=TRUE
+
+# Preview Charles Schwab Trader API bracket payloads
+Rscript execute_orders.R --broker=schwab --dry_run=TRUE
+```
+
+To transmit orders live to an active Interactive Brokers TWS or IB Gateway instance (port 7497 for paper, 7496 for live):
+```bash
+Rscript execute_orders.R --broker=ibkr --dry_run=FALSE --port=7497
 ```
 
 ### Portfolio Management (CLI)

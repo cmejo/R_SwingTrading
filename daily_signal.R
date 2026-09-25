@@ -148,7 +148,7 @@ if (is.null(SYMBOLS)) {
 }
 
 cat("\n========================================================================================\n")
-cat(" 1. MACRO MARKET REGIME GATE (QQQ 50-DAY TREND FILTER)\n")
+cat(" 1. MACRO MARKET & VOLATILITY REGIME GATE (QQQ + VIX DUAL FILTER)\n")
 cat("========================================================================================\n")
 
 macro_info <- tryCatch({
@@ -172,25 +172,45 @@ macro_info <- tryCatch({
   list(close = 0, fit = 0, slope = 0, is_bullish = TRUE, regime = "BULLISH (Default)")
 })
 
+# Dynamic CBOE VIX Volatility Regime
+vix_info <- tryCatch({
+  vix_ohlcv <- load_stock_data("^VIX")
+  vix_px <- as.numeric(last(Cl(vix_ohlcv)))
+  v_reg <- if (vix_px < 20) "NORMAL (Low Volatility)" else if (vix_px <= 28) "ELEVATED (Caution)" else "CRISIS (Extreme Volatility)"
+  list(close = vix_px, regime = v_reg)
+}, error = function(e) {
+  list(close = 16.5, regime = "NORMAL (Default)")
+})
+
+# Multi-Factor Macro Sizing Policy
 if (MACRO_GATE && !macro_info$is_bullish) {
-  EFFECTIVE_MAX_POS <- min(2, MAX_POSITIONS)
-  EFFECTIVE_P_LONG  <- 0.65
-  cat(sprintf(" [Macro Gate Status] %s\n", macro_info$regime))
-  cat(sprintf("   QQQ Close: $%.2f | 50D lmMA Fit: $%.2f | Slope: %.3f\n", 
-              macro_info$close, macro_info$fit, macro_info$slope))
-  cat(sprintf("   -> DEFENSIVE ADJUSTMENT: Max active positions scaled to %d (from %d)\n", 
-              EFFECTIVE_MAX_POS, MAX_POSITIONS))
-  cat(sprintf("   -> RAISING CONVICTION BAR: Required P(Up) >= %.1f%% (from %.1f%%)\n\n", 
-              EFFECTIVE_P_LONG * 100, P_LONG * 100))
+  EFFECTIVE_MAX_POS       <- min(2, MAX_POSITIONS)
+  EFFECTIVE_P_LONG        <- 0.65
+  EFFECTIVE_SAFETY_FACTOR <- min(SAFETY_FACTOR, 0.30)
+  macro_note <- "QQQ Trend Deficit: Capping positions at 2, raising P(Up) >= 65%"
+} else if (vix_info$close > 28) {
+  EFFECTIVE_MAX_POS       <- min(1, MAX_POSITIONS)
+  EFFECTIVE_P_LONG        <- 0.68
+  EFFECTIVE_SAFETY_FACTOR <- 0.15
+  macro_note <- "VIX Crisis (>28): Capital preservation mode, 1 position max, Safe f = 0.15"
+} else if (vix_info$close >= 20) {
+  EFFECTIVE_MAX_POS       <- min(3, MAX_POSITIONS)
+  EFFECTIVE_P_LONG        <- 0.60
+  EFFECTIVE_SAFETY_FACTOR <- min(SAFETY_FACTOR, 0.30)
+  macro_note <- "VIX Elevated (20-28): Caution scaling to 3 positions, Safe f = 0.30"
 } else {
-  EFFECTIVE_MAX_POS <- MAX_POSITIONS
-  EFFECTIVE_P_LONG  <- P_LONG
-  cat(sprintf(" [Macro Gate Status] %s\n", macro_info$regime))
-  cat(sprintf("   QQQ Close: $%.2f | 50D lmMA Fit: $%.2f | Slope: +%.3f\n", 
-              macro_info$close, macro_info$fit, macro_info$slope))
-  cat(sprintf("   -> Full Risk-On Allocation: Max Positions = %d | P(Up) >= %.1f%%\n\n", 
-              EFFECTIVE_MAX_POS, EFFECTIVE_P_LONG * 100))
+  EFFECTIVE_MAX_POS       <- MAX_POSITIONS
+  EFFECTIVE_P_LONG        <- P_LONG
+  EFFECTIVE_SAFETY_FACTOR <- SAFETY_FACTOR
+  macro_note <- "Full Risk-On Allocation: 5 positions, Safe f = 0.50, P(Up) >= 58.0%"
 }
+
+cat(sprintf(" [Macro Gate Status] %s | Volatility Regime: %s\n", macro_info$regime, vix_info$regime))
+cat(sprintf("   QQQ Close: $%.2f | 50D lmMA Fit: $%.2f | Slope: %+.3f\n", 
+            macro_info$close, macro_info$fit, macro_info$slope))
+cat(sprintf("   CBOE VIX:  %.2f   | Volatility Regime: %s\n", vix_info$close, vix_info$regime))
+cat(sprintf("   -> Dynamic Policy: Max Positions = %d | Safe f = %.2f | Min P(Up) >= %.1f%%\n\n", 
+            EFFECTIVE_MAX_POS, EFFECTIVE_SAFETY_FACTOR, EFFECTIVE_P_LONG * 100))
 
 cat("========================================================================================\n")
 cat(sprintf(" 2. SCANNING WATCHLIST (%d ASSETS) WITH WALK-FORWARD RETRAINING\n", length(SYMBOLS)))
@@ -243,6 +263,16 @@ for (sym in SYMBOLS) {
     
     feat_slope_weekly <- xts(rep(weekly_slope_pct, nrow(price)), order.by = index(price))
     
+    # Volume features
+    vol <- tryCatch(Vo(ohlcv), error = function(e) xts(rep(1, nrow(price)), order.by = index(price)))
+    vol_ma <- TTR::runMean(vol, n = FAST_N)
+    feat_vol_ratio <- vol / (vol_ma + 1e-6)
+    
+    obv <- tryCatch(TTR::OBV(price, vol), error = function(e) xts(rep(0, nrow(price)), order.by = index(price)))
+    obv_lm <- calculate_dual_lmMA(obv, fast_n = FAST_N, slow_n = SLOW_N)$fast_lm
+    obv_sd <- TTR::runSD(obv, n = FAST_N)
+    feat_obv_slope <- obv_lm$slope / (obv_sd + 1e-6)
+
     all_feats <- merge(
       SlopeFast = dual_lm$fast_lm$slope,
       SlopeSlow = dual_lm$slow_lm$slope,
@@ -252,7 +282,9 @@ for (sym in SYMBOLS) {
       ZScore = zscore,
       GARCH_Vol = garch_out$annualized_vol,
       GARCH_Shock = garch_out$shocks,
-      GARCH_VolPct = garch_out$vol_percentile
+      GARCH_VolPct = garch_out$vol_percentile,
+      VolumeRatio = feat_vol_ratio,
+      OBV_Slope = feat_obv_slope
     )
     
     latest_feats <- tail(na.omit(all_feats), 1)
@@ -438,25 +470,73 @@ if (isTRUE(IS_FRIDAY)) {
   
   held_syms <- if (sync_res$active_count > 0) sync_res$holdings_df$Symbol else character(0)
   
+  # Sector Taxonomy Mapping & Cluster Risk Defense (Max 2 positions per sector)
+  SECTOR_MAP <- list(
+    AMD   = "Semiconductors",
+    NVDA  = "Semiconductors",
+    MU    = "Semiconductors",
+    SNDK  = "Semiconductors",
+    SOXL  = "Semiconductors",
+    MSFT  = "Software_MegaCap",
+    AAPL  = "Software_MegaCap",
+    META  = "Software_MegaCap",
+    TSLA  = "Hardware_Tech",
+    LITE  = "Hardware_Tech",
+    IONQ  = "Hardware_Tech",
+    SMHC  = "Hardware_Tech",
+    KXIAY = "Hardware_Tech",
+    QQQ   = "Index_ETF",
+    QLD   = "Index_ETF"
+  )
+  get_sector <- function(s) if (s %in% names(SECTOR_MAP)) SECTOR_MAP[[s]] else "General_Tech"
+  
+  # Count existing sector exposure from currently held positions
+  held_sectors <- list()
+  for (hs in held_syms) {
+    sec <- get_sector(hs)
+    held_sectors[[sec]] <- if (is.null(held_sectors[[sec]])) 1 else held_sectors[[sec]] + 1
+  }
+  
   if (empty_slots > 0 && cash_available >= 50) {
     unowned_buys <- df_scan[df_scan$Signal == "BUY" & !(df_scan$Symbol %in% held_syms), ]
-    n_actionable <- min(nrow(unowned_buys), empty_slots)
+    
+    # Apply Sector Concentration Filter (Max 2 positions per sector)
+    filtered_candidates <- character()
+    if (nrow(unowned_buys) > 0) {
+      for (cand_i in 1:nrow(unowned_buys)) {
+        cand_sym <- unowned_buys$Symbol[cand_i]
+        cand_sec <- get_sector(cand_sym)
+        c_count  <- if (is.null(held_sectors[[cand_sec]])) 0 else held_sectors[[cand_sec]]
+        
+        if (c_count < 2) {
+          filtered_candidates <- c(filtered_candidates, cand_sym)
+          held_sectors[[cand_sec]] <- c_count + 1
+          if (length(filtered_candidates) >= empty_slots) break
+        } else {
+          cat(sprintf(" [Sector Defense] Skipping %s: Sector '%s' already at maximum cap (2 positions).\n",
+                      cand_sym, cand_sec))
+        }
+      }
+    }
+    
+    n_actionable <- length(filtered_candidates)
     
     if (n_actionable > 0) {
-      candidate_syms <- unowned_buys$Symbol[1:n_actionable]
+      candidate_syms <- filtered_candidates
+      actionable_df <- unowned_buys[unowned_buys$Symbol %in% candidate_syms, ]
       vince_alloc <- NULL
       
       # Ralph Vince Leverage Space Model Sizing
       if (SIZING_MODE == "vince") {
         cat(sprintf(" Sizing Engine: Ralph Vince Leverage Space Model (Safe f = %.2f, %d-Day Scenarios, Fractional: %s)\n",
-                    SAFETY_FACTOR, VINCE_LOOKBACK, ifelse(ALLOW_FRACTIONAL, "YES (Exact)", "NO (Floor)")))
+                    EFFECTIVE_SAFETY_FACTOR, VINCE_LOOKBACK, ifelse(ALLOW_FRACTIONAL, "YES (Exact)", "NO (Floor)")))
         tryCatch({
           joint_events <- build_joint_scenario_matrix(candidate_syms, lookback_days = VINCE_LOOKBACK)
           avail_syms <- intersect(candidate_syms, colnames(joint_events))
           if (length(avail_syms) >= 1) {
             sub_events <- joint_events[, avail_syms, drop = FALSE]
-            vince_opt <- vince_optimal_f(sub_events, max_leverage = 1.0, safety_factor = SAFETY_FACTOR)
-            cur_px_map <- setNames(unowned_buys$Close[match(avail_syms, unowned_buys$Symbol)], avail_syms)
+            vince_opt <- vince_optimal_f(sub_events, max_leverage = 1.0, safety_factor = EFFECTIVE_SAFETY_FACTOR)
+            cur_px_map <- setNames(actionable_df$Close[match(avail_syms, actionable_df$Symbol)], avail_syms)
             vince_alloc <- vince_portfolio_allocation(vince_opt, total_cash = cash_available, current_prices = cur_px_map, allow_fractional = ALLOW_FRACTIONAL)
             cat(sprintf(" -> Optimized Portfolio GHPR: %.4f (Expected Geometric Growth: %+.2f%% / day)\n\n",
                         vince_opt$ghpr, vince_opt$expected_growth_pct))
@@ -473,7 +553,8 @@ if (isTRUE(IS_FRIDAY)) {
       }
       
       for (i in 1:n_actionable) {
-        row <- unowned_buys[i, ]
+        row <- actionable_df[actionable_df$Symbol == candidate_syms[i], ]
+        c_sec <- get_sector(row$Symbol)
         
         if (!is.null(vince_alloc) && row$Symbol %in% vince_alloc$Symbol) {
           v_row <- vince_alloc[vince_alloc$Symbol == row$Symbol, ]
@@ -498,20 +579,34 @@ if (isTRUE(IS_FRIDAY)) {
         
         shares_display <- if (isTRUE(ALLOW_FRACTIONAL) && (shares %% 1 != 0)) sprintf("%.3f", shares) else sprintf("%d", as.integer(shares))
         
-        cat(sprintf("--- ORDER TICKET #%d: %s (P(Up): %.1f%%) ---\n", i, row$Symbol, row$Prob_Up * 100))
+        # Multi-Tier Bracket Pricing
+        tier1_shares <- if (isTRUE(ALLOW_FRACTIONAL)) round(shares * 0.5, 3) else floor(shares * 0.5)
+        tier2_shares <- round(shares - tier1_shares, 3)
+        tier1_target <- round(row$Close * (1 + 3.0 * row$Daily_Vol), 2)  # +1.5R target
+        tier2_target <- round(row$Close * (1 + 6.0 * row$Daily_Vol), 2)  # +3.0R runner target
+        total_risk   <- round(shares * (row$Close - row$Stop_Loss), 2)
+        tier1_gain   <- round(tier1_shares * (tier1_target - row$Close), 2)
+        tier2_gain   <- round(tier2_shares * (tier2_target - row$Close), 2)
+        
+        cat(sprintf("--- ORDER TICKET #%d: %s (P(Up): %.1f%% | Sector: %s) ---\n", 
+                    i, row$Symbol, row$Prob_Up * 100, c_sec))
         cat(sprintf("  Action:              BUY %s SHARES at Market (Monday Afternoon Execution)\n", shares_display))
         cat(sprintf("  Position Sizing:     %s\n", sizing_note))
         cat(sprintf("  Capital Allocation:  %s\n", alloc_note))
         cat(sprintf("  Multi-Timeframe:     Weekly Trend +%.2f%% [BULLISH SYNERGY]\n", row$Weekly_Slope))
         cat(sprintf("  Earnings Safe:       Next report %s (%d days out)\n", row$Earnings_Date, as.integer(row$Days_To_Earn)))
-        cat(sprintf("  GTC Stop-Loss:       $%.2f (-%.2f%%) [Risk: $%.2f]\n", 
-                    row$Stop_Loss, 2.0 * row$Daily_Vol * 100, shares * (row$Close - row$Stop_Loss)))
-        cat(sprintf("  GTC Take-Profit:     $%.2f (+%.2f%%) [Gain: $%.2f]\n", 
-                    row$Take_Profit, 3.0 * row$Daily_Vol * 100, shares * (row$Take_Profit - row$Close)))
-        cat(sprintf("  Reward / Risk Ratio: 1.50 : 1.0\n\n"))
+        cat(sprintf("  GTC Stop-Loss:       $%.2f (-%.2f%%) [Total Downside Risk: $%.2f]\n", 
+                    row$Stop_Loss, 2.0 * row$Daily_Vol * 100, total_risk))
+        cat("  Multi-Tier Bracket Exits:\n")
+        cat(sprintf("    -> Tier 1 (50%% = %s shs): Target $%.2f (+%.2f%%, +1.5R) [Gain: $%.2f] -> Lock in profits & move stop to Breakeven $%.2f\n",
+                    tier1_shares, tier1_target, 3.0 * row$Daily_Vol * 100, tier1_gain, row$Close))
+        cat(sprintf("    -> Tier 2 (50%% = %s shs): Target $%.2f (+%.2f%%, +3.0R) [Gain: $%.2f] -> Momentum runner\n",
+                    tier2_shares, tier2_target, 6.0 * row$Daily_Vol * 100, tier2_gain))
+        cat(sprintf("  Reward / Risk Ratio: Tier 1: 1.50R | Tier 2: 3.00R (Combined Potential: +$%.2f vs -$%.2f Risk)\n\n",
+                    tier1_gain + tier2_gain, total_risk))
       }
     } else {
-      cat(sprintf(" No unowned symbols currently meet all BUY criteria (P(Up) >= %.1f%%, Weekly Bullish, No Earnings).\n",
+      cat(sprintf(" No unowned symbols currently meet all BUY criteria (P(Up) >= %.1f%%, Weekly Bullish, Sector Cap).\n",
                   EFFECTIVE_P_LONG * 100))
       cat(" RECOMMENDATION: Retain available cash buffer in money market / cash.\n")
     }
