@@ -2,8 +2,10 @@ name: Daily Swing Trading Scanner & Email Alert
 
 on:
   schedule:
-    # 20:30 UTC = 4:30 PM EDT (Monday through Friday)
-    - cron: '30 20 * * 1-5'
+    # 18:00 UTC = 2:00 PM (14:00) EDT (Monday through Thursday)
+    - cron: '0 18 * * 1-4'
+    # 19:30 UTC = 3:30 PM (15:30) EDT (Friday: Mandatory Weekend Exit Check)
+    - cron: '30 19 * * 5'
   workflow_dispatch: # Allows manual one-click execution from GitHub Actions tab
 
 permissions:
@@ -48,7 +50,7 @@ jobs:
       - name: Run Daily Swing Scanner
         run: |
           mkdir -p output logs data
-          Rscript daily_signal.R --symbols_file=symbols.txt --capital=10000 --max_pos=5 --sizing_mode=vince --safety_factor=0.50 > LATEST_TICKET.txt 2>&1
+          Rscript daily_signal.R --symbols_file=symbols.txt --capital=10000 --max_pos=5 --sizing_mode=vince --safety_factor=0.50 --fractional=TRUE --portfolio_file=portfolio.json > LATEST_TICKET.txt 2>&1
           cat LATEST_TICKET.txt
 
       - name: Run Weekly/Monthly Evaluation (Fridays)

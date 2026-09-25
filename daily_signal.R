@@ -24,22 +24,26 @@ source("R/03_volatility_garch.R")
 source("R/04_feature_pipeline.R")
 source("R/05_logistic_model.R")
 source("R/07_leverage_space.R")
+source("R/portfolio_manager.R")
 
 # Default Parameters
-CAPITAL        <- 10000
-MAX_POSITIONS  <- 5     # Max concurrent swing positions to hold (e.g., 5 positions @ $2,000 each)
-TARGET_VOL     <- 1.00  # High Growth Sizing (100% allocation of per-position capital)
-FAST_N         <- 20
-SLOW_N         <- 50
-LOOK_AHEAD     <- 5
-P_LONG         <- 0.58
-P_SHORT        <- 0.42
-TRAIN_WINDOW   <- 500   # Rolling historical training window (bars) to prevent regime decay
-MACRO_GATE     <- TRUE  # Top-down market regime filter (QQQ)
-EARNINGS_DAYS  <- 7     # Disqualify stocks reporting earnings within N trading days (~10 calendar days)
-SIZING_MODE    <- "vince" # Position sizing engine: "vince" (Leverage Space) or "equal"
-SAFETY_FACTOR  <- 0.50    # Aggressive Safe f scaling factor for Ralph Vince Leverage Space model
-VINCE_LOOKBACK <- 120     # Lookback days for joint scenario return matrix
+CAPITAL          <- 10000
+MAX_POSITIONS    <- 5     # Max concurrent swing positions to hold (e.g., 5 positions @ $2,000 each)
+TARGET_VOL       <- 1.00  # High Growth Sizing (100% allocation of per-position capital)
+FAST_N           <- 20
+SLOW_N           <- 50
+LOOK_AHEAD       <- 5
+P_LONG           <- 0.58
+P_SHORT          <- 0.42
+TRAIN_WINDOW     <- 500   # Rolling historical training window (bars) to prevent regime decay
+MACRO_GATE       <- TRUE  # Top-down market regime filter (QQQ)
+EARNINGS_DAYS    <- 7     # Disqualify stocks reporting earnings within N trading days (~10 calendar days)
+SIZING_MODE      <- "vince" # Position sizing engine: "vince" (Leverage Space) or "equal"
+SAFETY_FACTOR    <- 0.50    # Aggressive Safe f scaling factor for Ralph Vince Leverage Space model
+VINCE_LOOKBACK   <- 120     # Lookback days for joint scenario return matrix
+ALLOW_FRACTIONAL <- TRUE    # Allow fractional shares for exact risk budget allocation
+PORTFOLIO_FILE   <- "portfolio.json"
+IS_FRIDAY        <- (format(Sys.Date(), "%u") == "5") # Friday weekend exit check
 
 # Read symbols & portfolio management CLI args
 SYMBOLS <- NULL
@@ -59,6 +63,9 @@ for (arg in args) {
   if (grepl("^--sizing_mode=", arg)) SIZING_MODE <- tolower(sub("^--sizing_mode=", "", arg))
   if (grepl("^--safety_factor=", arg)) SAFETY_FACTOR <- as.numeric(sub("^--safety_factor=", "", arg))
   if (grepl("^--vince_lookback=", arg)) VINCE_LOOKBACK <- as.numeric(sub("^--vince_lookback=", "", arg))
+  if (grepl("^--fractional=", arg)) ALLOW_FRACTIONAL <- as.logical(sub("^--fractional=", "", arg))
+  if (grepl("^--portfolio_file=", arg)) PORTFOLIO_FILE <- sub("^--portfolio_file=", "", arg)
+  if (grepl("^--is_friday=", arg)) IS_FRIDAY <- as.logical(sub("^--is_friday=", "", arg))
   if (grepl("^--symbols_file=", arg)) SYMBOLS_FILE <- sub("^--symbols_file=", "", arg)
   if (grepl("^--symbol=", arg))  SYMBOLS <- strsplit(sub("^--symbol=", "", arg), "[, ]+")[[1]]
   if (grepl("^--symbols=", arg)) SYMBOLS <- strsplit(sub("^--symbols=", "", arg), "[, ]+")[[1]]
@@ -67,37 +74,47 @@ for (arg in args) {
   if (arg == "--reset_portfolio") RESET_PORT <- TRUE
 }
 
-# Portfolio State Management
-PORTFOLIO_FILE <- "portfolio.json"
-if (!file.exists(PORTFOLIO_FILE) || RESET_PORT) {
-  port_state <- list(total_capital = CAPITAL, positions = list())
-  write(toJSON(port_state, auto_unbox = TRUE, pretty = TRUE), PORTFOLIO_FILE)
+# Portfolio State Initialization & Management
+if (RESET_PORT) {
+  port_state <- list(
+    total_capital = CAPITAL,
+    cash_balance = CAPITAL,
+    max_positions = MAX_POSITIONS,
+    last_updated = as.character(Sys.time()),
+    positions = list(),
+    closed_trades = list()
+  )
+  save_portfolio(port_state, PORTFOLIO_FILE)
+  cat(sprintf("[PortfolioManager] Reset portfolio to $%.2f cash balance.\n", CAPITAL))
 } else {
-  port_state <- fromJSON(PORTFOLIO_FILE)
+  port_state <- load_portfolio(PORTFOLIO_FILE, default_capital = CAPITAL, max_positions = MAX_POSITIONS)
 }
 
-# Handle Buy Recording: e.g. --record_buy=SNDK,2,1816.57
+# Handle Buy Recording: e.g. --record_buy=AMD:9.26:614.61:555.76:702.88
 if (!is.null(RECORD_BUY)) {
   parts <- strsplit(RECORD_BUY, "[,:]")[[1]]
-  buy_sym <- toupper(parts[1])
-  buy_qty <- as.numeric(parts[2])
-  buy_px  <- as.numeric(parts[3])
-  port_state$positions[[buy_sym]] <- list(
-    symbol = buy_sym, shares = buy_qty, entry_price = buy_px, entry_date = as.character(Sys.Date())
-  )
-  write(toJSON(port_state, auto_unbox = TRUE, pretty = TRUE), PORTFOLIO_FILE)
-  cat(sprintf("[Portfolio] Recorded BUY: %d shares of %s at $%.2f\n", buy_qty, buy_sym, buy_px))
+  if (length(parts) >= 3) {
+    buy_sym <- toupper(parts[1])
+    buy_qty <- as.numeric(parts[2])
+    buy_px  <- as.numeric(parts[3])
+    buy_stp <- if (length(parts) >= 4) as.numeric(parts[4]) else round(buy_px * 0.95, 2)
+    buy_tgt <- if (length(parts) >= 5) as.numeric(parts[5]) else round(buy_px * 1.10, 2)
+    port_state <- record_fill(port_state, buy_sym, buy_qty, buy_px, buy_stp, buy_tgt)
+    save_portfolio(port_state, PORTFOLIO_FILE)
+    cat(sprintf("[PortfolioManager] Recorded BUY: %.3f shares of %s at $%.2f (Stop: $%.2f, Target: $%.2f)\n",
+                buy_qty, buy_sym, buy_px, buy_stp, buy_tgt))
+  }
 }
 
-# Handle Sell Recording: e.g. --record_sell=SNDK,1850.00
+# Handle Sell Recording: e.g. --record_sell=AMD:635.00:TAKE_PROFIT
 if (!is.null(RECORD_SELL)) {
   parts <- strsplit(RECORD_SELL, "[,:]")[[1]]
   sell_sym <- toupper(parts[1])
-  if (sell_sym %in% names(port_state$positions)) {
-    port_state$positions[[sell_sym]] <- NULL
-    write(toJSON(port_state, auto_unbox = TRUE, pretty = TRUE), PORTFOLIO_FILE)
-    cat(sprintf("[Portfolio] Recorded SELL / EXIT to CASH for %s\n", sell_sym))
-  }
+  sell_px  <- as.numeric(parts[2])
+  sell_rsn <- if (length(parts) >= 3) parts[3] else "MANUAL_EXIT"
+  port_state <- record_exit(port_state, sell_sym, sell_px, reason = sell_rsn)
+  save_portfolio(port_state, PORTFOLIO_FILE)
+  cat(sprintf("[PortfolioManager] Recorded SELL / EXIT for %s at $%.2f (Reason: %s)\n", sell_sym, sell_px, sell_rsn))
 }
 
 # Resolve symbols.txt path if not explicitly provided as a vector
@@ -344,141 +361,136 @@ cat("\n=========================================================================
 cat("                        MY PORTFOLIO HOLDINGS & CASH MONITOR\n")
 cat("========================================================================================\n")
 
-held_syms <- names(port_state$positions)
-n_held <- length(held_syms)
-total_invested_val <- 0
+cur_px_all <- setNames(df_scan$Close, df_scan$Symbol)
+sync_res <- sync_portfolio_with_market(port_state, current_prices = cur_px_all, current_date = Sys.Date(), is_friday = IS_FRIDAY)
 
-if (n_held > 0) {
-  cat(sprintf(" Active Open Positions (%d of %d active slots used):\n\n", n_held, EFFECTIVE_MAX_POS))
-  
-  for (h_sym in held_syms) {
-    p_info <- port_state$positions[[h_sym]]
-    cur_px <- if (h_sym %in% df_scan$Symbol) df_scan$Close[df_scan$Symbol == h_sym] else p_info$entry_price
-    cur_sig <- if (h_sym %in% df_scan$Symbol) df_scan$Signal[df_scan$Symbol == h_sym] else "N/A"
-    cur_prob <- if (h_sym %in% df_scan$Symbol) sprintf("%.1f%%", df_scan$Prob_Up[df_scan$Symbol == h_sym] * 100) else "N/A"
-    
-    pos_val <- p_info$shares * cur_px
-    cost_val <- p_info$shares * p_info$entry_price
-    unrealized_pnl <- pos_val - cost_val
-    unrealized_pct <- (cur_px - p_info$entry_price) / p_info$entry_price * 100
-    total_invested_val <- total_invested_val + pos_val
-    
-    cat(sprintf("  [%s] %d SHARES | Entry: $%.2f | Current: $%.2f | Value: $%.2f | P&L: %s$%.2f (%s%.2f%%)\n",
-                h_sym, p_info$shares, p_info$entry_price, cur_px, pos_val,
-                ifelse(unrealized_pnl >= 0, "+", "-"), abs(unrealized_pnl),
-                ifelse(unrealized_pct >= 0, "+", "-"), abs(unrealized_pct)))
-    
-    # Check if earnings are approaching for held stock
-    h_row <- df_scan[df_scan$Symbol == h_sym, ]
-    if (nrow(h_row) > 0 && h_row$Days_To_Earn >= 0 && h_row$Days_To_Earn <= 10) {
-      cat(sprintf("    ⚠️ EARNINGS WARNING: %s reports earnings in %d days (%s)! Consider tightening stop.\n",
-                  h_sym, as.integer(h_row$Days_To_Earn), h_row$Earnings_Date))
-    }
-    
-    if (cur_sig == "CASH") {
-      cat(sprintf("    *** ACTION REQUIRED: Model signal flipped to CASH (P(Up): %s). SELL at Market Open! ***\n", cur_prob))
-    } else {
-      cat(sprintf("    ✓ Status: %s (P(Up): %s) -> MAINTAIN HOLDING (Brackets Active)\n", cur_sig, cur_prob))
-    }
-    cat("\n")
-  }
+if (sync_res$active_count > 0) {
+  cat(sprintf(" Active Open Positions (%d of %d active slots used):\n\n", sync_res$active_count, EFFECTIVE_MAX_POS))
+  print(sync_res$holdings_df[, c("Symbol", "Shares", "Entry_Price", "Current_Price", "Market_Value", "Unrealized_PnL", "Return_Pct", "Days_Held", "Action_Required")], row.names = FALSE)
+  cat("\n")
 } else {
   cat(" Currently 0 Open Positions. Portfolio is 100% in CASH.\n\n")
 }
 
-cash_available <- max(0, CAPITAL - total_invested_val)
-empty_slots <- max(0, EFFECTIVE_MAX_POS - n_held)
+if (length(sync_res$alerts) > 0) {
+  cat("----------------------------------------------------------------------------------------\n")
+  cat(" ⚠️  PORTFOLIO ACTION ALERTS:\n")
+  for (al in sync_res$alerts) {
+    cat(sprintf("    * %s\n", al))
+  }
+  cat("----------------------------------------------------------------------------------------\n\n")
+}
 
-cat(sprintf(" TOTAL ACCOUNT VALUE:    $%.2f\n", total_invested_val + cash_available))
-cat(sprintf(" INVESTED IN EQUITIES:   $%.2f (%.1f%%)\n", total_invested_val, total_invested_val / CAPITAL * 100))
-cat(sprintf(" AVAILABLE CASH BALANCE: $%.2f (%.1f%%)\n", cash_available, cash_available / CAPITAL * 100))
+cash_available <- sync_res$cash_balance
+empty_slots <- min(sync_res$available_slots, max(0, EFFECTIVE_MAX_POS - sync_res$active_count))
+
+cat(sprintf(" TOTAL ACCOUNT VALUE:    $%.2f\n", sync_res$total_account_value))
+cat(sprintf(" INVESTED IN EQUITIES:   $%.2f (%.1f%%)\n", sync_res$total_invested, sync_res$total_invested / max(1, sync_res$total_account_value) * 100))
+cat(sprintf(" AVAILABLE CASH BALANCE: $%.2f (%.1f%%)\n", cash_available, cash_available / max(1, sync_res$total_account_value) * 100))
 cat(sprintf(" AVAILABLE CASH SLOTS:   %d of %d (Regime Limit: %d)\n", empty_slots, EFFECTIVE_MAX_POS, EFFECTIVE_MAX_POS))
 
 # ========================================================================================
 # ACTIONABLE CAPITAL DEPLOYMENT (ORDERS TO FILL EMPTY CASH SLOTS)
 # ========================================================================================
 cat("\n========================================================================================\n")
-cat(sprintf("              RECOMMENDED ORDERS FOR EMPTY CASH SLOTS (%d AVAILABLE)\n", empty_slots))
-cat("========================================================================================\n")
 
-if (empty_slots > 0) {
-  # Candidate buys excluding already held positions and passing all gates
-  unowned_buys <- df_scan[df_scan$Signal == "BUY" & !(df_scan$Symbol %in% held_syms), ]
-  n_actionable <- min(nrow(unowned_buys), empty_slots)
+if (isTRUE(IS_FRIDAY)) {
+  cat("                   FRIDAY AFTERNOON: WEEKEND RISK CLOSE-OUT                   \n")
+  cat("========================================================================================\n")
+  cat(" [RULE ENFORCED] Zero positions held over the weekend!\n")
+  if (sync_res$active_count > 0) {
+    cat(" -> ACTION REQUIRED: Sell all active positions at market before 16:00 EDT Friday close.\n")
+  } else {
+    cat(" -> SUCCESS: Portfolio is 100% in cash. No open weekend exposure.\n")
+  }
+  cat(" -> NEXT ACTION: Fresh weekly signals will be scanned and executed MONDAY at 14:00 EDT.\n")
+  cat("========================================================================================\n\n")
+} else {
+  cat(sprintf("              RECOMMENDED ORDERS FOR EMPTY CASH SLOTS (%d AVAILABLE)\n", empty_slots))
+  cat("========================================================================================\n")
   
-  if (n_actionable > 0) {
-    candidate_syms <- unowned_buys$Symbol[1:n_actionable]
-    vince_alloc <- NULL
+  held_syms <- if (sync_res$active_count > 0) sync_res$holdings_df$Symbol else character(0)
+  
+  if (empty_slots > 0 && cash_available >= 50) {
+    unowned_buys <- df_scan[df_scan$Signal == "BUY" & !(df_scan$Symbol %in% held_syms), ]
+    n_actionable <- min(nrow(unowned_buys), empty_slots)
     
-    # Ralph Vince Leverage Space Model Sizing
-    if (SIZING_MODE == "vince") {
-      cat(sprintf(" Sizing Engine: Ralph Vince Leverage Space Model (Safe f = %.2f, %d-Day Scenarios)\n",
-                  SAFETY_FACTOR, VINCE_LOOKBACK))
-      tryCatch({
-        joint_events <- build_joint_scenario_matrix(candidate_syms, lookback_days = VINCE_LOOKBACK)
-        avail_syms <- intersect(candidate_syms, colnames(joint_events))
-        if (length(avail_syms) >= 1) {
-          sub_events <- joint_events[, avail_syms, drop = FALSE]
-          vince_opt <- vince_optimal_f(sub_events, max_leverage = 1.0, safety_factor = SAFETY_FACTOR)
-          cur_px_map <- setNames(unowned_buys$Close[match(avail_syms, unowned_buys$Symbol)], avail_syms)
-          vince_alloc <- vince_portfolio_allocation(vince_opt, total_cash = cash_available, current_prices = cur_px_map)
-          cat(sprintf(" -> Optimized Portfolio GHPR: %.4f (Expected Geometric Growth: %+.2f%% / day)\n\n",
-                      vince_opt$ghpr, vince_opt$expected_growth_pct))
-        }
-      }, error = function(e) {
-        cat(sprintf(" -> Leverage Space note: %s. Using Equal-Weight slots.\n\n", e$message))
-        vince_alloc <<- NULL
-      })
-    }
-    
-    slot_capital_equal <- cash_available / empty_slots
-    if (is.null(vince_alloc)) {
-      cat(sprintf(" Sizing Mode: Equal-Weight Cash Allocation ($%.2f per slot)\n\n", slot_capital_equal))
-    }
-    
-    for (i in 1:n_actionable) {
-      row <- unowned_buys[i, ]
+    if (n_actionable > 0) {
+      candidate_syms <- unowned_buys$Symbol[1:n_actionable]
+      vince_alloc <- NULL
       
-      if (!is.null(vince_alloc) && row$Symbol %in% vince_alloc$Symbol) {
-        v_row <- vince_alloc[vince_alloc$Symbol == row$Symbol, ]
-        shares <- v_row$Shares
-        invested <- v_row$Actual_Outlay
-        allocated_cash <- v_row$Dollar_Allocation
-        opt_f_val <- v_row$Optimal_f
-        safe_f_val <- v_row$Safe_f
-        max_loss_val <- v_row$Max_Loss
-        weight_pct <- v_row$Weight * 100
-        sizing_note <- sprintf("Vince Optimal f: %.4f | Safe f: %.4f | Max Loss: %s",
-                               opt_f_val, safe_f_val, max_loss_val)
-        alloc_note  <- sprintf("Target Allocation: %.1f%% ($%.2f) -> Actual Outlay: $%.2f (Cash Left: $%.2f)",
-                               weight_pct, allocated_cash, invested, v_row$Cash_Left)
-      } else {
-        shares <- floor(slot_capital_equal / row$Close)
-        invested <- shares * row$Close
-        sizing_note <- "Equal-Weight Slot Allocation"
-        alloc_note  <- sprintf("Slot Budget: $%.2f -> Actual Outlay: $%.2f (Cash Left: $%.2f)",
-                               slot_capital_equal, invested, slot_capital_equal - invested)
+      # Ralph Vince Leverage Space Model Sizing
+      if (SIZING_MODE == "vince") {
+        cat(sprintf(" Sizing Engine: Ralph Vince Leverage Space Model (Safe f = %.2f, %d-Day Scenarios, Fractional: %s)\n",
+                    SAFETY_FACTOR, VINCE_LOOKBACK, ifelse(ALLOW_FRACTIONAL, "YES (Exact)", "NO (Floor)")))
+        tryCatch({
+          joint_events <- build_joint_scenario_matrix(candidate_syms, lookback_days = VINCE_LOOKBACK)
+          avail_syms <- intersect(candidate_syms, colnames(joint_events))
+          if (length(avail_syms) >= 1) {
+            sub_events <- joint_events[, avail_syms, drop = FALSE]
+            vince_opt <- vince_optimal_f(sub_events, max_leverage = 1.0, safety_factor = SAFETY_FACTOR)
+            cur_px_map <- setNames(unowned_buys$Close[match(avail_syms, unowned_buys$Symbol)], avail_syms)
+            vince_alloc <- vince_portfolio_allocation(vince_opt, total_cash = cash_available, current_prices = cur_px_map, allow_fractional = ALLOW_FRACTIONAL)
+            cat(sprintf(" -> Optimized Portfolio GHPR: %.4f (Expected Geometric Growth: %+.2f%% / day)\n\n",
+                        vince_opt$ghpr, vince_opt$expected_growth_pct))
+          }
+        }, error = function(e) {
+          cat(sprintf(" -> Leverage Space note: %s. Using Equal-Weight slots.\n\n", e$message))
+          vince_alloc <<- NULL
+        })
       }
       
-      cat(sprintf("--- ORDER TICKET #%d: %s (P(Up): %.1f%%) ---\n", i, row$Symbol, row$Prob_Up * 100))
-      cat(sprintf("  Action:              BUY %d SHARES at Market Open\n", shares))
-      cat(sprintf("  Position Sizing:     %s\n", sizing_note))
-      cat(sprintf("  Capital Allocation:  %s\n", alloc_note))
-      cat(sprintf("  Multi-Timeframe:     Weekly Trend +%.2f%% [BULLISH SYNERGY]\n", row$Weekly_Slope))
-      cat(sprintf("  Earnings Safe:       Next report %s (%d days out)\n", row$Earnings_Date, as.integer(row$Days_To_Earn)))
-      cat(sprintf("  GTC Stop-Loss:       $%.2f (-%.2f%%) [Risk: $%.2f]\n", 
-                  row$Stop_Loss, 2.0 * row$Daily_Vol * 100, shares * (row$Close - row$Stop_Loss)))
-      cat(sprintf("  GTC Take-Profit:     $%.2f (+%.2f%%) [Gain: $%.2f]\n", 
-                  row$Take_Profit, 3.0 * row$Daily_Vol * 100, shares * (row$Take_Profit - row$Close)))
-      cat(sprintf("  Reward / Risk Ratio: 1.50 : 1.0\n\n"))
+      slot_capital_equal <- cash_available / empty_slots
+      if (is.null(vince_alloc)) {
+        cat(sprintf(" Sizing Mode: Equal-Weight Cash Allocation ($%.2f per slot)\n\n", slot_capital_equal))
+      }
+      
+      for (i in 1:n_actionable) {
+        row <- unowned_buys[i, ]
+        
+        if (!is.null(vince_alloc) && row$Symbol %in% vince_alloc$Symbol) {
+          v_row <- vince_alloc[vince_alloc$Symbol == row$Symbol, ]
+          shares <- v_row$Shares
+          invested <- v_row$Actual_Outlay
+          allocated_cash <- v_row$Dollar_Allocation
+          opt_f_val <- v_row$Optimal_f
+          safe_f_val <- v_row$Safe_f
+          max_loss_val <- v_row$Max_Loss
+          weight_pct <- v_row$Weight * 100
+          sizing_note <- sprintf("Vince Optimal f: %.4f | Safe f: %.4f | Max Loss: %s",
+                                 opt_f_val, safe_f_val, max_loss_val)
+          alloc_note  <- sprintf("Target Allocation: %.1f%% ($%.2f) -> Actual Outlay: $%.2f (Cash Left: $%.2f)",
+                                 weight_pct, allocated_cash, invested, v_row$Cash_Left)
+        } else {
+          shares <- if (isTRUE(ALLOW_FRACTIONAL)) round(slot_capital_equal / row$Close, 3) else floor(slot_capital_equal / row$Close)
+          invested <- round(shares * row$Close, 2)
+          sizing_note <- "Equal-Weight Slot Allocation"
+          alloc_note  <- sprintf("Slot Budget: $%.2f -> Actual Outlay: $%.2f (Cash Left: $%.2f)",
+                                 slot_capital_equal, invested, slot_capital_equal - invested)
+        }
+        
+        shares_display <- if (isTRUE(ALLOW_FRACTIONAL) && (shares %% 1 != 0)) sprintf("%.3f", shares) else sprintf("%d", as.integer(shares))
+        
+        cat(sprintf("--- ORDER TICKET #%d: %s (P(Up): %.1f%%) ---\n", i, row$Symbol, row$Prob_Up * 100))
+        cat(sprintf("  Action:              BUY %s SHARES at Market (Monday Afternoon Execution)\n", shares_display))
+        cat(sprintf("  Position Sizing:     %s\n", sizing_note))
+        cat(sprintf("  Capital Allocation:  %s\n", alloc_note))
+        cat(sprintf("  Multi-Timeframe:     Weekly Trend +%.2f%% [BULLISH SYNERGY]\n", row$Weekly_Slope))
+        cat(sprintf("  Earnings Safe:       Next report %s (%d days out)\n", row$Earnings_Date, as.integer(row$Days_To_Earn)))
+        cat(sprintf("  GTC Stop-Loss:       $%.2f (-%.2f%%) [Risk: $%.2f]\n", 
+                    row$Stop_Loss, 2.0 * row$Daily_Vol * 100, shares * (row$Close - row$Stop_Loss)))
+        cat(sprintf("  GTC Take-Profit:     $%.2f (+%.2f%%) [Gain: $%.2f]\n", 
+                    row$Take_Profit, 3.0 * row$Daily_Vol * 100, shares * (row$Take_Profit - row$Close)))
+        cat(sprintf("  Reward / Risk Ratio: 1.50 : 1.0\n\n"))
+      }
+    } else {
+      cat(sprintf(" No unowned symbols currently meet all BUY criteria (P(Up) >= %.1f%%, Weekly Bullish, No Earnings).\n",
+                  EFFECTIVE_P_LONG * 100))
+      cat(" RECOMMENDATION: Retain available cash buffer in money market / cash.\n")
     }
   } else {
-    cat(sprintf(" No unowned symbols currently meet all BUY criteria (P(Up) >= %.1f%%, Weekly Bullish, No Earnings).\n",
-                EFFECTIVE_P_LONG * 100))
-    cat(" RECOMMENDATION: Retain available cash buffer in money market / cash.\n")
+    cat(sprintf(" All %d active portfolio slots are currently filled or constrained by Macro Regime.\n", EFFECTIVE_MAX_POS))
+    cat(" No new purchases needed today.\n")
   }
-} else {
-  cat(sprintf(" All %d active portfolio slots are currently filled or constrained by Macro Regime.\n", EFFECTIVE_MAX_POS))
-  cat(" No new purchases needed today.\n")
+  cat("========================================================================================\n\n")
 }
-cat("========================================================================================\n\n")

@@ -228,7 +228,7 @@ Warning messages:
 ========================================================================================
               RECOMMENDED ORDERS FOR EMPTY CASH SLOTS (5 AVAILABLE)
 ========================================================================================
- Sizing Engine: Ralph Vince Leverage Space Model (Safe f = 0.50, 120-Day Scenarios)
+ Sizing Engine: Ralph Vince Leverage Space Model (Safe f = 0.50, 120-Day Scenarios, Fractional: YES (Exact))
 [DataLoader] Attempting to fetch 'MSFT' from Yahoo Finance (2020-01-01 to 2026-09-24)...
 [DataLoader] Successfully fetched 1690 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_msft.rds
@@ -252,27 +252,27 @@ Warning messages:
  -> Optimized Portfolio GHPR: 1.0313 (Expected Geometric Growth: +3.13% / day)
 
 --- ORDER TICKET #1: MSFT (P(Up): 69.7%) ---
-  Action:              BUY 6 SHARES at Market Open
+  Action:              BUY 6.718 SHARES at Market (Monday Afternoon Execution)
   Position Sizing:     Vince Optimal f: 0.2527 | Safe f: 0.1263 | Max Loss: 4.17%
-  Capital Allocation:  Target Allocation: 33.6% ($3363.20) -> Actual Outlay: $3003.54 (Cash Left: $359.66)
+  Capital Allocation:  Target Allocation: 33.6% ($3363.20) -> Actual Outlay: $3362.96 (Cash Left: $0.24)
   Multi-Timeframe:     Weekly Trend +1.57% [BULLISH SYNERGY]
   Earnings Safe:       Next report 2026-10-28 (34 days out)
-  GTC Stop-Loss:       $499.33 (-0.25%) [Risk: $7.57]
-  GTC Take-Profit:     $502.48 (+0.38%) [Gain: $11.35]
+  GTC Stop-Loss:       $499.33 (-0.25%) [Risk: $8.47]
+  GTC Take-Profit:     $502.48 (+0.38%) [Gain: $12.71]
   Reward / Risk Ratio: 1.50 : 1.0
 
 --- ORDER TICKET #2: SNDK (P(Up): 65.6%) ---
-  Action:              BUY 0 SHARES at Market Open
+  Action:              BUY 0.518 SHARES at Market (Monday Afternoon Execution)
   Position Sizing:     Vince Optimal f: 0.0706 | Safe f: 0.0353 | Max Loss: 14.25%
-  Capital Allocation:  Target Allocation: 9.4% ($940.16) -> Actual Outlay: $0.00 (Cash Left: $940.16)
+  Capital Allocation:  Target Allocation: 9.4% ($940.16) -> Actual Outlay: $940.98 (Cash Left: $-0.82)
   Multi-Timeframe:     Weekly Trend +3.25% [BULLISH SYNERGY]
   Earnings Safe:       Next report 2026-11-06 (43 days out)
-  GTC Stop-Loss:       $1692.98 (-6.80%) [Risk: $0.00]
-  GTC Take-Profit:     $2001.95 (+10.21%) [Gain: $0.00]
+  GTC Stop-Loss:       $1692.98 (-6.80%) [Risk: $64.02]
+  GTC Take-Profit:     $2001.95 (+10.21%) [Gain: $96.03]
   Reward / Risk Ratio: 1.50 : 1.0
 
 --- ORDER TICKET #3: KXIAY (P(Up): 64.7%) ---
-  Action:              BUY 0 SHARES at Market Open
+  Action:              BUY 0 SHARES at Market (Monday Afternoon Execution)
   Position Sizing:     Vince Optimal f: 0.0000 | Safe f: 0.0000 | Max Loss: 18.48%
   Capital Allocation:  Target Allocation: 0.0% ($0.00) -> Actual Outlay: $0.00 (Cash Left: $0.00)
   Multi-Timeframe:     Weekly Trend +2.21% [BULLISH SYNERGY]
@@ -282,17 +282,17 @@ Warning messages:
   Reward / Risk Ratio: 1.50 : 1.0
 
 --- ORDER TICKET #4: AMD (P(Up): 62.2%) ---
-  Action:              BUY 9 SHARES at Market Open
+  Action:              BUY 9.269 SHARES at Market (Monday Afternoon Execution)
   Position Sizing:     Vince Optimal f: 0.4280 | Safe f: 0.2140 | Max Loss: 10.86%
-  Capital Allocation:  Target Allocation: 57.0% ($5696.64) -> Actual Outlay: $5531.49 (Cash Left: $165.15)
+  Capital Allocation:  Target Allocation: 57.0% ($5696.64) -> Actual Outlay: $5696.82 (Cash Left: $-0.18)
   Multi-Timeframe:     Weekly Trend +1.44% [BULLISH SYNERGY]
   Earnings Safe:       Next report 2026-11-03 (40 days out)
-  GTC Stop-Loss:       $555.76 (-9.58%) [Risk: $529.65]
-  GTC Take-Profit:     $702.88 (+14.36%) [Gain: $794.47]
+  GTC Stop-Loss:       $555.76 (-9.58%) [Risk: $545.48]
+  GTC Take-Profit:     $702.88 (+14.36%) [Gain: $818.21]
   Reward / Risk Ratio: 1.50 : 1.0
 
 --- ORDER TICKET #5: LITE (P(Up): 60.0%) ---
-  Action:              BUY 0 SHARES at Market Open
+  Action:              BUY 0 SHARES at Market (Monday Afternoon Execution)
   Position Sizing:     Vince Optimal f: 0.0000 | Safe f: 0.0000 | Max Loss: 9.92%
   Capital Allocation:  Target Allocation: 0.0% ($0.00) -> Actual Outlay: $0.00 (Cash Left: $0.00)
   Multi-Timeframe:     Weekly Trend +2.05% [BULLISH SYNERGY]

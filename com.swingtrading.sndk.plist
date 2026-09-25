@@ -14,51 +14,54 @@
     <key>WorkingDirectory</key>
     <string>/Volumes/2TB.ssd/_a Development/swingtrading</string>
     
-    <!-- Run every weekday (Mon-Fri) at 4:30 PM (16:30) Eastern Time -->
+    <!-- Run Schedule:
+         - Monday 2:00 PM (14:00) EDT: Weekly Buy Signal Scan & Afternoon Execution
+         - Tuesday-Thursday 2:00 PM (14:00) EDT: Portfolio Monitoring & Target/Stop Checks
+         - Friday 3:30 PM (15:30) EDT: Mandatory Weekend Risk Close-Out Scan (before 16:00 Close) -->
     <key>StartCalendarInterval</key>
     <array>
-        <!-- Monday -->
+        <!-- Monday: 14:00 EDT -->
         <dict>
             <key>Weekday</key>
             <integer>1</integer>
             <key>Hour</key>
-            <integer>16</integer>
+            <integer>14</integer>
             <key>Minute</key>
-            <integer>30</integer>
+            <integer>0</integer>
         </dict>
-        <!-- Tuesday -->
+        <!-- Tuesday: 14:00 EDT -->
         <dict>
             <key>Weekday</key>
             <integer>2</integer>
             <key>Hour</key>
-            <integer>16</integer>
+            <integer>14</integer>
             <key>Minute</key>
-            <integer>30</integer>
+            <integer>0</integer>
         </dict>
-        <!-- Wednesday -->
+        <!-- Wednesday: 14:00 EDT -->
         <dict>
             <key>Weekday</key>
             <integer>3</integer>
             <key>Hour</key>
-            <integer>16</integer>
+            <integer>14</integer>
             <key>Minute</key>
-            <integer>30</integer>
+            <integer>0</integer>
         </dict>
-        <!-- Thursday -->
+        <!-- Thursday: 14:00 EDT -->
         <dict>
             <key>Weekday</key>
             <integer>4</integer>
             <key>Hour</key>
-            <integer>16</integer>
+            <integer>14</integer>
             <key>Minute</key>
-            <integer>30</integer>
+            <integer>0</integer>
         </dict>
-        <!-- Friday -->
+        <!-- Friday: 15:30 EDT (Mandatory Weekend Exit Check) -->
         <dict>
             <key>Weekday</key>
             <integer>5</integer>
             <key>Hour</key>
-            <integer>16</integer>
+            <integer>15</integer>
             <key>Minute</key>
             <integer>30</integer>
         </dict>

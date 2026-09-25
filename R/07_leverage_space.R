@@ -185,9 +185,10 @@ vince_optimal_f <- function(events, max_leverage = 1.0, safety_factor = 0.50) {
 #' @param opt_res Result object returned by `vince_optimal_f()`.
 #' @param total_cash Available cash capital to allocate.
 #' @param current_prices Named numeric vector of current stock prices.
+#' @param allow_fractional Logical; if TRUE, computes fractional shares to 3 decimal places (default: TRUE).
 #' @return A data.frame detailing allocation dollars, percentage weights, and share sizes.
 #' @export
-vince_portfolio_allocation <- function(opt_res, total_cash, current_prices) {
+vince_portfolio_allocation <- function(opt_res, total_cash, current_prices, allow_fractional = TRUE) {
   syms <- names(opt_res$weights)
   
   alloc_df <- data.frame(
@@ -202,8 +203,12 @@ vince_portfolio_allocation <- function(opt_res, total_cash, current_prices) {
   
   # Dollar allocation
   alloc_df$Dollar_Allocation <- round(total_cash * alloc_df$Weight, 2)
-  # Share counts
-  alloc_df$Shares <- floor(alloc_df$Dollar_Allocation / alloc_df$Current_Price)
+  # Share counts (fractional vs whole)
+  if (isTRUE(allow_fractional)) {
+    alloc_df$Shares <- round(alloc_df$Dollar_Allocation / alloc_df$Current_Price, 3)
+  } else {
+    alloc_df$Shares <- floor(alloc_df$Dollar_Allocation / alloc_df$Current_Price)
+  }
   alloc_df$Actual_Outlay <- round(alloc_df$Shares * alloc_df$Current_Price, 2)
   alloc_df$Cash_Left <- round(alloc_df$Dollar_Allocation - alloc_df$Actual_Outlay, 2)
   

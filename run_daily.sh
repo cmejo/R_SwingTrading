@@ -17,8 +17,8 @@ mkdir -p "$PROJECT_DIR/logs" "$PROJECT_DIR/output"
 
 echo "[$(date)] Reading watchlist from $PROJECT_DIR/symbols.txt..." >> "$LOG_FILE"
 
-# 1. Execute Daily Multi-Asset Scanner (Max Positions: 5 | Vince Safe f: 0.50)
-/opt/homebrew/bin/Rscript daily_signal.R --symbols_file="$PROJECT_DIR/symbols.txt" --capital=10000 --max_pos=5 --sizing_mode=vince --safety_factor=0.50 2>&1 | tee -a "$LOG_FILE" > "$LATEST_TICKET"
+# 1. Execute Daily Multi-Asset Scanner (Max Positions: 5 | Vince Safe f: 0.50 | Fractional: TRUE)
+/opt/homebrew/bin/Rscript daily_signal.R --symbols_file="$PROJECT_DIR/symbols.txt" --capital=10000 --max_pos=5 --sizing_mode=vince --safety_factor=0.50 --fractional=TRUE --portfolio_file="$PROJECT_DIR/portfolio.json" 2>&1 | tee -a "$LOG_FILE" > "$LATEST_TICKET"
 
 # 2. Automated Monthly Strategy Evaluation (Runs every Friday or if evaluation file is missing)
 DAY_OF_WEEK=$(date +%u) # 5 = Friday
@@ -33,7 +33,10 @@ MACRO_STATUS=$(grep -m 1 "Macro Gate:" "$LATEST_TICKET" | sed 's/.*Macro Gate: \
 N_BUYS=$(grep -c "ORDER TICKET #" "$LATEST_TICKET" || echo "0")
 TOP_TICKET=$(grep -m 1 "ORDER TICKET #1:" "$LATEST_TICKET" | sed 's/--- //;s/ ---//' || echo "")
 
-if [ "$N_BUYS" -gt 0 ] && [ -n "$TOP_TICKET" ]; then
+if [ "$DAY_OF_WEEK" -eq 5 ]; then
+  NOTIF_TITLE="Swing Scanner: Friday Weekend Exit Check"
+  NOTIF_MSG="Zero weekend risk enforced! Check LATEST_TICKET.txt to close open positions."
+elif [ "$N_BUYS" -gt 0 ] && [ -n "$TOP_TICKET" ]; then
   NOTIF_TITLE="Swing Scanner [${MACRO_STATUS}]: ${N_BUYS} Order(s)"
   NOTIF_MSG="${TOP_TICKET} | Check LATEST_TICKET.txt"
 else

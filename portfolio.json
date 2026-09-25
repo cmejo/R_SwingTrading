@@ -1,5 +1,8 @@
 {
-  "total_capital": 10000.0,
-  "cash_balance": 10000.0,
-  "positions": {}
+  "total_capital": 10000,
+  "cash_balance": 10000,
+  "max_positions": 5,
+  "last_updated": "2026-09-24 23:49:21.426663",
+  "positions": [],
+  "closed_trades": []
 }

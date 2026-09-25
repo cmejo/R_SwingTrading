@@ -29,9 +29,11 @@ A statistical swing trading system implemented in pure **R**, utilizing moderniz
 │   ├── 04_feature_pipeline.R  # Feature engineering & forward target calculation
 │   ├── 05_logistic_model.R    # Regularized logistic regression & classification
 │   ├── 06_swing_backtest.R    # Swing backtest simulator, metrics & trade logger
-│   └── 07_leverage_space.R    # Ralph Vince Leverage Space Model (Optimal f / Safe f)
+│   ├── 07_leverage_space.R    # Ralph Vince Leverage Space Model (Optimal f / Safe f)
+│   └── portfolio_manager.R    # Active portfolio state tracking, P&L sync & exit checks
 ├── main.R                     # Full backtesting & diagnostic plotting pipeline
 ├── daily_signal.R             # Multi-asset live scanner & order ticket generator
+├── trade_manager.R            # CLI portfolio manager (record fills, exits & P&L)
 ├── monthly_review.R           # Monthly performance & health evaluation script
 ├── backtest_past_2_months.R   # 2-month out-of-sample backtest vs S&P 500 (SPY)
 ├── backtest_all_symbols.R     # Watchlist-wide backtest across all symbols in symbols.txt
@@ -39,6 +41,8 @@ A statistical swing trading system implemented in pure **R**, utilizing moderniz
 ├── run_daily.sh               # Automation execution script with desktop alerts
 ├── install_automation.sh      # macOS launchd background scheduler installer
 ├── uninstall_automation.sh    # macOS launchd uninstaller
+├── portfolio.json             # Persistent account state & active positions
+├── TRADING_PLAYBOOK.md        # Comprehensive execution playbook & operating rules
 ├── symbols.txt                # Active trading watchlist
 └── output/                    # Exported diagnostic & performance charts
 ```
@@ -72,11 +76,25 @@ Rscript backtest_all_symbols.R
 ### Running the Live Scanner
 To scan your watchlist and generate actionable order tickets for a $10,000 account across 5 positions:
 ```bash
-Rscript daily_signal.R --capital=10000 --max_pos=5
+Rscript daily_signal.R --capital=10000 --max_pos=5 --fractional=TRUE
 ```
 
-### Automated Daily Scheduling (macOS)
-To schedule automatic execution every weekday at 4:30 PM ET:
+### Portfolio Management (CLI)
+View active portfolio status, open positions, unrealized P&L, and closed trade logs:
+```bash
+Rscript trade_manager.R --status
+```
+Record a trade fill:
+```bash
+Rscript trade_manager.R --buy=AMD:9.269:614.61:555.76:702.88
+```
+Record a trade exit:
+```bash
+Rscript trade_manager.R --sell=AMD:702.88:TAKE_PROFIT
+```
+
+### Automated Scheduling (macOS)
+To schedule automatic scans at **Monday 2:00 PM (14:00) EDT** (weekly entries) and **Friday 3:30 PM (15:30) EDT** (mandatory weekend risk exit):
 ```bash
 ./install_automation.sh
 ```
