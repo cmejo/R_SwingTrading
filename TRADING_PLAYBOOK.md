@@ -9,12 +9,17 @@ This playbook outlines the exact operational procedure for deploying and managin
 1. **Monday Afternoon Entry (No Monday Open Jumping)**:
    - Rather than jumping into volatile morning spreads or relying on stale Friday data, fresh weekly signals are scanned on **Monday at 14:00 EDT (2:00 PM)**.
    - Buys are executed on **Monday afternoon between 14:00 and 15:00 EDT** once morning price action has settled and the intraday trend is confirmed.
-2. **Strict "Zero Weekend Exposure" Rule**:
-   - **No positions are ever held over the weekend.**
-   - All open trades must be closed on **Friday before 16:00 EDT** (market close).
-   - An automated scan fires every **Friday at 15:30 EDT** to alert you to liquidate any remaining open positions.
+2. **Conditional Weekend Holding (Pruning Weakness, Letting Winners Run)**:
+   - **Why hold winners?** Captures Monday morning gap-ups, avoids cutting mid-week entries short before their 3–5 day horizon matures, and eliminates round-trip friction.
+   - **Qualification Test**: Every **Friday at 15:30 EDT**, active holdings are automatically evaluated:
+     1. **Macro Regime**: QQQ must be **BULLISH (Risk-On)**.
+     2. **Model Probability**: $P(\text{Up}) \ge 55.0\%$.
+     3. **Weekly Trend Synergy**: Weekly linear regression slope $\beta_{weekly} > 0$.
+     4. **Earnings Safety**: No earnings reports within the next 7 trading days.
+   - **Hold Decision**: Positions passing all 4 criteria are approved to hold into next week (**`HOLD OVER WEEKEND`**). If a position is in profit by $\ge 1R$ (+3%), the stop-loss is raised to **Breakeven (Entry Price)** for a zero-downside hold.
+   - **Defensive Exit**: Any position failing these criteria is flagged for liquidation (**`SELL BEFORE 16:00 FRIDAY`**).
 3. **Fractional Share Precision**:
-   - The Ralph Vince Leverage Space Model (`Safe f = 0.50`) sizes trades to 3 decimal places (e.g. `0.517 shares`).
+   - The Ralph Vince Leverage Space Model (`Safe f = 0.50`) sizes trades to 3 decimal places (e.g. `0.518 shares`).
    - 100% of available cash is deployed efficiently without leaving hundreds of dollars idle.
 4. **Persistent Portfolio State**:
    - Real positions, entry prices, days held, and unrealized P&L are tracked in `portfolio.json`.
@@ -30,8 +35,8 @@ This playbook outlines the exact operational procedure for deploying and managin
 | **Monday 14:15–15:00 EDT** | Market Entry | Place Buy orders for recommended shares + attach OCO brackets. |
 | **Monday Afternoon** | Record Fills | Run `Rscript trade_manager.R --buy=...` to update `portfolio.json`. |
 | **Tue–Thu 14:00 EDT** | Daily Monitoring Scan | Automated scanner checks stop/target hits and calculates live P&L. |
-| **Friday 15:30 EDT** | Weekend Exit Alert | Close all active positions at market before 16:00 close. |
-| **Friday 16:00 EDT** | Weekend Reset | Run `Rscript trade_manager.R --sell=...` or `--reset`. 100% Cash over weekend. |
+| **Friday 15:30 EDT** | Weekend Hold Review | Scanner separates active holdings: **Hold Winners** vs **Sell Weakness**. |
+| **Friday 15:45–16:00 EDT**| Selective Close-Out | Liquidate only disqualified positions. Ratchet winners' stops to Breakeven. |
 
 ---
 
@@ -49,11 +54,9 @@ At 2:00 PM EDT on Monday, the scanner runs automatically (or manually via `./run
 
 | Symbol | Action | Allocation ($ / %) | Exact Shares | GTC Stop-Loss | GTC Take-Profit |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **MSFT** | BUY | $3,363.18 (33.6%) | **6.718 shares** | $499.33 (-0.25%) | $502.48 (+0.38%) |
-| **SNDK** | BUY | $939.81 (9.4%) | **0.517 shares** | $1692.98 (-6.80%) | $2001.95 (+10.21%) |
-| **AMD** | BUY | $5,697.01 (57.0%) | **9.269 shares** | $555.76 (-9.58%) | $702.88 (+14.36%) |
-
-*(All cash is deployed down to pennies; no stranded dollars).*
+| **MSFT** | BUY | $3,363.20 (33.6%) | **6.718 shares** | $499.33 (-0.25%) | $502.48 (+0.38%) |
+| **SNDK** | BUY | $940.16 (9.4%) | **0.518 shares** | $1692.98 (-6.80%) | $2001.95 (+10.21%) |
+| **AMD** | BUY | $5,696.64 (57.0%) | **9.269 shares** | $555.76 (-9.58%) | $702.88 (+14.36%) |
 
 ---
 
@@ -71,7 +74,7 @@ In your brokerage account (IBKR, Schwab, Fidelity, etc.):
    Record your executions in terminal:
    ```bash
    Rscript trade_manager.R --buy=MSFT:6.718:500.59:499.33:502.48
-   Rscript trade_manager.R --buy=SNDK:0.517:1816.57:1692.98:2001.95
+   Rscript trade_manager.R --buy=SNDK:0.518:1816.57:1692.98:2001.95
    Rscript trade_manager.R --buy=AMD:9.269:614.61:555.76:702.88
    ```
 
@@ -94,18 +97,27 @@ In your brokerage account (IBKR, Schwab, Fidelity, etc.):
 
 ---
 
-### Step 4: Friday 15:30 EDT — Mandatory Weekend Risk Close-Out
+### Step 4: Friday 15:30 EDT — Conditional Weekend Hold Review
 
-> [!IMPORTANT]
-> **Zero Weekend Exposure Rule**
-> Gaps over the weekend cannot be controlled with stop-loss orders. At **15:30 EDT on Friday**, the system triggers a weekend exit alert.
+At **15:30 EDT on Friday**, inspect the **FRIDAY 15:30 EVALUATION** section in `LATEST_TICKET.txt`:
 
-1. **Check Friday Notification**:
-   - If any positions remain open, close them at market price before **16:00 EDT**.
-2. **Record Exits in State Tracker**:
-   ```bash
-   Rscript trade_manager.R --sell=MSFT:503.20:WEEKEND_EXIT
-   ```
-3. **Enjoy the Weekend**:
-   - Your account rests **100% in CASH / Treasury yield** over Saturday and Sunday.
-   - On Monday at 14:00 EDT, the system automatically begins the cycle anew.
+```
+========================================================================================
+              FRIDAY 15:30 EVALUATION: CONDITIONAL WEEKEND HOLD REVIEW        
+========================================================================================
+ [APPROVED TO HOLD OVER WEEKEND] (1 Positions with Strong Momentum):
+   ✓ AMD: HOLD OVER WEEKEND (Momentum Intact) | Current: $629.26 | P&L: +4.88%
+
+ [DEFENSIVE WEEKEND EXITS] (1 Positions to Liquidate Today):
+   ⚠️ NVDA: SELL BEFORE 16:00 (Weekend Risk: P(Up) 39.8% < 55%) | P&L: -2.36% -> SELL AT MARKET BEFORE 16:00 EDT CLOSE!
+```
+
+1. **If Marked `HOLD OVER WEEKEND`**:
+   - Do nothing, or raise your stop-loss in your broker to **Breakeven (Entry Price)** if suggested.
+   - Let the trade compound into Monday.
+2. **If Marked `DEFENSIVE WEEKEND EXIT`**:
+   - Sell at market before **16:00 EDT** to eliminate weekend headline risk.
+   - Record the sale:
+     ```bash
+     Rscript trade_manager.R --sell=NVDA:224.58:WEEKEND_DEFENSIVE_EXIT
+     ```

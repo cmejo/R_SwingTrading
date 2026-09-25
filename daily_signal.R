@@ -362,7 +362,14 @@ cat("                        MY PORTFOLIO HOLDINGS & CASH MONITOR\n")
 cat("========================================================================================\n")
 
 cur_px_all <- setNames(df_scan$Close, df_scan$Symbol)
-sync_res <- sync_portfolio_with_market(port_state, current_prices = cur_px_all, current_date = Sys.Date(), is_friday = IS_FRIDAY)
+sync_res <- sync_portfolio_with_market(
+  port_state, 
+  current_prices = cur_px_all, 
+  current_date = Sys.Date(), 
+  is_friday = IS_FRIDAY,
+  model_scan_df = df_scan,
+  macro_bullish = macro_info$is_bullish
+)
 
 if (sync_res$active_count > 0) {
   cat(sprintf(" Active Open Positions (%d of %d active slots used):\n\n", sync_res$active_count, EFFECTIVE_MAX_POS))
@@ -395,15 +402,35 @@ cat(sprintf(" AVAILABLE CASH SLOTS:   %d of %d (Regime Limit: %d)\n", empty_slot
 cat("\n========================================================================================\n")
 
 if (isTRUE(IS_FRIDAY)) {
-  cat("                   FRIDAY AFTERNOON: WEEKEND RISK CLOSE-OUT                   \n")
+  cat("              FRIDAY 15:30 EVALUATION: CONDITIONAL WEEKEND HOLD REVIEW        \n")
   cat("========================================================================================\n")
-  cat(" [RULE ENFORCED] Zero positions held over the weekend!\n")
   if (sync_res$active_count > 0) {
-    cat(" -> ACTION REQUIRED: Sell all active positions at market before 16:00 EDT Friday close.\n")
+    holds <- sync_res$holdings_df[sync_res$holdings_df$Status == "WEEKEND_HOLD_APPROVED", ]
+    sells <- sync_res$holdings_df[sync_res$holdings_df$Status != "WEEKEND_HOLD_APPROVED", ]
+    
+    if (nrow(holds) > 0) {
+      cat(sprintf(" [APPROVED TO HOLD OVER WEEKEND] (%d Positions with Strong Momentum):\n", nrow(holds)))
+      for (h_i in 1:nrow(holds)) {
+        h_row <- holds[h_i, ]
+        cat(sprintf("   ✓ %s: %s | Current: $%.2f | P&L: %s\n",
+                    h_row$Symbol, h_row$Action_Required, h_row$Current_Price, h_row$Return_Pct))
+      }
+      cat("\n")
+    }
+    
+    if (nrow(sells) > 0) {
+      cat(sprintf(" [DEFENSIVE WEEKEND EXITS] (%d Positions to Liquidate Today):\n", nrow(sells)))
+      for (s_i in 1:nrow(sells)) {
+        s_row <- sells[s_i, ]
+        cat(sprintf("   ⚠️ %s: %s | P&L: %s -> SELL AT MARKET BEFORE 16:00 EDT CLOSE!\n",
+                    s_row$Symbol, s_row$Action_Required, s_row$Return_Pct))
+      }
+      cat("\n")
+    }
   } else {
-    cat(" -> SUCCESS: Portfolio is 100% in cash. No open weekend exposure.\n")
+    cat(" Portfolio is 100% in cash. No open weekend exposure.\n\n")
   }
-  cat(" -> NEXT ACTION: Fresh weekly signals will be scanned and executed MONDAY at 14:00 EDT.\n")
+  cat(" -> NEXT WEEKLY BUYS: Fresh opportunities will be scanned and executed MONDAY at 14:00 EDT.\n")
   cat("========================================================================================\n\n")
 } else {
   cat(sprintf("              RECOMMENDED ORDERS FOR EMPTY CASH SLOTS (%d AVAILABLE)\n", empty_slots))

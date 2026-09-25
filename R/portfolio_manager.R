@@ -165,10 +165,13 @@ record_exit <- function(portfolio, symbol, exit_price, exit_date = as.character(
 #' @param portfolio Portfolio state list.
 #' @param current_prices Named numeric vector of latest closing / intraday prices.
 #' @param current_date Date or string (YYYY-MM-DD). Defaults to Sys.Date().
-#' @param is_friday Logical; if TRUE, triggers mandatory weekend risk exit.
+#' @param is_friday Logical; if TRUE, evaluates conditional weekend holding vs Friday liquidation.
+#' @param model_scan_df Optional data.frame from daily_signal scanner with columns (Symbol, Prob_Up, Weekly_Slope, Days_To_Earn).
+#' @param macro_bullish Logical; whether QQQ Macro Gate is Bullish (Risk-On).
 #' @return List containing updated position summaries, total equity, available slots, and alerts.
 #' @export
-sync_portfolio_with_market <- function(portfolio, current_prices, current_date = Sys.Date(), is_friday = FALSE) {
+sync_portfolio_with_market <- function(portfolio, current_prices, current_date = Sys.Date(), 
+                                       is_friday = FALSE, model_scan_df = NULL, macro_bullish = TRUE) {
   current_date <- as.Date(current_date)
   pos_list <- portfolio$positions
   
@@ -182,6 +185,7 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
     Return_Pct = character(),
     Days_Held = integer(),
     Stop_Loss = numeric(),
+    Suggested_Stop = numeric(),
     Take_Profit = numeric(),
     Status = character(),
     Action_Required = character(),
@@ -203,15 +207,19 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
       pnl_pct <- (cp / p$entry_price - 1) * 100
       days_held <- as.integer(current_date - as.Date(p$entry_date))
       
+      suggested_stop <- p$stop_loss
+      # Breakeven escalation rule: If position is up by >= 1R, raise stop to Entry Price
+      risk_1r <- p$entry_price - p$stop_loss
+      if (risk_1r > 0 && cp >= (p$entry_price + risk_1r)) {
+        suggested_stop <- round(max(suggested_stop, p$entry_price), 2)
+      }
+      
       # Determine action trigger
       action <- "HOLD"
       status <- "ACTIVE"
       
-      if (isTRUE(is_friday)) {
-        action <- "SELL (FRIDAY WEEKEND RISK CLOSE)"
-        status <- "WEEKEND_EXIT_TRIGGERED"
-        alerts <- c(alerts, sprintf("[WEEKEND RISK EXIT] %s must be closed before 16:00 EDT Friday. P&L: %+.2f%%", sym, pnl_pct))
-      } else if (cp <= p$stop_loss) {
+      # 1. Stop-Loss & Take-Profit Triggers (Immediate Execution)
+      if (cp <= p$stop_loss) {
         action <- "SELL (STOP-LOSS BREACHED)"
         status <- "STOP_TRIGGERED"
         alerts <- c(alerts, sprintf("[STOP-LOSS HIT] %s breached stop at $%.2f (Current: $%.2f). Exit immediately.", sym, p$stop_loss, cp))
@@ -223,6 +231,49 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
         action <- "SELL (MAX 5-DAY TIME HORIZON)"
         status <- "TIME_EXIT_TRIGGERED"
         alerts <- c(alerts, sprintf("[TIME EXIT] %s held for %d trading days. Recycle capital into fresh setups.", sym, days_held))
+      } else if (isTRUE(is_friday)) {
+        # 2. Conditional Weekend Holding Engine
+        sym_row <- if (!is.null(model_scan_df) && sym %in% model_scan_df$Symbol) {
+          model_scan_df[model_scan_df$Symbol == sym, ]
+        } else {
+          NULL
+        }
+        
+        prob_up <- if (!is.null(sym_row) && length(sym_row$Prob_Up) > 0) as.numeric(sym_row$Prob_Up[1]) else NA
+        weekly_slope <- if (!is.null(sym_row) && length(sym_row$Weekly_Slope) > 0) as.numeric(sym_row$Weekly_Slope[1]) else NA
+        days_to_earn <- if (!is.null(sym_row) && length(sym_row$Days_To_Earn) > 0) as.numeric(sym_row$Days_To_Earn[1]) else 999
+        
+        pass_macro    <- isTRUE(macro_bullish)
+        pass_prob     <- (!is.na(prob_up) && prob_up >= 0.55)
+        pass_weekly   <- (!is.na(weekly_slope) && weekly_slope > 0)
+        pass_earnings <- (is.na(days_to_earn) || days_to_earn < 0 || days_to_earn > 7)
+        pass_buffer   <- (cp > p$stop_loss)
+        
+        if (pass_macro && pass_prob && pass_weekly && pass_earnings && pass_buffer) {
+          status <- "WEEKEND_HOLD_APPROVED"
+          if (suggested_stop > p$stop_loss) {
+            action <- sprintf("HOLD OVER WEEKEND (Ratchet Stop to Breakeven $%.2f)", suggested_stop)
+            alerts <- c(alerts, sprintf("[WEEKEND HOLD APPROVED] %s: Strong momentum (P(Up)=%.1f%%, Weekly +%.1f%%, P&L: %+.2f%%). Hold over weekend; raise stop to Breakeven $%.2f.",
+                                        sym, prob_up * 100, weekly_slope, pnl_pct, suggested_stop))
+          } else {
+            action <- "HOLD OVER WEEKEND (Momentum Intact)"
+            alerts <- c(alerts, sprintf("[WEEKEND HOLD APPROVED] %s: Meets all criteria (P(Up)=%.1f%%, Weekly +%.1f%%, P&L: %+.2f%%). Hold into next week.",
+                                        sym, prob_up * 100, weekly_slope, pnl_pct))
+          }
+        } else {
+          status <- "WEEKEND_EXIT_TRIGGERED"
+          fail_reasons <- character()
+          if (!pass_macro) fail_reasons <- c(fail_reasons, "Macro Risk-Off")
+          if (!pass_prob) fail_reasons <- c(fail_reasons, sprintf("P(Up) %.1f%% < 55%%", ifelse(is.na(prob_up), 0, prob_up * 100)))
+          if (!pass_weekly) fail_reasons <- c(fail_reasons, "Weekly Bearish Trend")
+          if (!pass_earnings) fail_reasons <- c(fail_reasons, sprintf("Earnings in %dd", as.integer(days_to_earn)))
+          if (!pass_buffer) fail_reasons <- c(fail_reasons, "At/Below Stop Loss")
+          
+          reason_str <- paste(fail_reasons, collapse = ", ")
+          action <- sprintf("SELL BEFORE 16:00 (Weekend Risk: %s)", reason_str)
+          alerts <- c(alerts, sprintf("[DEFENSIVE WEEKEND EXIT] %s must be closed before 16:00 Friday (%s). P&L: %+.2f%%",
+                                      sym, reason_str, pnl_pct))
+        }
       }
       
       pos_df <- rbind(pos_df, data.frame(
@@ -235,6 +286,7 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
         Return_Pct = sprintf("%+.2f%%", pnl_pct),
         Days_Held = days_held,
         Stop_Loss = p$stop_loss,
+        Suggested_Stop = suggested_stop,
         Take_Profit = p$take_profit,
         Status = status,
         Action_Required = action,

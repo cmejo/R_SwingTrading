@@ -7,9 +7,30 @@
 [DataLoader] Successfully fetched 405 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_sndk.rds
 [DataLoader] Loaded 405 bars for SNDK [2025-02-13 to 2026-09-24]
-Warning message:
-SNDK contains missing values. Some functions will not work if objects contain missing values in the middle of the series. Consider using na.omit(), na.approx(), na.fill(), etc to remove or replace them. 
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
-Error in runCov(Ra, Rb, n) : Series contains non-leading NAs
-Calls: build_feature_dataset -> calculate_dual_lmMA -> lmMA -> rollSFM -> runCov
-Execution halted
+[GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
+[GARCH] Fitted: a0=0.001840, a1=0.2587, b1=0.3648 (persistence=0.6235)
+[Pipeline] Complete. Result: 351 valid observation rows across 9 features.
+------------------------------------------------------------------------
+ EVALUATION PERIOD: 2026-08-06 to 2026-09-17 (30 Trading Days)
+------------------------------------------------------------------------
+                               Strategy Cumulative_Return Annualized_Return
+ ML Swing Strategy (GARCH Vol-Targeted)            27.76%           740.73%
+                 Classic MA Trend Cross             5.65%            61.17%
+                        Buy & Hold SNDK            28.27%           770.15%
+ Annualized_Vol Sharpe_Ratio Max_Drawdown Calmar_Ratio Win_Rate Profit_Factor
+         78.99%         9.38       15.48%        47.86    51.7%          1.72
+         70.17%         0.87       17.13%         3.57    45.8%          1.22
+         83.05%         9.27       17.13%        44.96    51.7%          1.69
+
+========================================================================
+ STRATEGY HEALTH VERDICT: [HEALTHY (NOMINAL OPERATION)]
+========================================================================
+ ✓ Profit Factor and Win Rate exceed target thresholds (PF >= 1.30, Win Rate >= 50%).
+ ! Drawdown (15.48%) exceeded 15%. Consider lowering position sizing to 70%.
+========================================================================
+
+null device 
+          1 
+[Chart] Monthly evaluation plot saved to 'output/monthly_review.png'
+
