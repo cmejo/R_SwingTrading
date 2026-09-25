@@ -25,6 +25,7 @@ source("R/03_volatility_garch.R")
 #' Build Feature Matrix and Target Series
 #'
 #' @param ohlcv xts object containing OHLCV price series.
+#' @param benchmark_ohlcv Optional xts object of benchmark OHLCV (e.g. SPY) for Relative Strength.
 #' @param fast_n Window length for fast lmMA trend (default: 20 for swing trading, or 50).
 #' @param slow_n Window length for slow lmMA trend (default: 50 for swing trading, or 200).
 #' @param look_ahead Forward prediction horizon in days (default: 5 days for swing trading).
@@ -37,6 +38,7 @@ source("R/03_volatility_garch.R")
 #'   - feature_names: Character vector of predictor feature column names
 #' @export
 build_feature_dataset <- function(ohlcv, 
+                                  benchmark_ohlcv = NULL,
                                   fast_n = 20, 
                                   slow_n = 50, 
                                   look_ahead = 5,
@@ -129,13 +131,31 @@ build_feature_dataset <- function(ohlcv,
   feat_obv_slope <- obv_lm$slope / (obv_sd + 1e-6)
   colnames(feat_obv_slope) <- "OBV_Slope"
 
-  # 6. Forward Target: Return k periods into future
+  # 6. Benchmark-Relative Strength (RS vs SPY/Benchmark)
+  feat_rs_20 <- xts(rep(0, nrow(price)), order.by = index(price))
+  colnames(feat_rs_20) <- "RS_20"
+  if (!is.null(benchmark_ohlcv)) {
+    tryCatch({
+      bmk_price <- Cl(benchmark_ohlcv)
+      merged_bmk <- merge(price, bmk_price)
+      merged_bmk <- na.locf(merged_bmk, na.rm = FALSE)
+      p_stock <- merged_bmk[, 1]
+      p_bmk   <- merged_bmk[, 2]
+      ret_stock_20 <- (p_stock / lag.xts(p_stock, k = fast_n)) - 1
+      ret_bmk_20   <- (p_bmk   / lag.xts(p_bmk,   k = fast_n)) - 1
+      rs_diff <- ret_stock_20 - ret_bmk_20
+      feat_rs_20 <- rs_diff[index(price)]
+      colnames(feat_rs_20) <- "RS_20"
+    }, error = function(e) NULL)
+  }
+
+  # 7. Forward Target: Return k periods into future
   # (Price_{t+k} / Price_t - 1)
   fwd_price <- lag.xts(price, k = -look_ahead)
   target_ret <- (fwd_price - price) / price
   colnames(target_ret) <- "TargetRet"
   
-  # 7. Merge all into single xts
+  # 8. Merge all into single xts
   merged_xts <- merge(
     target_ret,
     feat_slope_fast,
@@ -148,7 +168,8 @@ build_feature_dataset <- function(ohlcv,
     feat_garch_shock,
     feat_garch_pct,
     feat_vol_ratio,
-    feat_obv_slope
+    feat_obv_slope,
+    feat_rs_20
   )
   
   # Clean NA created by rolling windows & lookahead
@@ -170,11 +191,12 @@ build_feature_dataset <- function(ohlcv,
     GARCH_Shock = as.numeric(clean_xts$GARCH_Shock),
     GARCH_VolPct = as.numeric(clean_xts$GARCH_VolPct),
     VolumeRatio = as.numeric(clean_xts$VolumeRatio),
-    OBV_Slope = as.numeric(clean_xts$OBV_Slope)
+    OBV_Slope = as.numeric(clean_xts$OBV_Slope),
+    RS_20 = as.numeric(clean_xts$RS_20)
   )
   
   feature_names <- c("SlopeFast", "SlopeSlow", "SlopeWeeklyPct", "TrendQuality", "DistPct", 
-                     "ZScore", "GARCH_Vol", "GARCH_Shock", "GARCH_VolPct", "VolumeRatio", "OBV_Slope")
+                     "ZScore", "GARCH_Vol", "GARCH_Shock", "GARCH_VolPct", "VolumeRatio", "OBV_Slope", "RS_20")
   
   cat(sprintf("[Pipeline] Complete. Result: %d valid observation rows across %d features.\n",
               nrow(df_model), length(feature_names)))
@@ -185,6 +207,7 @@ build_feature_dataset <- function(ohlcv,
     price = price[dates],
     dual_lm = dual_lm,
     latest_weekly_slope_pct = as.numeric(tail(feat_slope_weekly, 1)),
+    latest_rs_20 = as.numeric(tail(feat_rs_20, 1)),
     feature_names = feature_names
   ))
 }

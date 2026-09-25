@@ -25,6 +25,7 @@ source("R/04_feature_pipeline.R")
 source("R/05_logistic_model.R")
 source("R/07_leverage_space.R")
 source("R/portfolio_manager.R")
+source("R/send_alert.R")
 
 # Default Parameters
 CAPITAL          <- 10000
@@ -172,6 +173,14 @@ macro_info <- tryCatch({
   list(close = 0, fit = 0, slope = 0, is_bullish = TRUE, regime = "BULLISH (Default)")
 })
 
+# Benchmark (SPY) for Relative Strength
+spy_ohlcv <- tryCatch({
+  load_stock_data("SPY")
+}, error = function(e) {
+  qqq_ohlcv
+})
+spy_px <- as.numeric(last(Cl(spy_ohlcv)))
+
 # Dynamic CBOE VIX Volatility Regime
 vix_info <- tryCatch({
   vix_ohlcv <- load_stock_data("^VIX")
@@ -208,6 +217,7 @@ if (MACRO_GATE && !macro_info$is_bullish) {
 cat(sprintf(" [Macro Gate Status] %s | Volatility Regime: %s\n", macro_info$regime, vix_info$regime))
 cat(sprintf("   QQQ Close: $%.2f | 50D lmMA Fit: $%.2f | Slope: %+.3f\n", 
             macro_info$close, macro_info$fit, macro_info$slope))
+cat(sprintf("   SPY Benchmark Close: $%.2f\n", spy_px))
 cat(sprintf("   CBOE VIX:  %.2f   | Volatility Regime: %s\n", vix_info$close, vix_info$regime))
 cat(sprintf("   -> Dynamic Policy: Max Positions = %d | Safe f = %.2f | Min P(Up) >= %.1f%%\n\n", 
             EFFECTIVE_MAX_POS, EFFECTIVE_SAFETY_FACTOR, EFFECTIVE_P_LONG * 100))
@@ -232,9 +242,10 @@ for (sym in SYMBOLS) {
     latest_date <- as.character(index(last(price)))
     latest_close <- as.numeric(last(price))
     
-    # Feature engineering with weekly trend synergy
+    # Feature engineering with weekly trend synergy & benchmark relative strength
     pipeline_out <- build_feature_dataset(
       ohlcv = ohlcv,
+      benchmark_ohlcv = spy_ohlcv,
       fast_n = FAST_N,
       slow_n = SLOW_N,
       look_ahead = LOOK_AHEAD,
@@ -273,6 +284,23 @@ for (sym in SYMBOLS) {
     obv_sd <- TTR::runSD(obv, n = FAST_N)
     feat_obv_slope <- obv_lm$slope / (obv_sd + 1e-6)
 
+    # Relative Strength vs SPY Benchmark (20-day excess return)
+    spy_price <- Cl(spy_ohlcv)
+    merged_sp <- merge(price, spy_price)
+    merged_sp <- na.locf(merged_sp, na.rm = FALSE)
+    ret_stk_20 <- (merged_sp[, 1] / lag.xts(merged_sp[, 1], k = FAST_N)) - 1
+    ret_sp_20  <- (merged_sp[, 2] / lag.xts(merged_sp[, 2], k = FAST_N)) - 1
+    feat_rs_20 <- ret_stk_20 - ret_sp_20
+    colnames(feat_rs_20) <- "RS_20"
+    latest_rs_20 <- as.numeric(tail(feat_rs_20, 1))
+    is_rs_leader <- (!is.na(latest_rs_20) && latest_rs_20 >= 0)
+
+    # 14-day ATR & Dynamic Chandelier Trailing Stop anchor
+    atr_14 <- tryCatch({
+      as.numeric(tail(TTR::ATR(HLC(ohlcv), n = 14)$atr, 1))
+    }, error = function(e) curr_daily_vol * latest_close)
+    chandelier_stop <- round(latest_close - (2.5 * atr_14), 2)
+
     all_feats <- merge(
       SlopeFast = dual_lm$fast_lm$slope,
       SlopeSlow = dual_lm$slow_lm$slope,
@@ -284,7 +312,8 @@ for (sym in SYMBOLS) {
       GARCH_Shock = garch_out$shocks,
       GARCH_VolPct = garch_out$vol_percentile,
       VolumeRatio = feat_vol_ratio,
-      OBV_Slope = feat_obv_slope
+      OBV_Slope = feat_obv_slope,
+      RS_20 = feat_rs_20
     )
     
     latest_feats <- tail(na.omit(all_feats), 1)
@@ -300,7 +329,7 @@ for (sym in SYMBOLS) {
     stop_loss_price <- latest_close * (1 - 2.0 * curr_daily_vol)
     take_profit_price <- latest_close * (1 + 3.0 * curr_daily_vol)
     
-    # Signal Assignment with Multi-Timeframe & Earnings Gate
+    # Signal Assignment with Multi-Timeframe, RS Leader, & Earnings Gate
     signal_status <- "HOLD"
     gate_note <- "Normal"
     
@@ -314,9 +343,12 @@ for (sym in SYMBOLS) {
       } else if (!is_weekly_bullish) {
         signal_status <- "COUNTER_TREND"
         gate_note <- sprintf("Weekly Bear (%.2f%%)", weekly_slope_pct)
+      } else if (!is_rs_leader) {
+        signal_status <- "RS_LAGGER"
+        gate_note <- sprintf("RS Lagger (%+.1f%% vs SPY)", latest_rs_20 * 100)
       } else {
         signal_status <- "BUY"
-        gate_note <- "Synergy Confirmed"
+        gate_note <- sprintf("Leader (%+.1f%% vs SPY)", latest_rs_20 * 100)
       }
     } else {
       signal_status <- "HOLD"
@@ -331,6 +363,9 @@ for (sym in SYMBOLS) {
       Signal = signal_status,
       Gate_Note = gate_note,
       Weekly_Slope = weekly_slope_pct,
+      RS_20 = latest_rs_20,
+      ATR_14 = atr_14,
+      Chandelier_Stop = chandelier_stop,
       Earnings_Date = ifelse(is.na(earn_date), "None/ETF", earn_date),
       Days_To_Earn = ifelse(is.na(days_to_earn), -999, days_to_earn),
       GARCH_AnnVol = curr_ann_vol,
@@ -372,6 +407,7 @@ summary_table <- data.frame(
   Price      = sprintf("$%.2f", df_scan$Close),
   P_Up       = sprintf("%.1f%%", df_scan$Prob_Up * 100),
   Signal     = df_scan$Signal,
+  RS_SPY     = sprintf("%s%.1f%%", ifelse(df_scan$RS_20 >= 0, "+", ""), df_scan$RS_20 * 100),
   Weekly     = sprintf("%s%.1f%% [%s]", 
                        ifelse(df_scan$Weekly_Slope >= 0, "+", ""),
                        df_scan$Weekly_Slope, 
@@ -424,9 +460,28 @@ cash_available <- sync_res$cash_balance
 empty_slots <- min(sync_res$available_slots, max(0, EFFECTIVE_MAX_POS - sync_res$active_count))
 
 cat(sprintf(" TOTAL ACCOUNT VALUE:    $%.2f\n", sync_res$total_account_value))
+cat(sprintf(" PEAK EQUITY RECORD:     $%.2f (Drawdown: %+.2f%%)\n", sync_res$peak_equity, sync_res$drawdown_pct))
 cat(sprintf(" INVESTED IN EQUITIES:   $%.2f (%.1f%%)\n", sync_res$total_invested, sync_res$total_invested / max(1, sync_res$total_account_value) * 100))
 cat(sprintf(" AVAILABLE CASH BALANCE: $%.2f (%.1f%%)\n", cash_available, cash_available / max(1, sync_res$total_account_value) * 100))
 cat(sprintf(" AVAILABLE CASH SLOTS:   %d of %d (Regime Limit: %d)\n", empty_slots, EFFECTIVE_MAX_POS, EFFECTIVE_MAX_POS))
+
+# Account Drawdown Circuit Breaker Enforcement
+if (isTRUE(sync_res$circuit_breaker_active)) {
+  EFFECTIVE_SAFETY_FACTOR <- EFFECTIVE_SAFETY_FACTOR * 0.50
+  cat(sprintf(" ⚠️  [CIRCUIT BREAKER ENGAGED] Account drawdown %+.2f%% <= -4.0%%! Throttling Safe f to %.2f\n", 
+              sync_res$drawdown_pct, EFFECTIVE_SAFETY_FACTOR))
+}
+
+# Total Portfolio Heat (Max 5.0% Dollars at Risk across portfolio)
+existing_dollar_risk <- if (sync_res$active_count > 0) {
+  sum(sapply(port_state$positions, function(p) as.numeric(p$shares) * (as.numeric(p$entry_price) - as.numeric(p$stop_loss))))
+} else {
+  0.0
+}
+max_portfolio_heat <- 0.05 * sync_res$total_account_value
+avail_heat_budget  <- max(0, max_portfolio_heat - existing_dollar_risk)
+cat(sprintf(" PORTFOLIO HEAT (RISK):  $%.2f of $%.2f max allowed (%.2f%% of equity)\n",
+            existing_dollar_risk, max_portfolio_heat, (existing_dollar_risk / max(1, sync_res$total_account_value)) * 100))
 
 # ========================================================================================
 # ACTIONABLE CAPITAL DEPLOYMENT (ORDERS TO FILL EMPTY CASH SLOTS)
@@ -552,29 +607,53 @@ if (isTRUE(IS_FRIDAY)) {
         cat(sprintf(" Sizing Mode: Equal-Weight Cash Allocation ($%.2f per slot)\n\n", slot_capital_equal))
       }
       
+      # Preliminary share sizing across candidates to evaluate total risk
+      raw_shares_list <- numeric(n_actionable)
+      cand_risk_list  <- numeric(n_actionable)
+      for (i in 1:n_actionable) {
+        c_row <- actionable_df[actionable_df$Symbol == candidate_syms[i], ]
+        if (!is.null(vince_alloc) && c_row$Symbol %in% vince_alloc$Symbol) {
+          raw_shares_list[i] <- vince_alloc$Shares[vince_alloc$Symbol == c_row$Symbol]
+        } else {
+          raw_shares_list[i] <- if (isTRUE(ALLOW_FRACTIONAL)) round(slot_capital_equal / c_row$Close, 3) else floor(slot_capital_equal / c_row$Close)
+        }
+        cand_risk_list[i] <- raw_shares_list[i] * (c_row$Close - c_row$Stop_Loss)
+      }
+      
+      # Portfolio Heat Cap Scaling: Ensure total portfolio risk <= 5%
+      proposed_risk_sum <- sum(cand_risk_list)
+      heat_scale <- if (proposed_risk_sum > avail_heat_budget && proposed_risk_sum > 0) {
+        cat(sprintf(" [Heat Defense] Proposed risk ($%.2f) exceeds available heat budget ($%.2f). Scaling position size by %.1f%%.\n\n",
+                    proposed_risk_sum, avail_heat_budget, (avail_heat_budget / proposed_risk_sum) * 100))
+        avail_heat_budget / proposed_risk_sum
+      } else {
+        1.0
+      }
+      
+      alert_tickets <- character()
+      
       for (i in 1:n_actionable) {
         row <- actionable_df[actionable_df$Symbol == candidate_syms[i], ]
         c_sec <- get_sector(row$Symbol)
         
+        shares <- raw_shares_list[i] * heat_scale
+        if (isTRUE(ALLOW_FRACTIONAL)) {
+          shares <- round(shares, 3)
+        } else {
+          shares <- floor(shares)
+        }
+        invested <- round(shares * row$Close, 2)
+        
         if (!is.null(vince_alloc) && row$Symbol %in% vince_alloc$Symbol) {
           v_row <- vince_alloc[vince_alloc$Symbol == row$Symbol, ]
-          shares <- v_row$Shares
-          invested <- v_row$Actual_Outlay
-          allocated_cash <- v_row$Dollar_Allocation
-          opt_f_val <- v_row$Optimal_f
-          safe_f_val <- v_row$Safe_f
-          max_loss_val <- v_row$Max_Loss
-          weight_pct <- v_row$Weight * 100
-          sizing_note <- sprintf("Vince Optimal f: %.4f | Safe f: %.4f | Max Loss: %s",
-                                 opt_f_val, safe_f_val, max_loss_val)
-          alloc_note  <- sprintf("Target Allocation: %.1f%% ($%.2f) -> Actual Outlay: $%.2f (Cash Left: $%.2f)",
-                                 weight_pct, allocated_cash, invested, v_row$Cash_Left)
+          weight_pct <- v_row$Weight * 100 * heat_scale
+          sizing_note <- sprintf("Vince Optimal f: %.4f | Safe f: %.4f | Heat Scale: %.1f%%",
+                                 v_row$Optimal_f, v_row$Safe_f, heat_scale * 100)
+          alloc_note  <- sprintf("Target Allocation: %.1f%% ($%.2f) -> Actual Outlay: $%.2f",
+                                 weight_pct, v_row$Dollar_Allocation * heat_scale, invested)
         } else {
-          shares <- if (isTRUE(ALLOW_FRACTIONAL)) round(slot_capital_equal / row$Close, 3) else floor(slot_capital_equal / row$Close)
-          invested <- round(shares * row$Close, 2)
-          sizing_note <- "Equal-Weight Slot Allocation"
-          alloc_note  <- sprintf("Slot Budget: $%.2f -> Actual Outlay: $%.2f (Cash Left: $%.2f)",
-                                 slot_capital_equal, invested, slot_capital_equal - invested)
+          sizing_note <- sprintf("Equal-Weight Slot Allocation (Heat Scale: %.1f%%)", heat_scale * 100)
+          alloc_note  <- sprintf("Slot Budget: $%.2f -> Actual Outlay: $%.2f", slot_capital_equal, invested)
         }
         
         shares_display <- if (isTRUE(ALLOW_FRACTIONAL) && (shares %% 1 != 0)) sprintf("%.3f", shares) else sprintf("%d", as.integer(shares))
@@ -593,6 +672,7 @@ if (isTRUE(IS_FRIDAY)) {
         cat(sprintf("  Action:              BUY %s SHARES at Market (Monday Afternoon Execution)\n", shares_display))
         cat(sprintf("  Position Sizing:     %s\n", sizing_note))
         cat(sprintf("  Capital Allocation:  %s\n", alloc_note))
+        cat(sprintf("  Relative Strength:   %+.2f%% vs SPY Benchmark [MARKET LEADER]\n", row$RS_20 * 100))
         cat(sprintf("  Multi-Timeframe:     Weekly Trend +%.2f%% [BULLISH SYNERGY]\n", row$Weekly_Slope))
         cat(sprintf("  Earnings Safe:       Next report %s (%d days out)\n", row$Earnings_Date, as.integer(row$Days_To_Earn)))
         cat(sprintf("  GTC Stop-Loss:       $%.2f (-%.2f%%) [Total Downside Risk: $%.2f]\n", 
@@ -602,11 +682,29 @@ if (isTRUE(IS_FRIDAY)) {
                     tier1_shares, tier1_target, 3.0 * row$Daily_Vol * 100, tier1_gain, row$Close))
         cat(sprintf("    -> Tier 2 (50%% = %s shs): Target $%.2f (+%.2f%%, +3.0R) [Gain: $%.2f] -> Momentum runner\n",
                     tier2_shares, tier2_target, 6.0 * row$Daily_Vol * 100, tier2_gain))
+        cat(sprintf("    -> Chandelier Trailing Stop: Initial trigger at $%.2f (Trails Highest High - 2.5 x ATR(14) $%.2f)\n",
+                    row$Chandelier_Stop, row$ATR_14))
         cat(sprintf("  Reward / Risk Ratio: Tier 1: 1.50R | Tier 2: 3.00R (Combined Potential: +$%.2f vs -$%.2f Risk)\n\n",
                     tier1_gain + tier2_gain, total_risk))
+        
+        alert_tickets <- c(alert_tickets, sprintf(
+          "• *%s* (%s): BUY %s shs @ ~$%.2f\n  - Stop: $%.2f | T1: $%.2f (+1.5R) | T2: $%.2f (+3.0R)\n  - Chandelier Stop: $%.2f | RS vs SPY: %+.1f%%",
+          row$Symbol, c_sec, shares_display, row$Close, row$Stop_Loss, tier1_target, tier2_target, row$Chandelier_Stop, row$RS_20 * 100
+        ))
+      }
+      
+      # Dispatch Mobile Webhook Alert
+      if (length(alert_tickets) > 0) {
+        alert_body <- paste(
+          c(sprintf("Macro Gate: %s | VIX: %.2f | Open Slots: %d\n", macro_info$regime, vix_info$close, empty_slots),
+            "Actionable Order Tickets:",
+            alert_tickets),
+          collapse = "\n"
+        )
+        broadcast_alert(title = "📈 New Weekly Swing Signals", body = alert_body, level = "SUCCESS")
       }
     } else {
-      cat(sprintf(" No unowned symbols currently meet all BUY criteria (P(Up) >= %.1f%%, Weekly Bullish, Sector Cap).\n",
+      cat(sprintf(" No unowned symbols currently meet all BUY criteria (P(Up) >= %.1f%%, Weekly Bullish, RS Leader, Sector Cap).\n",
                   EFFECTIVE_P_LONG * 100))
       cat(" RECOMMENDATION: Retain available cash buffer in money market / cash.\n")
     }

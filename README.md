@@ -8,17 +8,19 @@ A statistical swing trading system implemented in pure **R**, utilizing moderniz
 
 1. **Linear Model Moving Average (`lmMA`)**: Replaces simple moving averages with rolling linear regressions (`TTR::rollSFM`) to decouple trend direction (instantaneous slope $\beta$) and trend level ($\alpha + \beta t$) with minimal lag.
 2. **GARCH(1,1) Volatility Modeling**: Models time-varying conditional variance $\sigma_t$ and standardized return shocks ($\epsilon_t / \sigma_t$) via quasi-maximum likelihood estimation (`tseries::garch`).
-3. **Volume & Institutional Accumulation Pipeline**: Incorporates 20-day Volume Ratio ($Vol_t / \text{SMA}_{20}(Vol)$) and standardized On-Balance Volume slope ($\beta_{OBV}$) into the ElasticNet model, expanding the feature space to 11 predictors to detect institutional accumulation prior to price breakouts.
+3. **12-Feature Pipeline with Benchmark Relative Strength (`RS_20`) & Volume Surge**: Expands feature space to 12 predictors including 20-day excess return vs. S&P 500 (`SPY`), 20-day Volume Ratio ($Vol_t / \text{SMA}_{20}(Vol)$), and standardized On-Balance Volume slope ($\beta_{OBV}$) to isolate high-conviction institutional leaders before breakout confirmation.
 4. **Dynamic VIX Volatility Regime Switcher**: Queries CBOE Volatility Index (`^VIX`) to toggle between `NORMAL` (<20), `ELEVATED` (20-28), and `CRISIS` (>28) market states. Automatically throttles maximum position slots (5 $\rightarrow$ 3 $\rightarrow$ 1) and scales the Ralph Vince Safe $f$ multiplier (0.50 $\rightarrow$ 0.30 $\rightarrow$ 0.15) while tightening probability thresholds.
 5. **Sector & Cluster Concentration Defense**: Enforces strict portfolio diversification by capping exposure at a maximum of 2 active positions per sector (e.g. Semiconductors, Software, Hardware), preventing catastrophic sector-specific drawdowns.
-6. **Multi-Tier Profit Bracket Exits**: Generates two-tier exit orders on every trade ticket:
-   - **Tier 1 (50% scale-out @ $+1.5R$)**: Locks in initial gains and triggers an automatic stop-loss ratchet to Breakeven (entry price) for a zero-downside trade.
-   - **Tier 2 (50% runner @ $+3.0R$)**: Captures multi-week trend momentum runs.
-7. **Automated Multi-Broker Execution Bridge**: Python & R CLI bridge (`execute_broker.py` / `execute_orders.R`) supporting automated bracket staging and transmission for both **Interactive Brokers (IBKR)** via TWS/Gateway (`ib_insync`) and **Charles Schwab Trader API** (OAuth2 REST API) with safe `--dry_run=TRUE` payload verification.
-8. **Macro Market Regime Gate (`QQQ`)**: Top-down market trend filter. When `QQQ` is above its 50-day `lmMA` with positive slope, full Risk-On allocation is allowed; otherwise triggers defensive risk reduction.
-9. **Earnings Date Blackout Filter**: Blocks purchases within 7 trading days (~10 calendar days) of earnings releases to eliminate binary earnings risk.
+6. **Multi-Tier Profit Bracket Exits with ATR Chandelier Trailing Stop**:
+   - **Tier 1 (50% scale-out @ $+1.5R$)**: Locks in initial gains and automatically ratchets the remaining stop-loss to Breakeven (entry price) for a zero-downside trade.
+   - **Tier 2 (50% runner @ $+3.0R$)**: Employs an open-ended **ATR Chandelier Trailing Stop** ($\text{Highest High} - 2.5 \times \text{ATR}_{14}$) to capture multi-week trend momentum runs without prematurely capping compounding upside.
+7. **Portfolio Heat Cap & Account Drawdown Circuit Breaker**:
+   - Enforces a hard ceiling of **$\le 5.0\%$ total portfolio dollars-at-risk** across all open positions.
+   - Triggers an automatic **Drawdown Circuit Breaker** if account equity drops $\ge 4.0\%$ below peak equity, cutting Safe $f$ by 50% to preserve capital.
+8. **Automated Multi-Broker Execution & Two-Way Sync Bridge**: Python & R CLI bridge (`execute_broker.py` / `execute_orders.R`) supporting automated bracket staging, live transmission, and two-way portfolio reconciliation (`--sync`) for **Interactive Brokers (IBKR)** and **Charles Schwab Trader API**.
+9. **Real-Time Mobile Push Alerts (Discord & Telegram Webhooks)**: Automatically pushes Monday 14:00 entry tickets and Friday 15:30 weekend hold reviews directly to your smartphone via lightweight HTTP webhooks (`R/send_alert.R`).
 10. **Ralph Vince Leverage Space Model (LSPM)**: Geometric Holding Period Return ($\text{GHPR}$) optimization across joint scenario returns, finding the optimal leverage vector $\mathbf{f}^*$ scaled by dynamic Safe $f$ to maximize long-term geometric compounding.
-11. **Native macOS & GitHub Automation**: Automated weekday background runner (`launchd`) at Monday 2:00 PM (entry scan) and Friday 3:30 PM (weekend review) with desktop notifications and GitHub Actions integration.
+11. **Macro Market Regime Gate (`QQQ`) & Earnings Blackout Filter**: Top-down trend filter requiring QQQ above its 50-day `lmMA` with positive slope, plus an automatic 7-day pre-earnings blackout to eliminate binary gap risk.
 
 ---
 
@@ -34,7 +36,8 @@ A statistical swing trading system implemented in pure **R**, utilizing moderniz
 │   ├── 05_logistic_model.R    # Regularized logistic regression & classification
 │   ├── 06_swing_backtest.R    # Swing backtest simulator, metrics & trade logger
 │   ├── 07_leverage_space.R    # Ralph Vince Leverage Space Model (Optimal f / Safe f)
-│   └── portfolio_manager.R    # Active portfolio state tracking, P&L sync & exit checks
+│   ├── portfolio_manager.R    # Active portfolio state tracking, P&L sync & exit checks
+│   └── send_alert.R           # Mobile push alerts dispatcher (Discord & Telegram Webhooks)
 ├── main.R                     # Full backtesting & diagnostic plotting pipeline
 ├── daily_signal.R             # Multi-asset live scanner & order ticket generator
 ├── execute_broker.py          # Python execution bridge (IBKR & Charles Schwab API)
@@ -104,6 +107,28 @@ To transmit orders live to an active Interactive Brokers TWS or IB Gateway insta
 Rscript execute_orders.R --broker=ibkr --dry_run=FALSE --port=7497
 ```
 
+### Automated Broker Portfolio Reconciliation (`--sync`)
+To synchronize your active positions, executed fills, and real-time cash balance directly from Interactive Brokers into `portfolio.json`:
+```bash
+# Preview portfolio reconciliation diff
+Rscript execute_orders.R --broker=ibkr --sync --dry_run=TRUE
+
+# Execute live synchronization with TWS / IB Gateway
+Rscript execute_orders.R --broker=ibkr --sync --dry_run=FALSE --port=7497
+```
+
+### Mobile Push Alerts (Discord & Telegram Webhooks)
+Configure environment variables in `.env` (or shell profile):
+```bash
+DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
+TELEGRAM_BOT_TOKEN="123456789:ABCDEF..."
+TELEGRAM_CHAT_ID="987654321"
+```
+Test notification dispatch:
+```bash
+Rscript R/send_alert.R --test
+```
+
 ### Portfolio Management (CLI)
 View active portfolio status, open positions, unrealized P&L, and closed trade logs:
 ```bash
@@ -111,11 +136,11 @@ Rscript trade_manager.R --status
 ```
 Record a trade fill:
 ```bash
-Rscript trade_manager.R --buy=AMD:9.269:614.61:555.76:702.88
+Rscript trade_manager.R --buy=AMD:9.034:629.26:578.52:705.37
 ```
 Record a trade exit:
 ```bash
-Rscript trade_manager.R --sell=AMD:702.88:TAKE_PROFIT
+Rscript trade_manager.R --sell=AMD:705.37:TAKE_PROFIT
 ```
 
 ### Automated Scheduling (macOS)

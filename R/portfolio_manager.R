@@ -26,6 +26,7 @@ load_portfolio <- function(path = "portfolio.json", default_capital = 10000, max
       state$total_capital  <- as.numeric(state$total_capital)
       state$cash_balance   <- as.numeric(state$cash_balance)
       state$max_positions  <- as.integer(state$max_positions)
+      state$peak_equity    <- if (!is.null(state$peak_equity)) as.numeric(state$peak_equity) else max(state$total_capital, state$cash_balance, default_capital)
       if (is.null(state$positions)) state$positions <- list()
       if (is.null(state$closed_trades)) state$closed_trades <- list()
       return(state)
@@ -39,6 +40,7 @@ load_portfolio <- function(path = "portfolio.json", default_capital = 10000, max
     total_capital = default_capital,
     cash_balance = default_capital,
     max_positions = max_positions,
+    peak_equity = default_capital,
     last_updated = as.character(Sys.time()),
     positions = list(),
     closed_trades = list()
@@ -214,6 +216,14 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
         suggested_stop <- round(max(suggested_stop, p$entry_price), 2)
       }
       
+      # ATR Chandelier Trailing Stop for Tier 2 runners
+      highest_seen <- max(p$entry_price, if (!is.null(p$highest_price)) p$highest_price else p$entry_price, cp)
+      atr_val <- if (!is.null(p$atr)) p$atr else (p$entry_price * 0.025)
+      chandelier_stop <- round(highest_seen - (2.5 * atr_val), 2)
+      if (cp >= (p$entry_price + risk_1r) && chandelier_stop > suggested_stop) {
+        suggested_stop <- chandelier_stop
+      }
+      
       # Determine action trigger
       action <- "HOLD"
       status <- "ACTIVE"
@@ -296,6 +306,14 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
   }
   
   total_account_value <- round(portfolio$cash_balance + total_invested, 2)
+  peak_equity <- if (!is.null(portfolio$peak_equity)) max(portfolio$peak_equity, total_account_value) else total_account_value
+  drawdown_pct <- round(((total_account_value - peak_equity) / peak_equity) * 100, 2)
+  circuit_breaker_active <- (drawdown_pct <= -4.0)
+  
+  if (circuit_breaker_active) {
+    alerts <- c(alerts, sprintf("[CIRCUIT BREAKER ACTIVE] Account Drawdown %+.2f%% exceeds -4.0%% ceiling! Safe f throttled by 50%%.", drawdown_pct))
+  }
+  
   available_slots <- max(0, portfolio$max_positions - nrow(pos_df))
   
   return(list(
@@ -303,6 +321,9 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
     total_invested = total_invested,
     cash_balance = portfolio$cash_balance,
     total_account_value = total_account_value,
+    peak_equity = peak_equity,
+    drawdown_pct = drawdown_pct,
+    circuit_breaker_active = circuit_breaker_active,
     available_slots = available_slots,
     active_count = nrow(pos_df),
     alerts = alerts

@@ -247,11 +247,112 @@ def execute_schwab(tickets: List[Dict[str, Any]], dry_run: bool):
 
     print("[Schwab Bridge] Ready for live REST submission with configured Schwab credentials.")
 
+def sync_ibkr(portfolio_file: str, host: str, port: int, client_id: int, dry_run: bool):
+    import datetime
+    print(f"\n[IBKR Sync] Connecting to TWS/Gateway at {host}:{port} (Client ID: {client_id})...")
+    
+    if not os.path.exists(portfolio_file):
+        port_data = {
+            "total_capital": 10000.0,
+            "cash_balance": 10000.0,
+            "max_positions": 5,
+            "peak_equity": 10000.0,
+            "last_updated": str(datetime.datetime.now()),
+            "positions": [],
+            "closed_trades": []
+        }
+    else:
+        with open(portfolio_file, "r") as f:
+            port_data = json.load(f)
+
+    if dry_run:
+        print("[IBKR Sync] MODE: DRY RUN (Simulating portfolio sync with IBKR)")
+        print(f"[IBKR Sync] Recorded Cash Balance: ${port_data.get('cash_balance', 0):.2f}")
+        print(f"[IBKR Sync] Recorded Total Equity: ${port_data.get('total_capital', 0):.2f}")
+        print(f"[IBKR Sync] Open Positions in Local Portfolio: {len(port_data.get('positions', []))}")
+        for pos in port_data.get("positions", []):
+            print(f"  * {pos['symbol']}: {pos['shares']} shs @ ${pos['entry_price']:.2f}")
+        print("\n[IBKR Sync] Dry-run reconciliation check complete. (Live connection requires --dry_run=false)")
+        return
+
+    try:
+        from ib_insync import IB
+        ib = IB()
+        ib.connect(host, port, clientId=client_id)
+        
+        ib_positions = ib.positions()
+        account_values = ib.accountSummary()
+        
+        cash_val = None
+        equity_val = None
+        for item in account_values:
+            if item.tag == "TotalCashValue":
+                cash_val = float(item.value)
+            elif item.tag == "NetLiquidation":
+                equity_val = float(item.value)
+                
+        if cash_val is not None:
+            port_data["cash_balance"] = round(cash_val, 2)
+        if equity_val is not None:
+            port_data["total_capital"] = round(equity_val, 2)
+            port_data["peak_equity"] = max(port_data.get("peak_equity", equity_val), equity_val)
+            
+        active_symbols = set()
+        for p in ib_positions:
+            if p.position > 0:
+                sym = p.contract.symbol
+                active_symbols.add(sym)
+                existing = [pos for pos in port_data["positions"] if pos["symbol"] == sym]
+                if existing:
+                    existing[0]["shares"] = float(p.position)
+                    existing[0]["cost_basis"] = round(float(p.position) * float(p.avgCost), 2)
+                else:
+                    port_data["positions"].append({
+                        "symbol": sym,
+                        "shares": float(p.position),
+                        "entry_price": round(float(p.avgCost), 2),
+                        "entry_date": str(datetime.date.today()),
+                        "stop_loss": round(float(p.avgCost) * 0.95, 2),
+                        "take_profit": round(float(p.avgCost) * 1.10, 2),
+                        "cost_basis": round(float(p.position) * float(p.avgCost), 2),
+                        "status": "OPEN"
+                    })
+                    
+        closed = []
+        remaining = []
+        for pos in port_data["positions"]:
+            if pos["symbol"] not in active_symbols:
+                closed.append(pos)
+            else:
+                remaining.append(pos)
+                
+        for c in closed:
+            c["exit_date"] = str(datetime.date.today())
+            c["reason"] = "BROKER_SYNC_CLOSED"
+            port_data["closed_trades"].append(c)
+            print(f"[IBKR Sync] Archived closed position: {c['symbol']}")
+            
+        port_data["positions"] = remaining
+        port_data["last_updated"] = str(datetime.datetime.now())
+        
+        with open(portfolio_file, "w") as f:
+            json.dump(port_data, f, indent=2)
+            
+        print(f"[IBKR Sync] SUCCESS: Synchronized {len(port_data['positions'])} positions, ${port_data['cash_balance']:.2f} cash.")
+        ib.disconnect()
+    except ImportError:
+        print("[IBKR Sync] 'ib_insync' package required for live IBKR sync. Install with: pip install ib_insync")
+    except Exception as e:
+        print(f"[IBKR Sync] Error: {e}")
+        sys.exit(1)
+
 def main():
     parser = argparse.ArgumentParser(description="Multi-Broker Execution Bridge for Swing Trading System")
     parser.add_argument("--broker", choices=["ibkr", "schwab"], default="ibkr", help="Target broker (ibkr or schwab)")
     parser.add_argument("--dry_run", type=str, default="true", help="Dry run mode (true/false)")
     parser.add_argument("--ticket_file", default="LATEST_TICKET.txt", help="Path to latest ticket file")
+    parser.add_argument("--portfolio_file", default="portfolio.json", help="Path to portfolio state file")
+    parser.add_argument("--sync", action="store_true", help="Synchronize local portfolio state with live broker")
     parser.add_argument("--port", type=int, default=7497, help="IBKR TWS/Gateway port (7497 Paper, 7496 Live)")
     parser.add_argument("--host", default="127.0.0.1", help="IBKR Host IP")
     parser.add_argument("--client_id", type=int, default=1, help="IBKR Client ID")
@@ -262,9 +363,18 @@ def main():
     print("================================================================================")
     print("                 MULTI-BROKER ORDER EXECUTION & BRACKET BRIDGE                  ")
     print("================================================================================")
-    print(f" Target Broker: {args.broker.upper()} | Mode: {'DRY RUN (Preview)' if dry_run else 'LIVE SUBMISSION'}")
-    print(f" Source Ticket: {args.ticket_file}")
+    print(f" Target Broker: {args.broker.upper()} | Mode: {'DRY RUN (Preview)' if dry_run else 'LIVE ACTION'}")
+    
+    if args.sync:
+        print(f" Operation: PORTFOLIO RECONCILIATION (--sync) with {args.portfolio_file}")
+        if args.broker == "ibkr":
+            sync_ibkr(args.portfolio_file, args.host, args.port, args.client_id, dry_run)
+        else:
+            print("[Schwab Sync] Live Schwab account reconciliation available via REST balance query.")
+        print("\n================================================================================")
+        return
 
+    print(f" Source Ticket: {args.ticket_file}")
     tickets = parse_latest_tickets(args.ticket_file)
     print(f" Loaded {len(tickets)} Actionable Order Ticket(s) from {args.ticket_file}:\n")
 

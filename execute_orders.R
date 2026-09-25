@@ -12,12 +12,14 @@ broker <- "ibkr"
 dry_run <- "true"
 port <- "7497"
 ticket_file <- "LATEST_TICKET.txt"
+sync_flag <- FALSE
 
 for (arg in args) {
   if (startsWith(arg, "--broker=")) broker <- tolower(sub("^--broker=", "", arg))
   if (startsWith(arg, "--dry_run=")) dry_run <- tolower(sub("^--dry_run=", "", arg))
   if (startsWith(arg, "--port=")) port <- sub("^--port=", "", arg)
   if (startsWith(arg, "--ticket_file=")) ticket_file <- sub("^--ticket_file=", "", arg)
+  if (arg == "--sync") sync_flag <- TRUE
 }
 
 python_bin <- Sys.which("python3")
@@ -32,6 +34,9 @@ cmd_args <- c(
   sprintf("--ticket_file=%s", ticket_file),
   sprintf("--port=%s", port)
 )
+if (sync_flag) {
+  cmd_args <- c(cmd_args, "--sync")
+}
 
 exit_code <- system2(python_bin, args = cmd_args)
 quit(save = "no", status = exit_code)
