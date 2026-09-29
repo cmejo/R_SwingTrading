@@ -89,10 +89,12 @@ jobs:
             gh issue close "$num" --comment "Closed by daily automated runner." || true
           done
 
-          # Create new daily ticket issue (triggers automatic email notification to christopher@cmejo.com)
+          # Create new daily ticket issue with assignment and mention to trigger immediate email delivery
+          BODY_WITH_MENTION=$(printf "@cmejo\n\n### Daily Swing Trade Signals & Execution Ticket (%s)\n\n" "${{ env.TODAY }}"; cat LATEST_TICKET.txt)
           gh issue create \
             --title "Daily Swing Trade Ticket: ${{ env.TODAY }}" \
-            --body-file LATEST_TICKET.txt \
+            --body "$BODY_WITH_MENTION" \
+            --assignee "cmejo" \
             --label "daily-ticket"
 
       - name: Commit and Push Updated Tickets & Portfolio Cache
