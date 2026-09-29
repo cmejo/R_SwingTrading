@@ -573,11 +573,69 @@ def sync_ibkr(portfolio_file: str, host: str, port: int, client_id: int, dry_run
         print(f"[IBKR Sync] Error: {e}")
         sys.exit(1)
 
+def interactive_edit_tickets(tickets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Allows user to interactively inspect and adjust order parameters before transmission."""
+    edited_tickets = []
+    print("\n[Interactive Order Editor] Review and adjust order parameters below (press Enter to keep default):")
+    for idx, t in enumerate(tickets, 1):
+        print(f"\n------------------------------------------------------------")
+        print(f" Ticket #{idx}: {t['symbol']} ({t['sector']}) | P(Up): {t['p_up']}%")
+        print(f" Current: {t['shares']} shares | Stop: ${t['stop_loss']:.2f} | T1: ${t['tier1_target']:.2f} | T2: ${t['tier2_target']:.2f}")
+        print(f"------------------------------------------------------------")
+        choice = input(f" Action for {t['symbol']} [1=Keep, 2=Edit, 3=Skip]: ").strip().lower()
+        if choice in ["3", "s", "skip"]:
+            print(f" -> Skipped {t['symbol']}.")
+            continue
+        elif choice in ["2", "e", "edit"]:
+            # Edit shares
+            new_shares_str = input(f"   Shares [{t['shares']}]: ").strip()
+            if new_shares_str:
+                try:
+                    t['shares'] = float(new_shares_str)
+                    t['tier1_shares'] = round(t['shares'] / 2.0, 4)
+                    t['tier2_shares'] = round(t['shares'] - t['tier1_shares'], 4)
+                except ValueError:
+                    print("   Invalid number, keeping default.")
+            
+            # Edit stop loss
+            new_stop_str = input(f"   Stop-Loss Price [${t['stop_loss']:.2f}]: ").strip().replace("$", "")
+            if new_stop_str:
+                try:
+                    t['stop_loss'] = float(new_stop_str)
+                except ValueError:
+                    print("   Invalid price, keeping default.")
+
+            # Edit Tier 1 target
+            new_t1_str = input(f"   Tier 1 Target [${t['tier1_target']:.2f}]: ").strip().replace("$", "")
+            if new_t1_str:
+                try:
+                    t['tier1_target'] = float(new_t1_str)
+                except ValueError:
+                    print("   Invalid price, keeping default.")
+
+            # Edit Tier 2 target
+            new_t2_str = input(f"   Tier 2 Target [${t['tier2_target']:.2f}]: ").strip().replace("$", "")
+            if new_t2_str:
+                try:
+                    t['tier2_target'] = float(new_t2_str)
+                except ValueError:
+                    print("   Invalid price, keeping default.")
+
+            print(f" -> Updated {t['symbol']}: {t['shares']} shs | Stop: ${t['stop_loss']:.2f} | T1: ${t['tier1_target']:.2f} | T2: ${t['tier2_target']:.2f}")
+        else:
+            print(f" -> Kept {t['symbol']} as is.")
+        
+        edited_tickets.append(t)
+    return edited_tickets
+
 def main():
     parser = argparse.ArgumentParser(description="Multi-Broker Execution Bridge for Swing Trading System")
     parser.add_argument("--broker", choices=["ibkr", "schwab"], default="ibkr", help="Target broker (ibkr or schwab)")
     parser.add_argument("--dry_run", type=str, default="true", help="Dry run mode (true/false)")
     parser.add_argument("--ticket_file", default="LATEST_TICKET.txt", help="Path to latest ticket file")
+    parser.add_argument("--symbols", type=str, default="", help="Comma-separated symbols to filter (e.g. AMD,SNDK)")
+    parser.add_argument("--interactive", "-i", action="store_true", help="Interactively review and edit orders before execution")
+    parser.add_argument("--yes", "-y", action="store_true", help="Skip live execution confirmation prompt")
     parser.add_argument("--portfolio_file", default="portfolio.json", help="Path to portfolio state file")
     parser.add_argument("--sync", action="store_true", help="Synchronize local portfolio state with live broker")
     parser.add_argument("--auth", action="store_true", help="Authenticate with Charles Schwab OAuth2")
@@ -627,10 +685,34 @@ def main():
 
     print(f" Source Ticket: {args.ticket_file}")
     tickets = parse_latest_tickets(args.ticket_file)
-    print(f" Loaded {len(tickets)} Actionable Order Ticket(s) from {args.ticket_file}:\n")
+
+    # Filter symbols if requested
+    if args.symbols:
+        allowed = {s.strip().upper() for s in args.symbols.split(",") if s.strip()}
+        tickets = [t for t in tickets if t["symbol"].upper() in allowed]
+        print(f" Filtered to {len(tickets)} requested symbol(s): {', '.join(allowed)}")
+
+    print(f" Loaded {len(tickets)} Actionable Order Ticket(s):\n")
 
     for t in tickets:
         print(f"  * #{t['rank']} {t['symbol']} ({t['sector']}): BUY {t['shares']} shs | Stop: ${t['stop_loss']} | T1: ${t['tier1_target']} | T2: ${t['tier2_target']}")
+
+    # Interactive edit mode
+    if args.interactive:
+        tickets = interactive_edit_tickets(tickets)
+        if not tickets:
+            print("\n[Notice] No orders remaining after interactive review. Exiting.")
+            sys.exit(0)
+
+    # Confirmation before live execution
+    if not dry_run and not args.yes:
+        print(f"\n[Live Confirmation Required] You are about to transmit {len(tickets)} order(s) to {args.broker.upper()}:")
+        for t in tickets:
+            print(f"   -> BUY {t['shares']} {t['symbol']} | Stop: ${t['stop_loss']:.2f} | T1: ${t['tier1_target']:.2f}")
+        confirm = input("\nType 'yes' to transmit orders to broker: ").strip().lower()
+        if confirm not in ["yes", "y"]:
+            print("[Cancelled] Transmission aborted. No orders were sent.")
+            sys.exit(0)
 
     if args.broker == "ibkr":
         execute_ibkr(tickets, args.host, args.port, args.client_id, dry_run)

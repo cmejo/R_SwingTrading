@@ -12,13 +12,18 @@ broker <- "ibkr"
 dry_run <- "true"
 port <- "7497"
 ticket_file <- "LATEST_TICKET.txt"
-sync_flag <- FALSE
+symbols <- ""
+interactive_flag <- FALSE
+yes_flag <- FALSE
 
 for (arg in args) {
   if (startsWith(arg, "--broker=")) broker <- tolower(sub("^--broker=", "", arg))
   if (startsWith(arg, "--dry_run=")) dry_run <- tolower(sub("^--dry_run=", "", arg))
   if (startsWith(arg, "--port=")) port <- sub("^--port=", "", arg)
   if (startsWith(arg, "--ticket_file=")) ticket_file <- sub("^--ticket_file=", "", arg)
+  if (startsWith(arg, "--symbols=")) symbols <- sub("^--symbols=", "", arg)
+  if (arg == "--interactive" || arg == "-i") interactive_flag <- TRUE
+  if (arg == "--yes" || arg == "-y") yes_flag <- TRUE
   if (arg == "--sync") sync_flag <- TRUE
 }
 
@@ -34,6 +39,15 @@ cmd_args <- c(
   sprintf("--ticket_file=%s", ticket_file),
   sprintf("--port=%s", port)
 )
+if (symbols != "") {
+  cmd_args <- c(cmd_args, sprintf("--symbols=%s", symbols))
+}
+if (interactive_flag) {
+  cmd_args <- c(cmd_args, "--interactive")
+}
+if (yes_flag) {
+  cmd_args <- c(cmd_args, "--yes")
+}
 if (sync_flag) {
   cmd_args <- c(cmd_args, "--sync")
 }
