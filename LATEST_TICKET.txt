@@ -3,194 +3,194 @@
 ========================================================================================
  1. MACRO MARKET & VOLATILITY REGIME GATE (QQQ + VIX DUAL FILTER)
 ========================================================================================
-[DataLoader] Attempting to fetch 'QQQ' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1693 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'QQQ' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1694 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_qqq.rds
-[DataLoader] Loaded 1693 bars for QQQ [2020-01-02 to 2026-09-28]
-[DataLoader] Attempting to fetch 'SPY' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1693 bars from Yahoo Finance.
+[DataLoader] Loaded 1694 bars for QQQ [2020-01-02 to 2026-09-29]
+[DataLoader] Attempting to fetch 'SPY' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1694 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_spy.rds
-[DataLoader] Loaded 1693 bars for SPY [2020-01-02 to 2026-09-28]
-[DataLoader] Attempting to fetch '^VIX' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1758 bars from Yahoo Finance.
+[DataLoader] Loaded 1694 bars for SPY [2020-01-02 to 2026-09-29]
+[DataLoader] Attempting to fetch '^VIX' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1759 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_^vix.rds
-[DataLoader] Loaded 1758 bars for ^VIX [2020-01-02 to 2026-09-28]
+[DataLoader] Loaded 1759 bars for ^VIX [2020-01-02 to 2026-09-29]
 Warning message:
 ^VIX contains missing values. Some functions will not work if objects contain missing values in the middle of the series. Consider using na.omit(), na.approx(), na.fill(), etc to remove or replace them. 
  [Macro Gate Status] BULLISH (Risk-On) | Volatility Regime: NORMAL (Low Volatility)
-   QQQ Close: $736.53 | 50D lmMA Fit: $732.31 | Slope: +0.769
-   SPY Benchmark Close: $765.61
-   CBOE VIX:  16.07   | Volatility Regime: NORMAL (Low Volatility)
+   QQQ Close: $737.93 | 50D lmMA Fit: $733.51 | Slope: +0.784
+   SPY Benchmark Close: $764.20
+   CBOE VIX:  16.04   | Volatility Regime: NORMAL (Low Volatility)
    -> Dynamic Policy: Max Positions = 5 | Safe f = 0.50 | Min P(Up) >= 58.0%
 
 ========================================================================================
  2. SCANNING WATCHLIST (15 ASSETS) WITH WALK-FORWARD RETRAINING
 ========================================================================================
 [Scanning SNDK] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'SNDK' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 407 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'SNDK' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 408 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_sndk.rds
-[DataLoader] Loaded 407 bars for SNDK [2025-02-13 to 2026-09-28]
+[DataLoader] Loaded 408 bars for SNDK [2025-02-13 to 2026-09-29]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.001635, a1=0.3015, b1=0.3879 (persistence=0.6894)
-[Pipeline] Complete. Result: 353 valid observation rows across 12 features.
+[GARCH] Fitted: a0=0.001501, a1=0.3247, b1=0.4068 (persistence=0.7315)
+[Pipeline] Complete. Result: 354 valid observation rows across 12 features.
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.001635, a1=0.3015, b1=0.3879 (persistence=0.6894)
+[GARCH] Fitted: a0=0.001501, a1=0.3247, b1=0.4068 (persistence=0.7315)
 [Scanning NVDA] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'NVDA' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1693 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'NVDA' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1694 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_nvda.rds
-[DataLoader] Loaded 1693 bars for NVDA [2020-01-02 to 2026-09-28]
+[DataLoader] Loaded 1694 bars for NVDA [2020-01-02 to 2026-09-29]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000058, a1=0.0960, b1=0.8524 (persistence=0.9484)
-[Pipeline] Complete. Result: 1639 valid observation rows across 12 features.
+[GARCH] Fitted: a0=0.000057, a1=0.0964, b1=0.8522 (persistence=0.9486)
+[Pipeline] Complete. Result: 1640 valid observation rows across 12 features.
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000058, a1=0.0960, b1=0.8524 (persistence=0.9484)
+[GARCH] Fitted: a0=0.000057, a1=0.0964, b1=0.8522 (persistence=0.9486)
 [Scanning AAPL] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'AAPL' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1693 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'AAPL' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1694 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_aapl.rds
-[DataLoader] Loaded 1693 bars for AAPL [2020-01-02 to 2026-09-28]
+[DataLoader] Loaded 1694 bars for AAPL [2020-01-02 to 2026-09-29]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000013, a1=0.0862, b1=0.8772 (persistence=0.9634)
-[Pipeline] Complete. Result: 1639 valid observation rows across 12 features.
+[GARCH] Fitted: a0=0.000013, a1=0.0858, b1=0.8775 (persistence=0.9634)
+[Pipeline] Complete. Result: 1640 valid observation rows across 12 features.
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000013, a1=0.0862, b1=0.8772 (persistence=0.9634)
+[GARCH] Fitted: a0=0.000013, a1=0.0858, b1=0.8775 (persistence=0.9634)
 [Scanning AMD] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'AMD' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1693 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'AMD' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1694 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_amd.rds
-[DataLoader] Loaded 1693 bars for AMD [2020-01-02 to 2026-09-28]
+[DataLoader] Loaded 1694 bars for AMD [2020-01-02 to 2026-09-29]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000110, a1=0.0747, b1=0.8373 (persistence=0.9120)
-[Pipeline] Complete. Result: 1639 valid observation rows across 12 features.
+[GARCH] Fitted: a0=0.000110, a1=0.0747, b1=0.8369 (persistence=0.9117)
+[Pipeline] Complete. Result: 1640 valid observation rows across 12 features.
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000110, a1=0.0747, b1=0.8373 (persistence=0.9120)
+[GARCH] Fitted: a0=0.000110, a1=0.0747, b1=0.8369 (persistence=0.9117)
 [Scanning MSFT] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'MSFT' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1693 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'MSFT' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1694 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_msft.rds
-[DataLoader] Loaded 1693 bars for MSFT [2020-01-02 to 2026-09-28]
+[DataLoader] Loaded 1694 bars for MSFT [2020-01-02 to 2026-09-29]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000014, a1=0.1026, b1=0.8629 (persistence=0.9656)
-[Pipeline] Complete. Result: 1639 valid observation rows across 12 features.
+[GARCH] Fitted: a0=0.000014, a1=0.1051, b1=0.8603 (persistence=0.9653)
+[Pipeline] Complete. Result: 1640 valid observation rows across 12 features.
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000014, a1=0.1026, b1=0.8629 (persistence=0.9656)
+[GARCH] Fitted: a0=0.000014, a1=0.1051, b1=0.8603 (persistence=0.9653)
 [Scanning TSLA] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'TSLA' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1693 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'TSLA' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1694 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_tsla.rds
-[DataLoader] Loaded 1693 bars for TSLA [2020-01-02 to 2026-09-28]
+[DataLoader] Loaded 1694 bars for TSLA [2020-01-02 to 2026-09-29]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000031, a1=0.0486, b1=0.9324 (persistence=0.9810)
-[Pipeline] Complete. Result: 1639 valid observation rows across 12 features.
+[GARCH] Fitted: a0=0.000031, a1=0.0488, b1=0.9321 (persistence=0.9810)
+[Pipeline] Complete. Result: 1640 valid observation rows across 12 features.
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000031, a1=0.0486, b1=0.9324 (persistence=0.9810)
+[GARCH] Fitted: a0=0.000031, a1=0.0488, b1=0.9321 (persistence=0.9810)
 [Scanning QQQ] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'QQQ' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1693 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'QQQ' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1694 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_qqq.rds
-[DataLoader] Loaded 1693 bars for QQQ [2020-01-02 to 2026-09-28]
+[DataLoader] Loaded 1694 bars for QQQ [2020-01-02 to 2026-09-29]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000006, a1=0.1150, b1=0.8582 (persistence=0.9732)
-[Pipeline] Complete. Result: 1639 valid observation rows across 12 features.
+[GARCH] Fitted: a0=0.000006, a1=0.1150, b1=0.8581 (persistence=0.9731)
+[Pipeline] Complete. Result: 1640 valid observation rows across 12 features.
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000006, a1=0.1150, b1=0.8582 (persistence=0.9732)
+[GARCH] Fitted: a0=0.000006, a1=0.1150, b1=0.8581 (persistence=0.9731)
 [Scanning META] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'META' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1693 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'META' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1694 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_meta.rds
-[DataLoader] Loaded 1693 bars for META [2020-01-02 to 2026-09-28]
+[DataLoader] Loaded 1694 bars for META [2020-01-02 to 2026-09-29]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000125, a1=0.1546, b1=0.7089 (persistence=0.8635)
-[Pipeline] Complete. Result: 1639 valid observation rows across 12 features.
+[GARCH] Fitted: a0=0.000126, a1=0.1543, b1=0.7089 (persistence=0.8632)
+[Pipeline] Complete. Result: 1640 valid observation rows across 12 features.
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000125, a1=0.1546, b1=0.7089 (persistence=0.8635)
+[GARCH] Fitted: a0=0.000126, a1=0.1543, b1=0.7089 (persistence=0.8632)
 [Scanning IONQ] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'IONQ' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1440 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'IONQ' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1441 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_ionq.rds
-[DataLoader] Loaded 1440 bars for IONQ [2021-01-04 to 2026-09-28]
+[DataLoader] Loaded 1441 bars for IONQ [2021-01-04 to 2026-09-29]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000029, a1=0.1483, b1=0.8667 (persistence=1.0151)
-[Pipeline] Complete. Result: 1386 valid observation rows across 12 features.
+[GARCH] Fitted: a0=0.000029, a1=0.1484, b1=0.8666 (persistence=1.0150)
+[Pipeline] Complete. Result: 1387 valid observation rows across 12 features.
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000029, a1=0.1483, b1=0.8667 (persistence=1.0151)
+[GARCH] Fitted: a0=0.000029, a1=0.1484, b1=0.8666 (persistence=1.0150)
 [Scanning MU] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'MU' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1693 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'MU' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1694 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_mu.rds
-[DataLoader] Loaded 1693 bars for MU [2020-01-02 to 2026-09-28]
+[DataLoader] Loaded 1694 bars for MU [2020-01-02 to 2026-09-29]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000019, a1=0.0741, b1=0.9115 (persistence=0.9856)
-[Pipeline] Complete. Result: 1639 valid observation rows across 12 features.
+[GARCH] Fitted: a0=0.000019, a1=0.0743, b1=0.9111 (persistence=0.9854)
+[Pipeline] Complete. Result: 1640 valid observation rows across 12 features.
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000019, a1=0.0741, b1=0.9115 (persistence=0.9856)
+[GARCH] Fitted: a0=0.000019, a1=0.0743, b1=0.9111 (persistence=0.9854)
 [Scanning SMHC] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'SMHC' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 67 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'SMHC' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 68 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_smhc.rds
-[DataLoader] Loaded 67 bars for SMHC [2026-06-24 to 2026-09-28]
+[DataLoader] Loaded 68 bars for SMHC [2026-06-24 to 2026-09-29]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.001442, a1=0.0000, b1=0.0507 (persistence=0.0507)
-[Pipeline] Complete. Result: 13 valid observation rows across 12 features.
+[GARCH] Fitted: a0=0.001421, a1=0.0000, b1=0.0511 (persistence=0.0511)
+[Pipeline] Complete. Result: 14 valid observation rows across 12 features.
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.001442, a1=0.0000, b1=0.0507 (persistence=0.0507)
+[GARCH] Fitted: a0=0.001421, a1=0.0000, b1=0.0511 (persistence=0.0511)
 [Scanning KXIAY] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'KXIAY' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 246 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'KXIAY' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 247 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_kxiay.rds
-[DataLoader] Loaded 246 bars for KXIAY [2025-10-06 to 2026-09-28]
+[DataLoader] Loaded 247 bars for KXIAY [2025-10-06 to 2026-09-29]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.006295, a1=0.0000, b1=0.0511 (persistence=0.0511)
-[Pipeline] Complete. Result: 192 valid observation rows across 12 features.
+[GARCH] Fitted: a0=0.006271, a1=0.0000, b1=0.0504 (persistence=0.0504)
+[Pipeline] Complete. Result: 193 valid observation rows across 12 features.
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.006295, a1=0.0000, b1=0.0511 (persistence=0.0511)
+[GARCH] Fitted: a0=0.006271, a1=0.0000, b1=0.0504 (persistence=0.0504)
 [Scanning LITE] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'LITE' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1693 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'LITE' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1694 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_lite.rds
-[DataLoader] Loaded 1693 bars for LITE [2020-01-02 to 2026-09-28]
+[DataLoader] Loaded 1694 bars for LITE [2020-01-02 to 2026-09-29]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000074, a1=0.1248, b1=0.8326 (persistence=0.9574)
-[Pipeline] Complete. Result: 1639 valid observation rows across 12 features.
+[GARCH] Fitted: a0=0.000073, a1=0.1237, b1=0.8343 (persistence=0.9580)
+[Pipeline] Complete. Result: 1640 valid observation rows across 12 features.
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000074, a1=0.1248, b1=0.8326 (persistence=0.9574)
+[GARCH] Fitted: a0=0.000073, a1=0.1237, b1=0.8343 (persistence=0.9580)
 [Scanning QLD] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'QLD' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1693 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'QLD' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1694 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_qld.rds
-[DataLoader] Loaded 1693 bars for QLD [2020-01-02 to 2026-09-28]
+[DataLoader] Loaded 1694 bars for QLD [2020-01-02 to 2026-09-29]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000026, a1=0.1138, b1=0.8584 (persistence=0.9723)
-[Pipeline] Complete. Result: 1639 valid observation rows across 12 features.
+[GARCH] Fitted: a0=0.000026, a1=0.1136, b1=0.8588 (persistence=0.9723)
+[Pipeline] Complete. Result: 1640 valid observation rows across 12 features.
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000026, a1=0.1138, b1=0.8584 (persistence=0.9723)
+[GARCH] Fitted: a0=0.000026, a1=0.1136, b1=0.8588 (persistence=0.9723)
 [Scanning SOXL] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'SOXL' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1693 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'SOXL' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1694 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_soxl.rds
-[DataLoader] Loaded 1693 bars for SOXL [2020-01-02 to 2026-09-28]
+[DataLoader] Loaded 1694 bars for SOXL [2020-01-02 to 2026-09-29]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000147, a1=0.0895, b1=0.8834 (persistence=0.9729)
-[Pipeline] Complete. Result: 1639 valid observation rows across 12 features.
+[GARCH] Fitted: a0=0.000147, a1=0.0895, b1=0.8833 (persistence=0.9728)
+[Pipeline] Complete. Result: 1640 valid observation rows across 12 features.
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000147, a1=0.0895, b1=0.8834 (persistence=0.9729)
+[GARCH] Fitted: a0=0.000147, a1=0.0895, b1=0.8833 (persistence=0.9728)
 There were 18 warnings (use warnings() to see them)
 
 ========================================================================================
@@ -198,37 +198,37 @@ There were 18 warnings (use warnings() to see them)
  Macro Gate: BULLISH (Risk-On) | Max Positions: 5 | Buy Threshold: P(Up) >= 58.0%
 ========================================================================================
  Rank Symbol    Price  P_Up        Signal RS_SPY       Weekly         Earnings
-    1    AMD  $607.87 86.1%           BUY +31.0% +2.6% [BULL] 2026-11-03 (35d)
-    2   SNDK $1712.89 69.7%           BUY +15.8% +3.4% [BULL] 2026-11-06 (38d)
-    3   SOXL  $142.29 62.9%           BUY +28.3% +1.0% [BULL]         None/ETF
-    4   SMHC   $44.28 61.5% COUNTER_TREND  -4.3% -0.5% [BEAR]         None/ETF
-    5   LITE  $921.32 60.7%           BUY  +3.4% +1.6% [BULL] 2026-11-05 (37d)
-    6   MSFT  $509.22 60.7%     RS_LAGGER  -0.4% +0.6% [BULL] 2026-10-28 (29d)
-    7    QLD   $94.87 59.6%           BUY  +5.7% +0.8% [BULL]         None/ETF
-    8  KXIAY   $33.90 57.3%          HOLD +13.9% +2.2% [BULL]         None/ETF
-    9    QQQ  $736.53 51.6%          HOLD  +3.3% +0.4% [BULL]         None/ETF
-   10   AAPL  $338.40 47.1%          HOLD  +6.3% +1.2% [BULL] 2026-10-29 (30d)
-   11     MU $1053.98 43.5%          HOLD +13.5% +2.2% [BULL]  2026-09-30 (1d)
-   12   IONQ   $44.58 43.5%          HOLD +14.2% +0.3% [BULL] 2026-11-04 (36d)
-   13   TSLA  $357.45 37.1%          CASH  +3.0% +1.4% [BULL] 2026-10-21 (22d)
-   14   META  $715.62 28.4%          CASH +24.3% +2.8% [BULL] 2026-10-28 (29d)
-   15   NVDA  $228.86 26.8%          CASH  +5.7% +0.7% [BULL] 2026-11-17 (49d)
-              Filter_Note GARCH_Vol        Stop_Loss      Take_Profit
-   Leader (+31.0% vs SPY)     40.0%  $577.24 (-5.0%)  $653.82 (+7.6%)
-   Leader (+15.8% vs SPY)     16.0% $1678.36 (-2.0%) $1764.68 (+3.0%)
-   Leader (+28.3% vs SPY)     24.0%  $137.99 (-3.0%)  $148.74 (+4.5%)
-     Weekly Bear (-0.53%)      4.0%   $44.06 (-0.5%)   $44.61 (+0.8%)
-    Leader (+3.4% vs SPY)      2.0%  $919.00 (-0.3%)  $924.80 (+0.4%)
- RS Lagger (-0.4% vs SPY)     38.0%  $484.84 (-4.8%)  $545.79 (+7.2%)
-    Leader (+5.7% vs SPY)     42.0%   $89.85 (-5.3%)  $102.40 (+7.9%)
-         Below 58% Cutoff     36.0%   $32.36 (-4.5%)   $36.21 (+6.8%)
-         Below 58% Cutoff     42.0%  $697.56 (-5.3%)  $794.99 (+7.9%)
-         Below 58% Cutoff      4.0%  $336.69 (-0.5%)  $340.96 (+0.8%)
-         Below 58% Cutoff      2.0% $1051.32 (-0.3%) $1057.96 (+0.4%)
-         Below 58% Cutoff     10.0%   $44.02 (-1.3%)   $45.42 (+1.9%)
-            Bearish Model      2.0%  $356.55 (-0.3%)  $358.80 (+0.4%)
-            Bearish Model     86.0% $638.08 (-10.8%) $831.93 (+16.3%)
-            Bearish Model      2.0%  $228.28 (-0.3%)  $229.73 (+0.4%)
+    1    AMD  $607.57 84.0%           BUY +29.4% +2.6% [BULL] 2026-11-03 (34d)
+    2   SMHC   $44.78 75.2% COUNTER_TREND  -5.2% -0.5% [BEAR]         None/ETF
+    3   SNDK $1729.76 68.1%           BUY +10.8% +3.4% [BULL] 2026-10-29 (29d)
+    4   SOXL  $147.00 62.8%           BUY +30.7% +1.1% [BULL]         None/ETF
+    5    QLD   $95.22 60.4%           BUY  +5.9% +0.8% [BULL]         None/ETF
+    6   MSFT  $508.96 59.8%           BUY  +0.7% +0.6% [BULL] 2026-10-28 (28d)
+    7   LITE  $973.49 59.3%           BUY  +6.8% +1.8% [BULL] 2026-11-05 (36d)
+    8    QQQ  $737.93 58.2%           BUY  +3.3% +0.5% [BULL]         None/ETF
+    9  KXIAY   $34.67 53.5%          HOLD +11.0% +2.2% [BULL]         None/ETF
+   10     MU $1065.08 46.1%          HOLD +11.5% +2.2% [BULL]  2026-09-30 (0d)
+   11   AAPL  $329.40 45.3%          HOLD  +4.3% +1.1% [BULL] 2026-10-29 (29d)
+   12   IONQ   $43.91 44.8%          HOLD +12.1% +0.2% [BULL] 2026-11-04 (35d)
+   13   TSLA  $352.84 40.8%          CASH  -3.7% +1.4% [BULL] 2026-10-21 (21d)
+   14   NVDA  $227.21 31.7%          CASH  +3.3% +0.7% [BULL] 2026-11-17 (48d)
+   15   META  $738.79 27.1%          CASH +29.5% +2.8% [BULL] 2026-10-28 (28d)
+            Filter_Note GARCH_Vol        Stop_Loss      Take_Profit
+ Leader (+29.4% vs SPY)     40.0%  $576.95 (-5.0%)  $653.50 (+7.6%)
+   Weekly Bear (-0.46%)     92.0%  $39.59 (-11.6%)  $52.57 (+17.4%)
+ Leader (+10.8% vs SPY)     24.0% $1677.46 (-3.0%) $1808.21 (+4.5%)
+ Leader (+30.7% vs SPY)     22.0%  $142.93 (-2.8%)  $153.11 (+4.2%)
+  Leader (+5.9% vs SPY)     44.0%   $89.94 (-5.5%)  $103.14 (+8.3%)
+  Leader (+0.7% vs SPY)     32.0%  $488.44 (-4.0%)  $539.74 (+6.0%)
+  Leader (+6.8% vs SPY)      2.0%  $971.04 (-0.3%)  $977.17 (+0.4%)
+  Leader (+3.3% vs SPY)     44.0%  $697.02 (-5.5%)  $799.29 (+8.3%)
+       Below 58% Cutoff     58.0%   $32.14 (-7.3%)  $38.47 (+11.0%)
+       Below 58% Cutoff      2.0% $1062.40 (-0.3%) $1069.11 (+0.4%)
+       Below 58% Cutoff      4.0%  $327.74 (-0.5%)  $331.89 (+0.8%)
+       Below 58% Cutoff      6.0%   $43.58 (-0.8%)   $44.41 (+1.1%)
+          Bearish Model      6.0%  $350.17 (-0.8%)  $356.84 (+1.1%)
+          Bearish Model      2.0%  $226.64 (-0.3%)  $228.07 (+0.4%)
+          Bearish Model     90.0% $655.02 (-11.3%) $864.45 (+17.0%)
 
 ========================================================================================
                         MY PORTFOLIO HOLDINGS & CASH MONITOR
@@ -247,80 +247,96 @@ There were 18 warnings (use warnings() to see them)
 ========================================================================================
  [Sector Defense] Skipping SOXL: Sector 'Semiconductors' already at maximum cap (2 positions).
  Sizing Engine: Ralph Vince Leverage Space Model (Safe f = 0.50, 120-Day Scenarios, Fractional: YES (Exact))
-[DataLoader] Attempting to fetch 'AMD' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1693 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'AMD' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1694 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_amd.rds
-[DataLoader] Loaded 1693 bars for AMD [2020-01-02 to 2026-09-28]
-[DataLoader] Attempting to fetch 'SNDK' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 407 bars from Yahoo Finance.
+[DataLoader] Loaded 1694 bars for AMD [2020-01-02 to 2026-09-29]
+[DataLoader] Attempting to fetch 'SNDK' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 408 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_sndk.rds
-[DataLoader] Loaded 407 bars for SNDK [2025-02-13 to 2026-09-28]
-[DataLoader] Attempting to fetch 'LITE' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1693 bars from Yahoo Finance.
-[DataLoader] Cached data saved to data/data_lite.rds
-[DataLoader] Loaded 1693 bars for LITE [2020-01-02 to 2026-09-28]
-[DataLoader] Attempting to fetch 'QLD' from Yahoo Finance (2020-01-01 to 2026-09-29)...
-[DataLoader] Successfully fetched 1693 bars from Yahoo Finance.
+[DataLoader] Loaded 408 bars for SNDK [2025-02-13 to 2026-09-29]
+[DataLoader] Attempting to fetch 'QLD' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1694 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_qld.rds
-[DataLoader] Loaded 1693 bars for QLD [2020-01-02 to 2026-09-28]
- -> Optimized Portfolio GHPR: 1.0210 (Expected Geometric Growth: +2.10% / day)
+[DataLoader] Loaded 1694 bars for QLD [2020-01-02 to 2026-09-29]
+[DataLoader] Attempting to fetch 'MSFT' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1694 bars from Yahoo Finance.
+[DataLoader] Cached data saved to data/data_msft.rds
+[DataLoader] Loaded 1694 bars for MSFT [2020-01-02 to 2026-09-29]
+[DataLoader] Attempting to fetch 'LITE' from Yahoo Finance (2020-01-01 to 2026-09-30)...
+[DataLoader] Successfully fetched 1694 bars from Yahoo Finance.
+[DataLoader] Cached data saved to data/data_lite.rds
+[DataLoader] Loaded 1694 bars for LITE [2020-01-02 to 2026-09-29]
+ -> Optimized Portfolio GHPR: 1.0271 (Expected Geometric Growth: +2.71% / day)
 
- [Heat Defense] Proposed risk ($500.17) exceeds available heat budget ($500.00). Scaling position size by 100.0%.
-
---- ORDER TICKET #1: AMD (P(Up): 86.1% | Sector: Semiconductors) ---
-  Action:              BUY 16.240 SHARES at Market (Monday Afternoon Execution)
-  Position Sizing:     Vince Optimal f: 0.4695 | Safe f: 0.2348 | Heat Scale: 100.0%
-  Capital Allocation:  Target Allocation: 98.7% ($9871.32) -> Actual Outlay: $9871.81
-  Relative Strength:   +31.05% vs SPY Benchmark [MARKET LEADER]
+--- ORDER TICKET #1: AMD (P(Up): 84.0% | Sector: Semiconductors) ---
+  Action:              BUY 9.482 SHARES at Market (Monday Afternoon Execution)
+  Position Sizing:     Vince Optimal f: 0.4069 | Safe f: 0.2034 | Heat Scale: 100.0%
+  Capital Allocation:  Target Allocation: 57.6% ($5760.93) -> Actual Outlay: $5760.98
+  Relative Strength:   +29.44% vs SPY Benchmark [MARKET LEADER]
   Multi-Timeframe:     Weekly Trend +2.58% [BULLISH SYNERGY]
-  Earnings Safe:       Next report 2026-11-03 (35 days out)
-  GTC Stop-Loss:       $577.24 (-5.04%) [Total Downside Risk: $497.49]
+  Earnings Safe:       Next report 2026-11-03 (34 days out)
+  GTC Stop-Loss:       $576.95 (-5.04%) [Total Downside Risk: $290.33]
   Multi-Tier Bracket Exits:
-    -> Tier 1 (50% = 8.12 shs): Target $653.82 (+7.56%, +1.5R) [Gain: $373.11] -> Lock in profits & move stop to Breakeven $607.87
-    -> Tier 2 (50% = 8.12 shs): Target $699.77 (+15.12%, +3.0R) [Gain: $746.23] -> Momentum runner
-    -> Chandelier Trailing Stop: Initial trigger at $544.33 (Trails Highest High - 2.5 x ATR(14) $25.42)
-  Reward / Risk Ratio: Tier 1: 1.50R | Tier 2: 3.00R (Combined Potential: +$1119.34 vs -$497.49 Risk)
+    -> Tier 1 (50% = 4.741 shs): Target $653.50 (+7.56%, +1.5R) [Gain: $217.75] -> Lock in profits & move stop to Breakeven $607.57
+    -> Tier 2 (50% = 4.741 shs): Target $699.43 (+15.12%, +3.0R) [Gain: $435.51] -> Momentum runner
+    -> Chandelier Trailing Stop: Initial trigger at $545.20 (Trails Highest High - 2.5 x ATR(14) $24.95)
+  Reward / Risk Ratio: Tier 1: 1.50R | Tier 2: 3.00R (Combined Potential: +$653.26 vs -$290.33 Risk)
 
---- ORDER TICKET #2: SNDK (P(Up): 69.7% | Sector: Semiconductors) ---
-  Action:              BUY 0.073 SHARES at Market (Monday Afternoon Execution)
-  Position Sizing:     Vince Optimal f: 0.0060 | Safe f: 0.0030 | Heat Scale: 100.0%
-  Capital Allocation:  Target Allocation: 1.3% ($125.36) -> Actual Outlay: $125.04
-  Relative Strength:   +15.83% vs SPY Benchmark [MARKET LEADER]
-  Multi-Timeframe:     Weekly Trend +3.38% [BULLISH SYNERGY]
-  Earnings Safe:       Next report 2026-11-06 (38 days out)
-  GTC Stop-Loss:       $1678.36 (-2.02%) [Total Downside Risk: $2.52]
+--- ORDER TICKET #2: SNDK (P(Up): 68.1% | Sector: Semiconductors) ---
+  Action:              BUY 0.408 SHARES at Market (Monday Afternoon Execution)
+  Position Sizing:     Vince Optimal f: 0.0498 | Safe f: 0.0249 | Heat Scale: 100.0%
+  Capital Allocation:  Target Allocation: 7.1% ($705.83) -> Actual Outlay: $705.74
+  Relative Strength:   +10.78% vs SPY Benchmark [MARKET LEADER]
+  Multi-Timeframe:     Weekly Trend +3.40% [BULLISH SYNERGY]
+  Earnings Safe:       Next report 2026-10-29 (29 days out)
+  GTC Stop-Loss:       $1677.46 (-3.02%) [Total Downside Risk: $21.34]
   Multi-Tier Bracket Exits:
-    -> Tier 1 (50% = 0.036 shs): Target $1764.68 (+3.02%, +1.5R) [Gain: $1.86] -> Lock in profits & move stop to Breakeven $1712.89
-    -> Tier 2 (50% = 0.037 shs): Target $1816.48 (+6.05%, +3.0R) [Gain: $3.83] -> Momentum runner
-    -> Chandelier Trailing Stop: Initial trigger at $1432.59 (Trails Highest High - 2.5 x ATR(14) $112.12)
-  Reward / Risk Ratio: Tier 1: 1.50R | Tier 2: 3.00R (Combined Potential: +$5.69 vs -$2.52 Risk)
+    -> Tier 1 (50% = 0.204 shs): Target $1808.21 (+4.54%, +1.5R) [Gain: $16.00] -> Lock in profits & move stop to Breakeven $1729.76
+    -> Tier 2 (50% = 0.204 shs): Target $1886.67 (+9.07%, +3.0R) [Gain: $32.01] -> Momentum runner
+    -> Chandelier Trailing Stop: Initial trigger at $1459.34 (Trails Highest High - 2.5 x ATR(14) $108.17)
+  Reward / Risk Ratio: Tier 1: 1.50R | Tier 2: 3.00R (Combined Potential: +$48.01 vs -$21.34 Risk)
 
---- ORDER TICKET #3: LITE (P(Up): 60.7% | Sector: Hardware_Tech) ---
+--- ORDER TICKET #3: QLD (P(Up): 60.4% | Sector: Index_ETF) ---
   Action:              BUY 0 SHARES at Market (Monday Afternoon Execution)
   Position Sizing:     Vince Optimal f: 0.0000 | Safe f: 0.0000 | Heat Scale: 100.0%
   Capital Allocation:  Target Allocation: 0.0% ($0.00) -> Actual Outlay: $0.00
-  Relative Strength:   +3.43% vs SPY Benchmark [MARKET LEADER]
-  Multi-Timeframe:     Weekly Trend +1.59% [BULLISH SYNERGY]
-  Earnings Safe:       Next report 2026-11-05 (37 days out)
-  GTC Stop-Loss:       $919.00 (-0.25%) [Total Downside Risk: $0.00]
+  Relative Strength:   +5.89% vs SPY Benchmark [MARKET LEADER]
+  Multi-Timeframe:     Weekly Trend +0.78% [BULLISH SYNERGY]
+  Earnings Safe:       Next report None/ETF (-999 days out)
+  GTC Stop-Loss:       $89.94 (-5.54%) [Total Downside Risk: $0.00]
   Multi-Tier Bracket Exits:
-    -> Tier 1 (50% = 0 shs): Target $924.80 (+0.38%, +1.5R) [Gain: $0.00] -> Lock in profits & move stop to Breakeven $921.32
-    -> Tier 2 (50% = 0 shs): Target $928.28 (+0.76%, +3.0R) [Gain: $0.00] -> Momentum runner
-    -> Chandelier Trailing Stop: Initial trigger at $765.89 (Trails Highest High - 2.5 x ATR(14) $62.17)
+    -> Tier 1 (50% = 0 shs): Target $103.14 (+8.32%, +1.5R) [Gain: $0.00] -> Lock in profits & move stop to Breakeven $95.22
+    -> Tier 2 (50% = 0 shs): Target $111.06 (+16.63%, +3.0R) [Gain: $0.00] -> Momentum runner
+    -> Chandelier Trailing Stop: Initial trigger at $89.22 (Trails Highest High - 2.5 x ATR(14) $2.40)
   Reward / Risk Ratio: Tier 1: 1.50R | Tier 2: 3.00R (Combined Potential: +$0.00 vs -$0.00 Risk)
 
---- ORDER TICKET #4: QLD (P(Up): 59.6% | Sector: Index_ETF) ---
+--- ORDER TICKET #4: MSFT (P(Up): 59.8% | Sector: Software_MegaCap) ---
+  Action:              BUY 6.942 SHARES at Market (Monday Afternoon Execution)
+  Position Sizing:     Vince Optimal f: 0.2495 | Safe f: 0.1248 | Heat Scale: 100.0%
+  Capital Allocation:  Target Allocation: 35.3% ($3533.24) -> Actual Outlay: $3533.20
+  Relative Strength:   +0.70% vs SPY Benchmark [MARKET LEADER]
+  Multi-Timeframe:     Weekly Trend +0.63% [BULLISH SYNERGY]
+  Earnings Safe:       Next report 2026-10-28 (28 days out)
+  GTC Stop-Loss:       $488.44 (-4.03%) [Total Downside Risk: $142.45]
+  Multi-Tier Bracket Exits:
+    -> Tier 1 (50% = 3.471 shs): Target $539.74 (+6.05%, +1.5R) [Gain: $106.84] -> Lock in profits & move stop to Breakeven $508.96
+    -> Tier 2 (50% = 3.471 shs): Target $570.52 (+12.09%, +3.0R) [Gain: $213.67] -> Momentum runner
+    -> Chandelier Trailing Stop: Initial trigger at $479.25 (Trails Highest High - 2.5 x ATR(14) $11.88)
+  Reward / Risk Ratio: Tier 1: 1.50R | Tier 2: 3.00R (Combined Potential: +$320.51 vs -$142.45 Risk)
+
+--- ORDER TICKET #5: LITE (P(Up): 59.3% | Sector: Hardware_Tech) ---
   Action:              BUY 0 SHARES at Market (Monday Afternoon Execution)
   Position Sizing:     Vince Optimal f: 0.0000 | Safe f: 0.0000 | Heat Scale: 100.0%
   Capital Allocation:  Target Allocation: 0.0% ($0.00) -> Actual Outlay: $0.00
-  Relative Strength:   +5.70% vs SPY Benchmark [MARKET LEADER]
-  Multi-Timeframe:     Weekly Trend +0.76% [BULLISH SYNERGY]
-  Earnings Safe:       Next report None/ETF (-999 days out)
-  GTC Stop-Loss:       $89.85 (-5.29%) [Total Downside Risk: $0.00]
+  Relative Strength:   +6.79% vs SPY Benchmark [MARKET LEADER]
+  Multi-Timeframe:     Weekly Trend +1.80% [BULLISH SYNERGY]
+  Earnings Safe:       Next report 2026-11-05 (36 days out)
+  GTC Stop-Loss:       $971.04 (-0.25%) [Total Downside Risk: $0.00]
   Multi-Tier Bracket Exits:
-    -> Tier 1 (50% = 0 shs): Target $102.40 (+7.94%, +1.5R) [Gain: $0.00] -> Lock in profits & move stop to Breakeven $94.87
-    -> Tier 2 (50% = 0 shs): Target $109.93 (+15.87%, +3.0R) [Gain: $0.00] -> Momentum runner
-    -> Chandelier Trailing Stop: Initial trigger at $88.67 (Trails Highest High - 2.5 x ATR(14) $2.48)
+    -> Tier 1 (50% = 0 shs): Target $977.17 (+0.38%, +1.5R) [Gain: $0.00] -> Lock in profits & move stop to Breakeven $973.49
+    -> Tier 2 (50% = 0 shs): Target $980.85 (+0.76%, +3.0R) [Gain: $0.00] -> Momentum runner
+    -> Chandelier Trailing Stop: Initial trigger at $815.31 (Trails Highest High - 2.5 x ATR(14) $63.27)
   Reward / Risk Ratio: Tier 1: 1.50R | Tier 2: 3.00R (Combined Potential: +$0.00 vs -$0.00 Risk)
 
 [AlertSystem] Notice: Webhooks not configured. Skipping push alert for '📈 New Weekly Swing Signals'.
