@@ -13,6 +13,12 @@ logs/scan_*.log
 logs/signal_*.log
 logs/launchd_*.log
 
+# Secrets and Credentials (NEVER COMMIT)
+.env
+.env.*
+!.env.example
+schwab_token.json
+
 # Keep sample data, ignore large transient downloads
 data/*.rds
 !data/data_sndk.rds
