@@ -1,0 +1,74 @@
+# ==============================================================================
+# Broad 50-Stock Swing Trading Watchlist (High Liquidity, Momentum & Growth Leaders)
+# ==============================================================================
+# Usage:
+#   Rscript daily_signal.R --symbols_file=symbols_broad.txt --leverage=1.5
+# ==============================================================================
+
+# 1. Semiconductors & Chip Equipment (High Beta, Momentum Leaders)
+NVDA
+AMD
+TSM
+AVGO
+QCOM
+MU
+AMAT
+LRCX
+ARM
+SNDK
+SOXL
+SMH
+
+# 2. Mega-Cap Tech & AI Infrastructure
+MSFT
+AAPL
+AMZN
+GOOGL
+META
+TSLA
+
+# 3. Enterprise Software, Cloud & SaaS
+CRM
+NOW
+ADBE
+INTU
+ORCL
+SNOW
+WDAY
+SHOP
+PLTR
+
+# 4. Cybersecurity, Infrastructure & Networking
+PANW
+CRWD
+FTNT
+NET
+ANET
+CSCO
+
+# 5. Hardware, Photonics & Quantum / Emerging Tech
+LITE
+IONQ
+SMHC
+KXIAY
+DELL
+SMCI
+
+# 6. Fintech, Payments & Digital Assets
+V
+MA
+PYPL
+SQ
+COIN
+MSTR
+
+# 7. Energy Transition & High-Power Industrials
+CEG
+VST
+GE
+
+# 8. Benchmark & Leveraged Index ETFs
+QQQ
+QLD
+SPY
+XLK

@@ -139,7 +139,7 @@ if (is.null(SYMBOLS)) {
     lines <- readLines(target_file, warn = FALSE)
     # Strip comments (#...) and empty lines
     lines <- gsub("#.*", "", lines)
-    raw_tokens <- unlist(strsplit(lines, "[,\\s]+"))
+    raw_tokens <- unlist(strsplit(lines, "[, \\t\\r\\n]+"))
     SYMBOLS <- unique(toupper(trimws(raw_tokens)))
     SYMBOLS <- SYMBOLS[SYMBOLS != ""]
     cat(sprintf("[Config] Loaded %d symbols from '%s': %s\n", 
@@ -534,23 +534,75 @@ if (isTRUE(IS_FRIDAY)) {
   
   held_syms <- if (sync_res$active_count > 0) sync_res$holdings_df$Symbol else character(0)
   
-  # Sector Taxonomy Mapping & Cluster Risk Defense (Max 2 positions per sector)
+  # Sector Taxonomy Mapping & Cluster Risk Defense
   SECTOR_MAP <- list(
+    # Semiconductors & Semiconductor Equipment
     AMD   = "Semiconductors",
     NVDA  = "Semiconductors",
+    TSM   = "Semiconductors",
+    AVGO  = "Semiconductors",
+    QCOM  = "Semiconductors",
     MU    = "Semiconductors",
+    AMAT  = "Semiconductors",
+    LRCX  = "Semiconductors",
+    ARM   = "Semiconductors",
     SNDK  = "Semiconductors",
     SOXL  = "Semiconductors",
-    MSFT  = "Software_MegaCap",
-    AAPL  = "Software_MegaCap",
-    META  = "Software_MegaCap",
-    TSLA  = "Hardware_Tech",
+    SMH   = "Semiconductors",
+
+    # Mega-Cap Tech & AI Platforms
+    MSFT  = "MegaCap_Tech",
+    AAPL  = "MegaCap_Tech",
+    AMZN  = "MegaCap_Tech",
+    GOOGL = "MegaCap_Tech",
+    META  = "MegaCap_Tech",
+    TSLA  = "MegaCap_Tech",
+
+    # Enterprise Software, Cloud & SaaS
+    CRM   = "Enterprise_Software",
+    NOW   = "Enterprise_Software",
+    ADBE  = "Enterprise_Software",
+    INTU  = "Enterprise_Software",
+    ORCL  = "Enterprise_Software",
+    SNOW  = "Enterprise_Software",
+    WDAY  = "Enterprise_Software",
+    SHOP  = "Enterprise_Software",
+    PLTR  = "Enterprise_Software",
+
+    # Cybersecurity & Infrastructure
+    PANW  = "Cybersecurity",
+    CRWD  = "Cybersecurity",
+    FTNT  = "Cybersecurity",
+    NET   = "Cybersecurity",
+    ANET  = "Cybersecurity",
+    CSCO  = "Cybersecurity",
+
+    # Hardware, Photonics & Quantum / Emerging Tech
     LITE  = "Hardware_Tech",
     IONQ  = "Hardware_Tech",
     SMHC  = "Hardware_Tech",
     KXIAY = "Hardware_Tech",
+    DELL  = "Hardware_Tech",
+    SMCI  = "Hardware_Tech",
+
+    # Fintech, Payments & Digital Assets
+    V     = "Fintech_Financials",
+    MA    = "Fintech_Financials",
+    PYPL  = "Fintech_Financials",
+    SQ    = "Fintech_Financials",
+    COIN  = "Fintech_Financials",
+    MSTR  = "Fintech_Financials",
+
+    # Energy Transition & High-Power Industrials
+    CEG   = "Power_Industrial",
+    VST   = "Power_Industrial",
+    GE    = "Power_Industrial",
+
+    # Benchmark & Leveraged Index ETFs
     QQQ   = "Index_ETF",
-    QLD   = "Index_ETF"
+    QLD   = "Index_ETF",
+    SPY   = "Index_ETF",
+    XLK   = "Index_ETF"
   )
   get_sector <- function(s) if (s %in% names(SECTOR_MAP)) SECTOR_MAP[[s]] else "General_Tech"
   
