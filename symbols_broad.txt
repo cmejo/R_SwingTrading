@@ -1,11 +1,11 @@
 # ==============================================================================
-# Broad 50-Stock Swing Trading Watchlist (High Liquidity, Momentum & Growth Leaders)
+# Broad 50-Stock Swing Trading Watchlist (High Liquidity,Momentum & Growth Leaders)
 # ==============================================================================
 # Usage:
 #   Rscript daily_signal.R --symbols_file=symbols_broad.txt --leverage=1.5
 # ==============================================================================
 
-# 1. Semiconductors & Chip Equipment (High Beta, Momentum Leaders)
+# 1. Semiconductors & Chip Equipment (High Beta,Momentum Leaders)
 NVDA
 AMD
 TSM
@@ -27,7 +27,7 @@ GOOGL
 META
 TSLA
 
-# 3. Enterprise Software, Cloud & SaaS
+# 3. Enterprise Software,Cloud & SaaS
 CRM
 NOW
 ADBE
@@ -38,7 +38,7 @@ WDAY
 SHOP
 PLTR
 
-# 4. Cybersecurity, Infrastructure & Networking
+# 4. Cybersecurity,Infrastructure & Networking
 PANW
 CRWD
 FTNT
@@ -46,7 +46,7 @@ NET
 ANET
 CSCO
 
-# 5. Hardware, Photonics & Quantum / Emerging Tech
+# 5. Hardware,Photonics & Quantum / Emerging Tech
 LITE
 IONQ
 SMHC
@@ -54,7 +54,7 @@ KXIAY
 DELL
 SMCI
 
-# 6. Fintech, Payments & Digital Assets
+# 6. Fintech,Payments & Digital Assets
 V
 MA
 PYPL
@@ -72,3 +72,197 @@ QQQ
 QLD
 SPY
 XLK
+
+# 9. Google Finance watched stocks
+
+SOXL
+LAC
+BE
+KOS
+FET
+SQM
+ETN
+EQNR
+AVEX
+STM
+VRT
+GLW
+CIEN
+OKLO
+MO
+FIG
+VST
+MOD
+ONTO
+FLR
+APH
+GS
+HROW
+TQQQ
+RXT
+SKHY
+SMHC
+TENB
+SGML
+GENB
+MRAM
+PENG
+ADTN
+PLAB
+QUIK
+MRVL
+CEVA
+RMBS
+FORM
+MXL
+AOSL
+HIMX
+ACMR
+LWLG
+AEHR
+ON
+WDC
+PLTR
+NVTS
+RGTI
+AMZN
+STX
+AAPL
+TSLA
+META
+CBRS
+MU
+AAOI
+ICHR
+LITE
+AMKR
+LRCX
+ABTC
+HYMC
+AXTI
+AVGO
+NVDA
+ASTS
+RKLB
+SMH
+NVDU
+AMUU
+CRWV
+CORZ
+TLN
+PLTU
+SMCI
+CRSP
+SEMTC
+QBTS
+APLD
+SOUN
+IMPP
+ARQQ
+PATH
+AI
+INOD
+BBAI
+RZLV
+NTAP
+ALGM
+GOOGL
+ALAB
+POET
+CRDO
+WATT
+COHR
+ADI
+BAND
+TSM
+ASML
+GEV
+NVT
+
+# 10. GS Conviction List
+
+# USA
+
+AMAT
+APD
+CFG
+CLS
+COP
+CSL
+CWST
+DAL
+DASH
+EL
+GLNG
+LOAR
+MSFT
+NXT
+ORLY
+TPG
+TSN
+UNH
+UPS
+VIK
+VRTX
+WFC
+XYZ
+
+# Europe
+
+ADYEY  # US ADR for ADYEN.AS
+ARGX
+ARGX  # US ADR for ARGX.BR
+ASML  # US ADR for ASML.AS
+BBVA  # US ADR for BBVA.MC
+# BT.L  # Non-US local exchange (No direct US liquid ADR)
+# CWR.L  # Non-US local exchange (No direct US liquid ADR)
+# CTPNV.AS  # Non-US local exchange (No direct US liquid ADR)
+# CVC.AS  # Non-US local exchange (No direct US liquid ADR)
+# DSV.CO  # Non-US local exchange (No direct US liquid ADR)
+# FTKn.DE  # Non-US local exchange (No direct US liquid ADR)
+HLN  # US ADR for HLN.L
+# HLMA.L  # Non-US local exchange (No direct US liquid ADR)
+HSBC  # US ADR for HSBA.L
+IHG  # US ADR for IHG.L
+# NTGY.MC  # Non-US local exchange (No direct US liquid ADR)
+# NHY.OL  # Non-US local exchange (No direct US liquid ADR)
+# PUIGb.MC  # Non-US local exchange (No direct US liquid ADR)
+# RHMG.DE  # Non-US local exchange (No direct US liquid ADR)
+# RWEG.DE  # Non-US local exchange (No direct US liquid ADR)
+# ENR1n.DE  # Non-US local exchange (No direct US liquid ADR)
+# SIKA.S  # Non-US local exchange (No direct US liquid ADR)
+SNN  # US ADR for SN.L
+# TLXGn.DE  # Non-US local exchange (No direct US liquid ADR)
+# TGS.OL  # Non-US local exchange (No direct US liquid ADR)
+# TRELb.ST  # Non-US local exchange (No direct US liquid ADR)
+
+# APAC
+
+# ALQ.AX  # Non-US local exchange (No direct US liquid ADR)
+# 002594.SZ  # Non-US local exchange (No direct US liquid ADR)
+# 1211.HK  # Non-US local exchange (No direct US liquid ADR)
+# 1364.HK  # Non-US local exchange (No direct US liquid ADR)
+# 0012.HK  # Non-US local exchange (No direct US liquid ADR)
+# 2317.TW  # Non-US local exchange (No direct US liquid ADR)
+# 0388.HK  # Non-US local exchange (No direct US liquid ADR)
+# 012330.KS  # Non-US local exchange (No direct US liquid ADR)
+# 105560.KS  # Non-US local exchange (No direct US liquid ADR)
+# 6861.T  # Non-US local exchange (No direct US liquid ADR)
+# KTKM.BO  # Non-US local exchange (No direct US liquid ADR)
+# 6920.T  # Non-US local exchange (No direct US liquid ADR)
+# MRTI.BO  # Non-US local exchange (No direct US liquid ADR)
+# 8411.T  # Non-US local exchange (No direct US liquid ADR)
+# 6981.T  # Non-US local exchange (No direct US liquid ADR)
+# 6701.T  # Non-US local exchange (No direct US liquid ADR)
+NTES  # US ADR for 9999.HK
+NTES
+# 8046.TW  # Non-US local exchange (No direct US liquid ADR)
+# RMS.AX  # Non-US local exchange (No direct US liquid ADR)
+RMD  # US ADR for RMD.AX
+# 010950.KS  # Non-US local exchange (No direct US liquid ADR)
+# 005935.KS  # Non-US local exchange (No direct US liquid ADR)
+SSNLF  # US ADR for 005930.KS
+# 600183.SS  # Non-US local exchange (No direct US liquid ADR)
+# TACN.BO  # Non-US local exchange (No direct US liquid ADR)
+YUMC  # US ADR for 9987.HK
+YUMC
