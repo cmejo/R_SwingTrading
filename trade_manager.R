@@ -105,6 +105,30 @@ for (arg in args) {
                 portfolio$cash_balance, portfolio$total_capital))
   }
   
+  if (startsWith(arg, "--deposit=")) {
+    dep <- as.numeric(sub("^--deposit=", "", arg))
+    if (is.na(dep) || dep <= 0) stop("Invalid deposit amount.")
+    portfolio$cash_balance <- round(portfolio$cash_balance + dep, 2)
+    portfolio$total_capital <- round(portfolio$total_capital + dep, 2)
+    portfolio$peak_equity <- max(if (!is.null(portfolio$peak_equity)) portfolio$peak_equity else 0, portfolio$total_capital)
+    save_portfolio(portfolio, state_file)
+    cat(sprintf("[TradeManager] Deposited $%.2f. New Cash Balance: $%.2f | Total Capital: $%.2f\n",
+                dep, portfolio$cash_balance, portfolio$total_capital))
+  }
+
+  if (startsWith(arg, "--withdraw=")) {
+    wth <- as.numeric(sub("^--withdraw=", "", arg))
+    if (is.na(wth) || wth <= 0) stop("Invalid withdrawal amount.")
+    if (wth > portfolio$cash_balance) {
+      stop(sprintf("Cannot withdraw $%.2f. Available cash is only $%.2f.", wth, portfolio$cash_balance))
+    }
+    portfolio$cash_balance <- round(portfolio$cash_balance - wth, 2)
+    portfolio$total_capital <- round(portfolio$total_capital - wth, 2)
+    save_portfolio(portfolio, state_file)
+    cat(sprintf("[TradeManager] Withdrew $%.2f. New Cash Balance: $%.2f | Total Capital: $%.2f\n",
+                wth, portfolio$cash_balance, portfolio$total_capital))
+  }
+
   if (arg == "--reset") {
     portfolio <- list(
       total_capital = 10000,

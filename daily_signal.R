@@ -43,6 +43,7 @@ SIZING_MODE      <- "vince" # Position sizing engine: "vince" (Leverage Space) o
 SAFETY_FACTOR    <- 0.50    # Aggressive Safe f scaling factor for Ralph Vince Leverage Space model
 VINCE_LOOKBACK   <- 120     # Lookback days for joint scenario return matrix
 ALLOW_FRACTIONAL <- TRUE    # Allow fractional shares for exact risk budget allocation
+LEVERAGE         <- 1.0     # Default leverage multiplier: 1.0 (cash only). Set >1.0 for margin.
 PORTFOLIO_FILE   <- "portfolio.json"
 IS_FRIDAY        <- (format(Sys.Date(), "%u") == "5") # Friday weekend exit check
 
@@ -56,6 +57,8 @@ RESET_PORT  <- FALSE
 args <- commandArgs(trailingOnly = TRUE)
 for (arg in args) {
   if (grepl("^--capital=", arg)) CAPITAL <- as.numeric(sub("^--capital=", "", arg))
+  if (grepl("^--leverage=", arg)) LEVERAGE <- as.numeric(sub("^--leverage=", "", arg))
+  if (grepl("^--margin_leverage=", arg)) LEVERAGE <- as.numeric(sub("^--margin_leverage=", "", arg))
   if (grepl("^--max_pos=", arg)) MAX_POSITIONS <- as.numeric(sub("^--max_pos=", "", arg))
   if (grepl("^--target_vol=", arg)) TARGET_VOL <- as.numeric(sub("^--target_vol=", "", arg))
   if (grepl("^--train_window=", arg)) TRAIN_WINDOW <- as.numeric(sub("^--train_window=", "", arg))
@@ -458,11 +461,15 @@ if (length(sync_res$alerts) > 0) {
 
 cash_available <- sync_res$cash_balance
 empty_slots <- min(sync_res$available_slots, max(0, EFFECTIVE_MAX_POS - sync_res$active_count))
+purchasing_power <- cash_available * LEVERAGE
 
 cat(sprintf(" TOTAL ACCOUNT VALUE:    $%.2f\n", sync_res$total_account_value))
 cat(sprintf(" PEAK EQUITY RECORD:     $%.2f (Drawdown: %+.2f%%)\n", sync_res$peak_equity, sync_res$drawdown_pct))
 cat(sprintf(" INVESTED IN EQUITIES:   $%.2f (%.1f%%)\n", sync_res$total_invested, sync_res$total_invested / max(1, sync_res$total_account_value) * 100))
 cat(sprintf(" AVAILABLE CASH BALANCE: $%.2f (%.1f%%)\n", cash_available, cash_available / max(1, sync_res$total_account_value) * 100))
+if (LEVERAGE > 1.0) {
+  cat(sprintf(" MARGIN LEVERAGE RATIO:  %.2fx (Active Buying Power: $%.2f)\n", LEVERAGE, purchasing_power))
+}
 cat(sprintf(" AVAILABLE CASH SLOTS:   %d of %d (Regime Limit: %d)\n", empty_slots, EFFECTIVE_MAX_POS, EFFECTIVE_MAX_POS))
 
 # Account Drawdown Circuit Breaker Enforcement
@@ -583,16 +590,16 @@ if (isTRUE(IS_FRIDAY)) {
       
       # Ralph Vince Leverage Space Model Sizing
       if (SIZING_MODE == "vince") {
-        cat(sprintf(" Sizing Engine: Ralph Vince Leverage Space Model (Safe f = %.2f, %d-Day Scenarios, Fractional: %s)\n",
-                    EFFECTIVE_SAFETY_FACTOR, VINCE_LOOKBACK, ifelse(ALLOW_FRACTIONAL, "YES (Exact)", "NO (Floor)")))
+        cat(sprintf(" Sizing Engine: Ralph Vince Leverage Space Model (Safe f = %.2f, %d-Day Scenarios, Fractional: %s, Leverage: %.2fx)\n",
+                    EFFECTIVE_SAFETY_FACTOR, VINCE_LOOKBACK, ifelse(ALLOW_FRACTIONAL, "YES (Exact)", "NO (Floor)"), LEVERAGE))
         tryCatch({
           joint_events <- build_joint_scenario_matrix(candidate_syms, lookback_days = VINCE_LOOKBACK)
           avail_syms <- intersect(candidate_syms, colnames(joint_events))
           if (length(avail_syms) >= 1) {
             sub_events <- joint_events[, avail_syms, drop = FALSE]
-            vince_opt <- vince_optimal_f(sub_events, max_leverage = 1.0, safety_factor = EFFECTIVE_SAFETY_FACTOR)
+            vince_opt <- vince_optimal_f(sub_events, max_leverage = LEVERAGE, safety_factor = EFFECTIVE_SAFETY_FACTOR)
             cur_px_map <- setNames(actionable_df$Close[match(avail_syms, actionable_df$Symbol)], avail_syms)
-            vince_alloc <- vince_portfolio_allocation(vince_opt, total_cash = cash_available, current_prices = cur_px_map, allow_fractional = ALLOW_FRACTIONAL)
+            vince_alloc <- vince_portfolio_allocation(vince_opt, total_cash = purchasing_power, current_prices = cur_px_map, allow_fractional = ALLOW_FRACTIONAL)
             cat(sprintf(" -> Optimized Portfolio GHPR: %.4f (Expected Geometric Growth: %+.2f%% / day)\n\n",
                         vince_opt$ghpr, vince_opt$expected_growth_pct))
           }
@@ -602,9 +609,9 @@ if (isTRUE(IS_FRIDAY)) {
         })
       }
       
-      slot_capital_equal <- cash_available / empty_slots
+      slot_capital_equal <- purchasing_power / empty_slots
       if (is.null(vince_alloc)) {
-        cat(sprintf(" Sizing Mode: Equal-Weight Cash Allocation ($%.2f per slot)\n\n", slot_capital_equal))
+        cat(sprintf(" Sizing Mode: Equal-Weight Cash Allocation ($%.2f per slot with %.2fx leverage)\n\n", slot_capital_equal, LEVERAGE))
       }
       
       # Preliminary share sizing across candidates to evaluate total risk
