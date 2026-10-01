@@ -535,9 +535,17 @@ if (isTRUE(IS_FRIDAY)) {
   held_syms <- if (sync_res$active_count > 0) sync_res$holdings_df$Symbol else character(0)
   
   # Sector Taxonomy Mapping & Cluster Risk Defense
-  SECTOR_MAP <- list(
-    # Semiconductors & Semiconductor Equipment
-    AMD   = "Semiconductors",
+  SECTOR_MAP <- if (file.exists("sector_map.json")) {
+    tryCatch(jsonlite::fromJSON("sector_map.json", simplifyDataFrame = FALSE), error = function(e) list())
+  } else if (file.exists("/Volumes/2TB.ssd/_a Development/swingtrading/sector_map.json")) {
+    tryCatch(jsonlite::fromJSON("/Volumes/2TB.ssd/_a Development/swingtrading/sector_map.json", simplifyDataFrame = FALSE), error = function(e) list())
+  } else {
+    list()
+  }
+  if (length(SECTOR_MAP) == 0) {
+    SECTOR_MAP <- list(
+      # Semiconductors & Semiconductor Equipment
+      AMD   = "Semiconductors",
     NVDA  = "Semiconductors",
     TSM   = "Semiconductors",
     AVGO  = "Semiconductors",
@@ -604,6 +612,7 @@ if (isTRUE(IS_FRIDAY)) {
     SPY   = "Index_ETF",
     XLK   = "Index_ETF"
   )
+  }
   get_sector <- function(s) if (s %in% names(SECTOR_MAP)) SECTOR_MAP[[s]] else "General_Tech"
   
   # Count existing sector exposure from currently held positions
