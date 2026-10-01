@@ -44,6 +44,7 @@ SAFETY_FACTOR    <- 0.50    # Aggressive Safe f scaling factor for Ralph Vince L
 VINCE_LOOKBACK   <- 120     # Lookback days for joint scenario return matrix
 ALLOW_FRACTIONAL <- TRUE    # Allow fractional shares for exact risk budget allocation
 LEVERAGE         <- 1.0     # Default leverage multiplier: 1.0 (cash only). Set >1.0 for margin.
+MAX_PER_SECTOR   <- 2       # Maximum concurrent positions allowed in any single sector
 PORTFOLIO_FILE   <- "portfolio.json"
 IS_FRIDAY        <- (format(Sys.Date(), "%u") == "5") # Friday weekend exit check
 
@@ -60,6 +61,7 @@ for (arg in args) {
   if (grepl("^--leverage=", arg)) LEVERAGE <- as.numeric(sub("^--leverage=", "", arg))
   if (grepl("^--margin_leverage=", arg)) LEVERAGE <- as.numeric(sub("^--margin_leverage=", "", arg))
   if (grepl("^--max_pos=", arg)) MAX_POSITIONS <- as.numeric(sub("^--max_pos=", "", arg))
+  if (grepl("^--max_per_sector=", arg)) MAX_PER_SECTOR <- as.numeric(sub("^--max_per_sector=", "", arg))
   if (grepl("^--target_vol=", arg)) TARGET_VOL <- as.numeric(sub("^--target_vol=", "", arg))
   if (grepl("^--train_window=", arg)) TRAIN_WINDOW <- as.numeric(sub("^--train_window=", "", arg))
   if (grepl("^--macro_gate=", arg)) MACRO_GATE <- as.logical(sub("^--macro_gate=", "", arg))
@@ -570,13 +572,13 @@ if (isTRUE(IS_FRIDAY)) {
         cand_sec <- get_sector(cand_sym)
         c_count  <- if (is.null(held_sectors[[cand_sec]])) 0 else held_sectors[[cand_sec]]
         
-        if (c_count < 2) {
+        if (c_count < MAX_PER_SECTOR) {
           filtered_candidates <- c(filtered_candidates, cand_sym)
           held_sectors[[cand_sec]] <- c_count + 1
           if (length(filtered_candidates) >= empty_slots) break
         } else {
-          cat(sprintf(" [Sector Defense] Skipping %s: Sector '%s' already at maximum cap (2 positions).\n",
-                      cand_sym, cand_sec))
+          cat(sprintf(" [Sector Defense] Skipping %s: Sector '%s' already at maximum cap (%d positions).\n",
+                      cand_sym, cand_sec, MAX_PER_SECTOR))
         }
       }
     }
