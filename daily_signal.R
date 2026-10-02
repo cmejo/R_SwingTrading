@@ -197,16 +197,17 @@ vix_info <- tryCatch({
 })
 
 # Multi-Factor Macro Sizing Policy
-if (MACRO_GATE && !macro_info$is_bullish) {
-  EFFECTIVE_MAX_POS       <- min(2, MAX_POSITIONS)
-  EFFECTIVE_P_LONG        <- 0.65
-  EFFECTIVE_SAFETY_FACTOR <- min(SAFETY_FACTOR, 0.30)
-  macro_note <- "QQQ Trend Deficit: Capping positions at 2, raising P(Up) >= 65%"
-} else if (vix_info$close > 28) {
+# VIX Crisis must be checked FIRST since it's the most restrictive
+if (vix_info$close > 28) {
   EFFECTIVE_MAX_POS       <- min(1, MAX_POSITIONS)
   EFFECTIVE_P_LONG        <- 0.68
   EFFECTIVE_SAFETY_FACTOR <- 0.15
   macro_note <- "VIX Crisis (>28): Capital preservation mode, 1 position max, Safe f = 0.15"
+} else if (MACRO_GATE && !macro_info$is_bullish) {
+  EFFECTIVE_MAX_POS       <- min(2, MAX_POSITIONS)
+  EFFECTIVE_P_LONG        <- 0.65
+  EFFECTIVE_SAFETY_FACTOR <- min(SAFETY_FACTOR, 0.30)
+  macro_note <- "QQQ Trend Deficit: Capping positions at 2, raising P(Up) >= 65%"
 } else if (vix_info$close >= 20) {
   EFFECTIVE_MAX_POS       <- min(3, MAX_POSITIONS)
   EFFECTIVE_P_LONG        <- 0.60
@@ -303,8 +304,25 @@ for (sym in SYMBOLS) {
     # 14-day ATR & Dynamic Chandelier Trailing Stop anchor
     atr_14 <- tryCatch({
       as.numeric(tail(TTR::ATR(HLC(ohlcv), n = 14)$atr, 1))
-    }, error = function(e) curr_daily_vol * latest_close)
+    }, error = function(e) 0.02 * latest_close)
     chandelier_stop <- round(latest_close - (2.5 * atr_14), 2)
+
+    # RSI(14), MACD Histogram, Bollinger %B (matching pipeline features)
+    feat_rsi <- tryCatch({
+      rsi_raw <- TTR::RSI(price, n = 14)
+      (rsi_raw - 50) / 50
+    }, error = function(e) xts(rep(0, nrow(price)), order.by = index(price)))
+    
+    feat_macd_hist <- tryCatch({
+      macd_out <- TTR::MACD(price, nFast = 12, nSlow = 26, nSig = 9)
+      macd_h <- macd_out[, "macd"] - macd_out[, "signal"]
+      macd_h / (price + 1e-6) * 100
+    }, error = function(e) xts(rep(0, nrow(price)), order.by = index(price)))
+    
+    feat_bbpct <- tryCatch({
+      bb <- TTR::BBands(price, n = 20, sd = 2)
+      (price - bb[, "dn"]) / (bb[, "up"] - bb[, "dn"] + 1e-6)
+    }, error = function(e) xts(rep(0.5, nrow(price)), order.by = index(price)))
 
     all_feats <- merge(
       SlopeFast = dual_lm$fast_lm$slope,
@@ -318,6 +336,9 @@ for (sym in SYMBOLS) {
       GARCH_VolPct = garch_out$vol_percentile,
       VolumeRatio = feat_vol_ratio,
       OBV_Slope = feat_obv_slope,
+      RSI_14 = feat_rsi,
+      MACD_Hist = feat_macd_hist,
+      BB_PctB = feat_bbpct,
       RS_20 = feat_rs_20
     )
     
@@ -328,11 +349,12 @@ for (sym in SYMBOLS) {
     # Model forward probability
     pred_prob <- as.numeric(predict(cv_fit, newx = latest_feat_matrix, s = "lambda.min", type = "response"))
     
-    # Volatility & Bracket Levels
+    # Volatility & Bracket Levels (with NA fallback)
     curr_ann_vol <- as.numeric(latest_feats$GARCH_Vol)
+    if (is.na(curr_ann_vol) || curr_ann_vol <= 0) curr_ann_vol <- 0.30
     curr_daily_vol <- curr_ann_vol / sqrt(252)
-    stop_loss_price <- latest_close * (1 - 2.0 * curr_daily_vol)
-    take_profit_price <- latest_close * (1 + 3.0 * curr_daily_vol)
+    stop_loss_price <- round(latest_close * (1 - 2.0 * curr_daily_vol), 2)
+    take_profit_price <- round(latest_close * (1 + 3.0 * curr_daily_vol), 2)
     
     # Signal Assignment with Multi-Timeframe, RS Leader, & Earnings Gate
     signal_status <- "HOLD"
@@ -691,8 +713,8 @@ if (isTRUE(IS_FRIDAY)) {
       }
       
       # Portfolio Heat Cap Scaling: Ensure total portfolio risk <= 5%
-      proposed_risk_sum <- sum(cand_risk_list)
-      heat_scale <- if (proposed_risk_sum > avail_heat_budget && proposed_risk_sum > 0) {
+      proposed_risk_sum <- sum(cand_risk_list, na.rm = TRUE)
+      heat_scale <- if (!is.na(proposed_risk_sum) && proposed_risk_sum > avail_heat_budget && proposed_risk_sum > 0) {
         cat(sprintf(" [Heat Defense] Proposed risk ($%.2f) exceeds available heat budget ($%.2f). Scaling position size by %.1f%%.\n\n",
                     proposed_risk_sum, avail_heat_budget, (avail_heat_budget / proposed_risk_sum) * 100))
         avail_heat_budget / proposed_risk_sum

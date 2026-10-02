@@ -46,7 +46,7 @@ compute_garch_volatility <- function(price_xts, train_idx = NULL) {
   }, error = function(e) {
     cat(sprintf("[GARCH] Warning: GARCH convergence failed (%s). Falling back to ARCH(1)...\n", e$message))
     tryCatch({
-      garch(fit_sample, order = c(0, 1), trace = FALSE)
+      garch(fit_sample, order = c(1, 0), trace = FALSE)
     }, error = function(e2) {
       cat("[GARCH] Warning: ARCH failed. Using rolling empirical standard deviation.\n")
       NULL
@@ -59,8 +59,22 @@ compute_garch_volatility <- function(price_xts, train_idx = NULL) {
     a0 <- coefs["a0"]
     a1 <- coefs["a1"]
     b1 <- if ("b1" %in% names(coefs)) coefs["b1"] else 0
-    cat(sprintf("[GARCH] Fitted: a0=%.6f, a1=%.4f, b1=%.4f (persistence=%.4f)\n",
-                a0, a1, b1, a1 + b1))
+    
+    # Validate coefficients are finite and non-negative
+    if (any(is.na(c(a0, a1, b1))) || any(!is.finite(c(a0, a1, b1))) || a0 <= 0 || a1 < 0 || b1 < 0) {
+      cat("[GARCH] Warning: Invalid coefficients detected. Using rolling empirical standard deviation.\n")
+      fit <- NULL
+    } else {
+      cat(sprintf("[GARCH] Fitted: a0=%.6f, a1=%.4f, b1=%.4f (persistence=%.4f)\n",
+                  a0, a1, b1, a1 + b1))
+    }
+  }
+  
+  if (!is.null(fit)) {
+    coefs <- coef(fit)
+    a0 <- coefs["a0"]
+    a1 <- coefs["a1"]
+    b1 <- if ("b1" %in% names(coefs)) coefs["b1"] else 0
     
     # Compute full conditional variance path recursively
     sigma2 <- numeric(n)

@@ -1,6 +1,6 @@
-#' Data Loader for SNDK Stock
+#' Stock Data Loader
 #'
-#' Fetches daily OHLCV data for SNDK from Yahoo Finance (via quantmod)
+#' Fetches daily OHLCV data for any symbol from Yahoo Finance (via quantmod)
 #' or falls back to locally cached data / custom CSV files.
 
 suppressMessages({
@@ -42,6 +42,7 @@ load_stock_data <- function(symbol = "SNDK",
       cat(sprintf("[DataLoader] Successfully fetched %d bars from Yahoo Finance.\n", nrow(data_xts)))
       # Cache downloaded data
       if (!is.null(cache_file)) {
+        dir.create(dirname(cache_file), showWarnings = FALSE, recursive = TRUE)
         saveRDS(data_xts, cache_file)
         cat(sprintf("[DataLoader] Cached data saved to %s\n", cache_file))
       }
@@ -86,7 +87,7 @@ get_upcoming_earnings_date <- function(symbol, cache_file = "data/earnings_cache
   
   # Check local daily cache first (use if valid non-NA date checked today)
   cache <- if (file.exists(cache_file)) tryCatch(readRDS(cache_file), error = function(e) list()) else list()
-  if (!is.null(cache[[symbol]]) && !is.na(cache[[symbol]]$earnings_date) && identical(cache[[symbol]]$checked_on, today_str)) {
+  if (!is.null(cache[[symbol]]) && identical(cache[[symbol]]$checked_on, today_str)) {
     return(cache[[symbol]]$earnings_date)
   }
   

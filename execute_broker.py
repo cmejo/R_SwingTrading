@@ -308,6 +308,9 @@ class SchwabTraderAPI:
             if resp.status_code != 200:
                 raise Exception(f"Token refresh failed ({resp.status_code}): {resp.text}")
             new_data = resp.json()
+            # Preserve existing refresh_token if not returned in response
+            if "refresh_token" not in new_data:
+                new_data["refresh_token"] = refresh_token
             new_data["expires_at"] = time.time() + new_data.get("expires_in", 1800) - 60
             with open(self.TOKEN_FILE, "w") as f:
                 json.dump(new_data, f, indent=2)

@@ -139,7 +139,7 @@ run_swing_backtest <- function(ohlcv,
   perf_table <- rbind(
     calc_metrics(strat_net_ret, "ML Swing Strategy (GARCH Vol-Targeted)"),
     calc_metrics(ma_ret, "Classic MA Trend Cross"),
-    calc_metrics(bh_ret, "Buy & Hold SNDK")
+    calc_metrics(bh_ret, paste0("Buy & Hold (", gsub("\\.[A-Za-z]+$", "", colnames(Cl(ohlcv))[1]), ")"))
   )
   
   # Generate Trade Log

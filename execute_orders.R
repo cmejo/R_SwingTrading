@@ -15,6 +15,7 @@ ticket_file <- "LATEST_TICKET.txt"
 symbols <- ""
 interactive_flag <- FALSE
 yes_flag <- FALSE
+sync_flag <- FALSE
 
 for (arg in args) {
   if (startsWith(arg, "--broker=")) broker <- tolower(sub("^--broker=", "", arg))

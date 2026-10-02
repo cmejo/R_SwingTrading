@@ -152,35 +152,49 @@ def evaluate_exits(rh, dry_run: bool = True):
             print(f"[{timestamp}] {msg}")
             send_alert(msg)
 
+            order_ok = False
             if not dry_run:
                 try:
-                    res = rh.orders.order_sell_market_by_quantity(sym, quantity=shares, timeInForce="gtc")
-                    print(f"[{timestamp}] -> Market Sell Submitted: {res.get('id')}")
+                    res = rh.orders.order_sell_market_by_quantity(sym, quantity=shares, timeInForce="gfd")
+                    if res and "id" in res and res.get("state") not in ["rejected", "failed", "cancelled"]:
+                        print(f"[{timestamp}] -> Market Sell Submitted: {res.get('id')}")
+                        order_ok = True
+                    else:
+                        print(f"[{timestamp}] -> Sell order rejected or failed: {res}")
                 except Exception as e:
                     print(f"[{timestamp}] -> Error placing sell order: {e}")
             else:
                 print(f"[{timestamp}] -> [DRY RUN] Would execute market sell for {shares} shares of {sym}.")
+                order_ok = True
 
-            to_delete.append(sym)
+            if order_ok:
+                to_delete.append(sym)
             continue
 
         # 2. Check Tier 2 Profit Target (Full Exit)
         if curr_px >= t2_target and pos.get("tier1_executed", False):
             rem_shares = pos.get("tier2_shares", shares)
-            msg = f"🎯 [ROBINHOOD TARGET 2 REACHED] {sym} reached ${curr_px:.2f} >= Target $${t2_target:.2f}! Selling remaining {rem_shares} shares."
+            msg = f"🎯 [ROBINHOOD TARGET 2 REACHED] {sym} reached ${curr_px:.2f} >= Target ${t2_target:.2f}! Selling remaining {rem_shares} shares."
             print(f"[{timestamp}] {msg}")
             send_alert(msg)
 
+            order_ok = False
             if not dry_run:
                 try:
-                    res = rh.orders.order_sell_market_by_quantity(sym, quantity=rem_shares, timeInForce="gtc")
-                    print(f"[{timestamp}] -> Tier 2 Sell Submitted: {res.get('id')}")
+                    res = rh.orders.order_sell_market_by_quantity(sym, quantity=rem_shares, timeInForce="gfd")
+                    if res and "id" in res and res.get("state") not in ["rejected", "failed", "cancelled"]:
+                        print(f"[{timestamp}] -> Tier 2 Sell Submitted: {res.get('id')}")
+                        order_ok = True
+                    else:
+                        print(f"[{timestamp}] -> Tier 2 sell rejected: {res}")
                 except Exception as e:
                     print(f"[{timestamp}] -> Error placing sell order: {e}")
             else:
                 print(f"[{timestamp}] -> [DRY RUN] Would execute market sell for {rem_shares} shares.")
+                order_ok = True
 
-            to_delete.append(sym)
+            if order_ok:
+                to_delete.append(sym)
             continue
 
         # 3. Check Tier 1 Profit Target (Partial Scale-Out + Breakeven Stop)
@@ -191,20 +205,27 @@ def evaluate_exits(rh, dry_run: bool = True):
             print(f"[{timestamp}] {msg}")
             send_alert(msg)
 
+            order_ok = False
             if not dry_run:
                 try:
-                    res = rh.orders.order_sell_market_by_quantity(sym, quantity=t1_shares, timeInForce="gtc")
-                    print(f"[{timestamp}] -> Tier 1 Sell Submitted: {res.get('id')}")
+                    res = rh.orders.order_sell_market_by_quantity(sym, quantity=t1_shares, timeInForce="gfd")
+                    if res and "id" in res and res.get("state") not in ["rejected", "failed", "cancelled"]:
+                        print(f"[{timestamp}] -> Tier 1 Sell Submitted: {res.get('id')}")
+                        order_ok = True
+                    else:
+                        print(f"[{timestamp}] -> Tier 1 sell rejected: {res}")
                 except Exception as e:
                     print(f"[{timestamp}] -> Error placing sell order: {e}")
             else:
                 print(f"[{timestamp}] -> [DRY RUN] Would execute market sell for {t1_shares} shares.")
+                order_ok = True
 
-            # Update position state
-            pos["tier1_executed"] = True
-            pos["shares"] = round(shares - t1_shares, 4)
-            pos["stop_loss"] = entry_px # Breakeven Stop
-            pos["breakeven_stop_active"] = True
+            # Only update position state if sell was confirmed
+            if order_ok:
+                pos["tier1_executed"] = True
+                pos["shares"] = round(shares - t1_shares, 4)
+                pos["stop_loss"] = entry_px # Breakeven Stop
+                pos["breakeven_stop_active"] = True
 
     # Cleanup closed positions
     for sym in to_delete:

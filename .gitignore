@@ -22,3 +22,10 @@ schwab_token.json
 # Keep sample data, ignore large transient downloads
 data/*.rds
 !data/data_sndk.rds
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Logs
+logs/*.log

@@ -164,7 +164,7 @@ def execute_buys(tickets: List[Dict[str, Any]], dry_run: bool = True):
                 order = rh.orders.order_buy_market_by_quantity(
                     symbol=sym,
                     quantity=shares,
-                    timeInForce="gtc"
+                    timeInForce="gfd"
                 )
                 if order and "id" in order:
                     print(f"   [SUCCESS] Order submitted! Order ID: {order['id']} | State: {order.get('state')}")

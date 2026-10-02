@@ -57,8 +57,12 @@ fit_logistic_swing_model <- function(df_model,
   
   # 1. Fit Regularized Logistic Regression (ElasticNet)
   cat(sprintf("[LogisticModel] Fitting cv.glmnet with alpha=%.2f (ElasticNet)...\n", alpha))
-  set.seed(42) # For reproducible cross-validation folds
-  cv_fit <- cv.glmnet(X_train, y_train, alpha = alpha, family = "binomial", type.measure = "deviance")
+  set.seed(42) # For reproducible fold assignment
+  # Use chronological blocked folds to prevent lookahead leakage
+  # (overlapping 5-day forward targets leak across random K-fold boundaries)
+  nfolds <- 5
+  foldid <- rep(1:nfolds, each = ceiling(length(train_idx) / nfolds))[1:length(train_idx)]
+  cv_fit <- cv.glmnet(X_train, y_train, foldid = foldid, alpha = alpha, family = "binomial", type.measure = "deviance")
   
   # Extract coefficients at lambda.min
   coef_min <- as.matrix(coef(cv_fit, s = "lambda.min"))

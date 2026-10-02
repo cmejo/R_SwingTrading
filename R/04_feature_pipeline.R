@@ -131,6 +131,44 @@ build_feature_dataset <- function(ohlcv,
   feat_obv_slope <- obv_lm$slope / (obv_sd + 1e-6)
   colnames(feat_obv_slope) <- "OBV_Slope"
 
+  # 6b. RSI(14) - Relative Strength Index (Overbought / Oversold Mean-Reversion)
+  feat_rsi <- tryCatch({
+    rsi_raw <- TTR::RSI(price, n = 14)
+    rsi_scaled <- (rsi_raw - 50) / 50  # Center at 0, range [-1, 1]
+    colnames(rsi_scaled) <- "RSI_14"
+    rsi_scaled
+  }, error = function(e) {
+    r <- xts(rep(0, nrow(price)), order.by = index(price))
+    colnames(r) <- "RSI_14"
+    r
+  })
+
+  # 6c. MACD Histogram (Momentum Acceleration / Deceleration)
+  feat_macd_hist <- tryCatch({
+    macd_out <- TTR::MACD(price, nFast = 12, nSlow = 26, nSig = 9)
+    macd_h <- macd_out[, "macd"] - macd_out[, "signal"]
+    # Normalize by price to make cross-asset comparable
+    macd_norm <- macd_h / (price + 1e-6) * 100
+    colnames(macd_norm) <- "MACD_Hist"
+    macd_norm
+  }, error = function(e) {
+    r <- xts(rep(0, nrow(price)), order.by = index(price))
+    colnames(r) <- "MACD_Hist"
+    r
+  })
+
+  # 6d. Bollinger %B (Price Position Relative to Volatility Bands)
+  feat_bbpct <- tryCatch({
+    bb <- TTR::BBands(price, n = 20, sd = 2)
+    pctb <- (price - bb[, "dn"]) / (bb[, "up"] - bb[, "dn"] + 1e-6)
+    colnames(pctb) <- "BB_PctB"
+    pctb
+  }, error = function(e) {
+    r <- xts(rep(0.5, nrow(price)), order.by = index(price))
+    colnames(r) <- "BB_PctB"
+    r
+  })
+
   # 6. Benchmark-Relative Strength (RS vs SPY/Benchmark)
   feat_rs_20 <- xts(rep(0, nrow(price)), order.by = index(price))
   colnames(feat_rs_20) <- "RS_20"
@@ -169,6 +207,9 @@ build_feature_dataset <- function(ohlcv,
     feat_garch_pct,
     feat_vol_ratio,
     feat_obv_slope,
+    feat_rsi,
+    feat_macd_hist,
+    feat_bbpct,
     feat_rs_20
   )
   
@@ -192,11 +233,15 @@ build_feature_dataset <- function(ohlcv,
     GARCH_VolPct = as.numeric(clean_xts$GARCH_VolPct),
     VolumeRatio = as.numeric(clean_xts$VolumeRatio),
     OBV_Slope = as.numeric(clean_xts$OBV_Slope),
+    RSI_14 = as.numeric(clean_xts$RSI_14),
+    MACD_Hist = as.numeric(clean_xts$MACD_Hist),
+    BB_PctB = as.numeric(clean_xts$BB_PctB),
     RS_20 = as.numeric(clean_xts$RS_20)
   )
   
   feature_names <- c("SlopeFast", "SlopeSlow", "SlopeWeeklyPct", "TrendQuality", "DistPct", 
-                     "ZScore", "GARCH_Vol", "GARCH_Shock", "GARCH_VolPct", "VolumeRatio", "OBV_Slope", "RS_20")
+                     "ZScore", "GARCH_Vol", "GARCH_Shock", "GARCH_VolPct", "VolumeRatio", "OBV_Slope",
+                     "RSI_14", "MACD_Hist", "BB_PctB", "RS_20")
   
   cat(sprintf("[Pipeline] Complete. Result: %d valid observation rows across %d features.\n",
               nrow(df_model), length(feature_names)))

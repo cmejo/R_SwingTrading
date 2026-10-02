@@ -207,7 +207,9 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
       total_invested <- total_invested + mv
       pnl <- round(mv - p$cost_basis, 2)
       pnl_pct <- (cp / p$entry_price - 1) * 100
-      days_held <- as.integer(current_date - as.Date(p$entry_date))
+      # Count actual trading days (exclude weekends)
+      all_days_seq <- seq(as.Date(p$entry_date) + 1, as.Date(current_date), by = "day")
+      days_held <- sum(!weekdays(all_days_seq) %in% c("Saturday", "Sunday"))
       
       suggested_stop <- p$stop_loss
       # Breakeven escalation rule: If position is up by >= 1R, raise stop to Entry Price
@@ -217,7 +219,11 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
       }
       
       # ATR Chandelier Trailing Stop for Tier 2 runners
-      highest_seen <- max(p$entry_price, if (!is.null(p$highest_price)) p$highest_price else p$entry_price, cp)
+      # Persist highest_price so the trailing stop only ratchets upward
+      prev_highest <- if (!is.null(p$highest_price)) p$highest_price else p$entry_price
+      highest_seen <- max(prev_highest, cp)
+      portfolio$positions[[i]]$highest_price <- highest_seen
+      
       atr_val <- if (!is.null(p$atr)) p$atr else (p$entry_price * 0.025)
       chandelier_stop <- round(highest_seen - (2.5 * atr_val), 2)
       if (cp >= (p$entry_price + risk_1r) && chandelier_stop > suggested_stop) {
@@ -229,10 +235,11 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
       status <- "ACTIVE"
       
       # 1. Stop-Loss & Take-Profit Triggers (Immediate Execution)
-      if (cp <= p$stop_loss) {
-        action <- "SELL (STOP-LOSS BREACHED)"
+      # Use suggested_stop (which includes breakeven escalation and chandelier ratchet)
+      if (cp <= suggested_stop) {
+        action <- sprintf("SELL (STOP BREACHED at $%.2f)", suggested_stop)
         status <- "STOP_TRIGGERED"
-        alerts <- c(alerts, sprintf("[STOP-LOSS HIT] %s breached stop at $%.2f (Current: $%.2f). Exit immediately.", sym, p$stop_loss, cp))
+        alerts <- c(alerts, sprintf("[STOP-LOSS HIT] %s breached stop at $%.2f (Current: $%.2f). Exit immediately.", sym, suggested_stop, cp))
       } else if (cp >= p$take_profit) {
         action <- "SELL (TAKE-PROFIT REACHED)"
         status <- "TARGET_TRIGGERED"
