@@ -14,7 +14,7 @@
 
 suppressPackageStartupMessages({
   if (!requireNamespace("jsonlite", quietly = TRUE)) {
-    install.packages("jsonlite", repos = "https://cloud.r-project.org")
+    stop("Package 'jsonlite' is required. Please install it with install.packages('jsonlite').")
   }
   library(jsonlite)
 })
@@ -25,7 +25,11 @@ load_dot_env <- function(env_path = ".env") {
     lines <- readLines(env_path, warn = FALSE)
     for (line in lines) {
       line <- trimws(line)
-      if (line == "" || startsWith(line, "#")) next
+      # Strip comments and export prefixes
+      line <- sub("#.*$", "", line)
+      line <- sub("^export\\s+", "", line)
+      line <- trimws(line)
+      if (line == "") next
       eq_pos <- regexpr("=", line)
       if (eq_pos > 0) {
         key <- trimws(substr(line, 1, eq_pos - 1))
@@ -62,13 +66,15 @@ send_discord_alert <- function(title, description, color = 3447003, webhook_url 
   on.exit(unlink(tmp_file), add = TRUE)
   
   res <- system2("curl", args = c(
-    "-s", "-X", "POST",
+    "-s", "-o", "/dev/null", "-w", "%{http_code}",
+    "-X", "POST",
     "-H", "Content-Type: application/json",
     "-d", paste0("@", tmp_file),
     webhook_url
-  ), stdout = TRUE, stderr = TRUE)
+  ), stdout = TRUE, stderr = FALSE)
   
-  return(TRUE)
+  code <- as.integer(res[1])
+  return(!is.na(code) && code >= 200 && code < 300)
 }
 
 send_telegram_alert <- function(text, 
@@ -80,10 +86,15 @@ send_telegram_alert <- function(text,
   
   url <- sprintf("https://api.telegram.org/bot%s/sendMessage", bot_token)
   
+  # Sanitize HTML tags for Telegram HTML parse_mode
+  clean_text <- gsub("&", "&amp;", text)
+  clean_text <- gsub("<", "&lt;", clean_text)
+  clean_text <- gsub(">", "&gt;", clean_text)
+  
   payload <- list(
     chat_id = chat_id,
-    text = substr(text, 1, 4000),
-    parse_mode = "Markdown"
+    text = substr(clean_text, 1, 4000),
+    parse_mode = "HTML"
   )
   
   json_body <- jsonlite::toJSON(payload, auto_unbox = TRUE)
@@ -92,13 +103,15 @@ send_telegram_alert <- function(text,
   on.exit(unlink(tmp_file), add = TRUE)
   
   res <- system2("curl", args = c(
-    "-s", "-X", "POST",
+    "-s", "-o", "/dev/null", "-w", "%{http_code}",
+    "-X", "POST",
     "-H", "Content-Type: application/json",
     "-d", paste0("@", tmp_file),
     url
-  ), stdout = TRUE, stderr = TRUE)
+  ), stdout = TRUE, stderr = FALSE)
   
-  return(TRUE)
+  code <- as.integer(res[1])
+  return(!is.na(code) && code >= 200 && code < 300)
 }
 
 #' High-level Alert Dispatcher
@@ -116,7 +129,7 @@ broadcast_alert <- function(title, body, level = "INFO") {
   )
   
   discord_sent <- send_discord_alert(title, body, color)
-  tg_text <- sprintf("*%s*\n\n%s", title, body)
+  tg_text <- sprintf("<b>%s</b>\n\n%s", title, body)
   telegram_sent <- send_telegram_alert(tg_text)
   
   if (discord_sent || telegram_sent) {

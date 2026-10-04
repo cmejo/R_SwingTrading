@@ -16,7 +16,8 @@
 set -e
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
-PROJECT_DIR="/Volumes/2TB.ssd/_a Development/swingtrading"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="${PROJECT_DIR:-$SCRIPT_DIR}"
 cd "$PROJECT_DIR" || exit 1
 
 # Default Parameters

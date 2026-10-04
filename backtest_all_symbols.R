@@ -43,24 +43,27 @@ for (s in symbols) {
     pipe <- build_feature_dataset(ohlcv, fast_n = 20, slow_n = 50, look_ahead = 5)
     df_m <- pipe$model_data
     
-    if (nrow(df_m) < eval_n + 30) {
+    if (nrow(df_m) < eval_n + 35) {
       cat(sprintf("  -> Skipping %s: History too short (%d rows).\n", s, nrow(df_m)))
-      return(NULL)
-    }
-    
-    train_idx <- 1:(nrow(df_m) - eval_n)
-    test_idx  <- (nrow(df_m) - eval_n + 1):nrow(df_m)
-    test_dates <- df_m$Date[test_idx]
-    
-    # Train ElasticNet model strictly on in-sample training split
-    X_train <- as.matrix(df_m[train_idx, pipe$feature_names])
-    y_train <- df_m$TargetBinary[train_idx]
-    X_test  <- as.matrix(df_m[test_idx, pipe$feature_names])
-    
-    set.seed(42)
-    cv_fit <- cv.glmnet(X_train, y_train, alpha = 0.5, family = "binomial")
-    probs <- predict(cv_fit, newx = X_test, s = "lambda.min", type = "response")
-    pred_class <- ifelse(probs > 0.58, 1, ifelse(probs < 0.42, -1, 0))
+      NULL
+    } else {
+      # Embargo training window by 5 days to eliminate target leakage
+      train_idx <- 1:(nrow(df_m) - eval_n - 5)
+      test_idx  <- (nrow(df_m) - eval_n + 1):nrow(df_m)
+      test_dates <- df_m$Date[test_idx]
+      
+      # Train ElasticNet model strictly on in-sample training split with blocked folds
+      X_train <- as.matrix(df_m[train_idx, pipe$feature_names])
+      y_train <- df_m$TargetBinary[train_idx]
+      X_test  <- as.matrix(df_m[test_idx, pipe$feature_names])
+      
+      set.seed(42)
+      n_tr <- length(train_idx)
+      nfolds <- 5
+      foldid <- rep(1:nfolds, each = ceiling(n_tr / nfolds))[1:n_tr]
+      cv_fit <- cv.glmnet(X_train, y_train, foldid = foldid, alpha = 0.5, family = "binomial")
+      probs <- predict(cv_fit, newx = X_test, s = "lambda.min", type = "response")
+      pred_class <- ifelse(probs > 0.58, 1, ifelse(probs < 0.42, -1, 0))
     
     model_res <- list(test_dates = test_dates, test_idx = test_idx, pred_class = as.numeric(pred_class))
     
@@ -99,6 +102,7 @@ for (s in symbols) {
       N_Trades      = nrow(bt$trade_log),
       stringsAsFactors = FALSE
     )
+    }
   }, error = function(e) {
     cat(sprintf("  -> Error on %s: %s\n", s, e$message))
     NULL
@@ -136,10 +140,10 @@ cat("===========================================================================
 print(table_display, row.names = FALSE)
 
 # Aggregate Summary Statistics
-avg_strat <- mean(df_all$Strategy_Ret) * 100
-avg_bh    <- mean(df_all$BuyHold_Ret) * 100
-spy_val   <- df_all$SP500_Ret[1] * 100
-win_count <- sum(df_all$Strategy_Ret > df_all$SP500_Ret)
+avg_strat <- mean(df_all$Strategy_Ret, na.rm = TRUE) * 100
+avg_bh    <- mean(df_all$BuyHold_Ret, na.rm = TRUE) * 100
+spy_val   <- (prod(1 + na.omit(tail(spy_ret_all, eval_n))) - 1) * 100
+win_count <- sum(df_all$Strategy_Ret > df_all$SP500_Ret, na.rm = TRUE)
 
 cat("\n----------------------------------------------------------------------------------------\n")
 cat(" UNIVERSE AGGREGATE SUMMARY (PAST 2 MONTHS)\n")

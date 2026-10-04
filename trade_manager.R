@@ -74,15 +74,15 @@ if (length(args) == 0 || "--status" %in% args) {
 for (arg in args) {
   if (startsWith(arg, "--buy=")) {
     val <- sub("^--buy=", "", arg)
-    parts <- strsplit(val, ":")[[1]]
-    if (length(parts) < 5) {
-      stop("Invalid format for --buy. Use: --buy=SYMBOL:SHARES:ENTRY_PRICE:STOP_LOSS:TAKE_PROFIT")
+    parts <- strsplit(val, "[,:]")[[1]]
+    if (length(parts) < 3) {
+      stop("Invalid format for --buy. Use: --buy=SYMBOL:SHARES:ENTRY_PRICE[:STOP_LOSS][:TAKE_PROFIT]")
     }
     sym <- parts[1]
     shs <- as.numeric(parts[2])
     ent <- as.numeric(parts[3])
-    stp <- as.numeric(parts[4])
-    tgt <- as.numeric(parts[5])
+    stp <- if (length(parts) >= 4) as.numeric(parts[4]) else round(ent * 0.95, 2)
+    tgt <- if (length(parts) >= 5) as.numeric(parts[5]) else round(ent * 1.10, 2)
     
     portfolio <- record_fill(portfolio, sym, shs, ent, stp, tgt)
     save_portfolio(portfolio, state_file)
@@ -93,7 +93,7 @@ for (arg in args) {
   
   if (startsWith(arg, "--sell=")) {
     val <- sub("^--sell=", "", arg)
-    parts <- strsplit(val, ":")[[1]]
+    parts <- strsplit(val, "[,:]")[[1]]
     sym <- parts[1]
     px  <- as.numeric(parts[2])
     reason <- if (length(parts) >= 3) parts[3] else "MANUAL_CLOSE"
@@ -124,6 +124,7 @@ for (arg in args) {
     }
     portfolio$cash_balance <- round(portfolio$cash_balance - wth, 2)
     portfolio$total_capital <- round(portfolio$total_capital - wth, 2)
+    portfolio$peak_equity <- max(0, (if (!is.null(portfolio$peak_equity)) portfolio$peak_equity else portfolio$total_capital) - wth)
     save_portfolio(portfolio, state_file)
     cat(sprintf("[TradeManager] Withdrew $%.2f. New Cash Balance: $%.2f | Total Capital: $%.2f\n",
                 wth, portfolio$cash_balance, portfolio$total_capital))

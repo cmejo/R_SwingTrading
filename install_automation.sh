@@ -4,7 +4,8 @@
 # ==============================================================================
 
 PLIST_NAME="com.swingtrading.sndk.plist"
-SOURCE_PLIST="/Volumes/2TB.ssd/_a Development/swingtrading/$PLIST_NAME"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE_PLIST="$SCRIPT_DIR/$PLIST_NAME"
 TARGET_DIR="$HOME/Library/LaunchAgents"
 TARGET_PLIST="$TARGET_DIR/$PLIST_NAME"
 

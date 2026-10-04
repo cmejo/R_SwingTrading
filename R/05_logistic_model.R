@@ -39,8 +39,9 @@ fit_logistic_swing_model <- function(df_model,
   
   n <- nrow(df_model)
   n_train <- floor(n * train_split)
-  train_idx <- 1:n_train
-  test_idx <- (n_train + 1):n
+  # Embargo training window by 5 days to eliminate target leakage into test set
+  train_idx <- 1:max(1, (n_train - 5))
+  test_idx <- if (n_train >= n) integer(0) else (n_train + 1):n
   
   X <- as.matrix(df_model[, feature_names])
   y <- df_model$TargetBinary
@@ -50,8 +51,8 @@ fit_logistic_swing_model <- function(df_model,
   X_test  <- X[test_idx, , drop = FALSE]
   y_test  <- y[test_idx]
   
-  cat(sprintf("[LogisticModel] Training set: %d bars (%s to %s)\n",
-              length(train_idx), df_model$Date[1], df_model$Date[n_train]))
+  cat(sprintf("[LogisticModel] Training set: %d bars (%s to %s | 5-day embargo applied)\n",
+              length(train_idx), df_model$Date[1], df_model$Date[max(train_idx)]))
   cat(sprintf("[LogisticModel] Testing set:  %d bars (%s to %s)\n",
               length(test_idx), df_model$Date[n_train + 1], df_model$Date[n]))
   

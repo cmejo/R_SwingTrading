@@ -23,28 +23,45 @@ suppressMessages({
 #'   - slope: Alias for beta
 #' @export
 lmMA <- function(x, n = 50) {
-  if (nrow(x) < n) {
-    stop(sprintf("Input length (%d) is shorter than rolling window n (%d)", nrow(x), n))
+  n_obs <- NROW(x)
+  if (n_obs < n) {
+    stop(sprintf("Input length (%d) is shorter than rolling window n (%d)", n_obs, n))
   }
   
-  # Rolling regression of price on time indices
-  time_idx <- 1:nrow(x)
-  rl <- rollSFM(x, time_idx, n = n)
+  # Align time index strictly to x's time-series index
+  if (is.xts(x)) {
+    time_idx <- xts(1:n_obs, order.by = index(x))
+  } else {
+    time_idx <- 1:n_obs
+  }
   
-  # Calculate endpoint fit: alpha + beta * current_time
-  rl$fit <- rl$alpha + rl$beta * time_idx
-  rl$intercept <- rl$alpha
-  rl$slope <- rl$beta
+  rl_raw <- rollSFM(x, time_idx, n = n)
   
-  # Ensure xts preservation
+  # Extract components safely by column name
+  alpha_val <- as.numeric(rl_raw[, "alpha"])
+  beta_val  <- as.numeric(rl_raw[, "beta"])
+  rsq_val   <- as.numeric(rl_raw[, "r.squared"])
+  fit_val   <- alpha_val + beta_val * as.numeric(time_idx)
+  
   if (is.xts(x)) {
     idx <- index(x)
-    rl$alpha <- xts(rl$alpha, order.by = idx)
-    rl$beta <- xts(rl$beta, order.by = idx)
-    rl$r.squared <- xts(rl$r.squared, order.by = idx)
-    rl$fit <- xts(rl$fit, order.by = idx)
-    rl$intercept <- xts(rl$intercept, order.by = idx)
-    rl$slope <- xts(rl$slope, order.by = idx)
+    rl <- list(
+      alpha     = xts(alpha_val, order.by = idx),
+      beta      = xts(beta_val, order.by = idx),
+      r.squared = xts(rsq_val, order.by = idx),
+      fit       = xts(fit_val, order.by = idx),
+      intercept = xts(alpha_val, order.by = idx),
+      slope     = xts(beta_val, order.by = idx)
+    )
+  } else {
+    rl <- list(
+      alpha     = alpha_val,
+      beta      = beta_val,
+      r.squared = rsq_val,
+      fit       = fit_val,
+      intercept = alpha_val,
+      slope     = beta_val
+    )
   }
   
   return(rl)

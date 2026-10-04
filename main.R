@@ -181,7 +181,7 @@ plot(index(eq), as.numeric(eq$ML_Swing_Strategy), type = "l", col = "blue", lwd 
      ylab = "Portfolio Value ($)", xlab = "")
 lines(index(eq), as.numeric(eq$Buy_and_Hold), col = "gray50", lwd = 1.8, lty = 2)
 lines(index(eq), as.numeric(eq$Classic_MA_Cross), col = "red", lwd = 1.8, lty = 3)
-legend("topleft", legend = c("ML Swing Strategy (GARCH Vol-Targeted)", "Buy & Hold SNDK", "Classic MA Cross"),
+legend("topleft", legend = c("ML Swing Strategy (GARCH Vol-Targeted)", paste("Buy & Hold", SYMBOL), "Classic MA Cross"),
        col = c("blue", "gray50", "red"), lwd = c(2.5, 1.8, 1.8), lty = c(1, 2, 3), bty = "n")
 
 # Drawdowns panel
@@ -190,8 +190,11 @@ dd_strat <- (eq_strat - cummax(eq_strat)) / cummax(eq_strat) * 100
 eq_bh <- as.numeric(eq$Buy_and_Hold)
 dd_bh <- (eq_bh - cummax(eq_bh)) / cummax(eq_bh) * 100
 
+min_dd <- min(c(dd_strat, dd_bh), na.rm = TRUE)
+ylim_min <- if (!is.na(min_dd) && min_dd < 0) min_dd * 1.05 else -5
+
 plot(index(eq), dd_strat, type = "l", col = "blue", lwd = 2,
-     ylim = c(min(c(dd_strat, dd_bh), na.rm = TRUE), 0),
+     ylim = c(ylim_min, 0),
      main = "Drawdown Comparison (%)", ylab = "Drawdown %", xlab = "Date")
 lines(index(eq), dd_bh, col = "gray50", lwd = 1.5, lty = 2)
 abline(h = 0, lty = 1, col = "black")
