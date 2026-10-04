@@ -4,9 +4,10 @@ Interactive Brokers (IBKR Pro) Automated Order Execution Bridge
 Parses generated order tickets from LATEST_TICKET.txt, connects to IB Gateway / TWS,
 and transmits exchange-level First-Triggers-OCO Bracket Orders:
   1. Parent Order: BUY Market Order (transmit=False)
-  2. Child Stop-Loss: GTC Stop Order (transmit=False)
-  3. Child Target 1: GTC Limit Order for 50% shares @ +1.5R (transmit=False)
-  4. Child Target 2: GTC Limit Order for 50% shares @ +3.0R (transmit=True)
+  2. Tier 1 leg (50% shares): GTC Stop + GTC Limit @ +1.5R linked in one OCA group
+  3. Tier 2 leg (50% shares): GTC Stop + GTC Limit @ +3.0R linked in a second OCA group
+     (final child has transmit=True and arms the whole bracket)
+  Each leg's stop is sized to that leg, so a filled target can never leave an oversized stop.
 
 Usage:
   # Dry-run preview:
@@ -47,7 +48,7 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
 
     tickets = []
     ticket_blocks = re.findall(
-        r"--- ORDER TICKET #(\d+): (\w+) \(P\(Up\): ([\d\.]+)%.*?Sector: ([^\)]+)\) ---\n(.*?)(?=(?:--- ORDER TICKET|========================================================================================|\Z))",
+        r"--- ORDER TICKET #(\d+): ([A-Za-z0-9\.\-]+) \(P\(Up\): ([\d\.]+)%.*?Sector: ([^\)]+)\) ---\n(.*?)(?=(?:--- ORDER TICKET|========================================================================================|\Z))",
         content,
         re.DOTALL
     )
@@ -89,8 +90,18 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
 
     return tickets
 
+def split_whole_share_legs(t: Dict[str, Any]) -> Dict[str, int]:
+    """IBKR API brackets require whole shares. Round down total, then split into two legs.
+    If only 1 share, it all goes to the Tier 2 runner leg (which still has its own stop)."""
+    total = int(t["shares"])
+    tier1 = total // 2
+    tier2 = total - tier1
+    return {"total": total, "tier1": tier1, "tier2": tier2}
+
+
 def build_ibkr_bracket_spec(t: Dict[str, Any]) -> Dict[str, Any]:
-    return {
+    legs = split_whole_share_legs(t)
+    spec = {
         "broker": "Interactive Brokers (IBKR Pro)",
         "symbol": t["symbol"],
         "exchange": "SMART",
@@ -98,36 +109,25 @@ def build_ibkr_bracket_spec(t: Dict[str, Any]) -> Dict[str, Any]:
         "parent_order": {
             "action": "BUY",
             "orderType": "MKT",
-            "totalQuantity": t["shares"],
+            "totalQuantity": legs["total"],
             "transmit": False
         },
-        "child_stop_loss": {
-            "action": "SELL",
-            "orderType": "STP",
-            "auxPrice": t["stop_loss"],
-            "totalQuantity": t["shares"],
-            "tif": "GTC",
-            "transmit": False
-        },
-        "child_profit_target_1": {
-            "action": "SELL",
-            "orderType": "LMT",
-            "lmtPrice": t["tier1_target"],
-            "totalQuantity": t["tier1_shares"],
-            "tif": "GTC",
-            "transmit": False,
-            "note": "Tier 1: 50% scale-out (+1.5R)"
-        },
-        "child_profit_target_2": {
-            "action": "SELL",
-            "orderType": "LMT",
-            "lmtPrice": t["tier2_target"],
-            "totalQuantity": t["tier2_shares"],
-            "tif": "GTC",
-            "transmit": True,
-            "note": "Tier 2: 50% runner (+3.0R)"
-        }
+        "exit_legs": []
     }
+    if legs["tier1"] > 0:
+        spec["exit_legs"].append({
+            "ocaGroup": f"OCA_{t['symbol']}_T1", "ocaType": 1,
+            "stop":   {"action": "SELL", "orderType": "STP", "auxPrice": t["stop_loss"], "totalQuantity": legs["tier1"], "tif": "GTC"},
+            "target": {"action": "SELL", "orderType": "LMT", "lmtPrice": t["tier1_target"], "totalQuantity": legs["tier1"], "tif": "GTC"},
+            "note": "Tier 1 half: stop and +1.5R target cancel each other"
+        })
+    spec["exit_legs"].append({
+        "ocaGroup": f"OCA_{t['symbol']}_T2", "ocaType": 1,
+        "stop":   {"action": "SELL", "orderType": "STP", "auxPrice": t["stop_loss"], "totalQuantity": legs["tier2"], "tif": "GTC"},
+        "target": {"action": "SELL", "orderType": "LMT", "lmtPrice": t["tier2_target"], "totalQuantity": legs["tier2"], "tif": "GTC"},
+        "note": "Tier 2 runner half: stop and +3.0R target cancel each other (last order transmits bracket)"
+    })
+    return spec
 
 def execute_ibkr(tickets: List[Dict[str, Any]], host: str, port: int, client_id: int, dry_run: bool = True):
     print("================================================================================")
@@ -139,10 +139,19 @@ def execute_ibkr(tickets: List[Dict[str, Any]], host: str, port: int, client_id:
     print(f" Orders Found: {len(tickets)}")
     print("================================================================================")
 
+    # Drop tickets that round to zero whole shares
+    valid = []
+    for t in tickets:
+        if split_whole_share_legs(t)["total"] < 1:
+            print(f"[IBKRBridge] Skipping {t['symbol']}: {t['shares']} shares rounds to 0 whole shares.")
+            continue
+        valid.append(t)
+    tickets = valid
+
     if dry_run:
         print("\n[IBKRBridge] [DRY RUN] Generated TWS / IB Gateway Order Specifications:")
         for t in tickets:
-            print(f"\n--- Bracket Order Specification for {t['symbol']} ({t['shares']} shares) ---")
+            print(f"\n--- Bracket Order Specification for {t['symbol']} ({int(t['shares'])} whole shares) ---")
             print(json.dumps(build_ibkr_bracket_spec(t), indent=2))
         print("\n[IBKRBridge] Dry run complete. No live orders submitted.")
         return
@@ -166,29 +175,46 @@ def execute_ibkr(tickets: List[Dict[str, Any]], host: str, port: int, client_id:
 
     for t in tickets:
         sym = t["symbol"]
-        shares = t["shares"]
-        contract = Stock(sym, "SMART", "USD")
-        ib.qualifyContracts(contract)
+        legs = split_whole_share_legs(t)
+        try:
+            contract = Stock(sym, "SMART", "USD")
+            qualified = ib.qualifyContracts(contract)
+            if not qualified or not contract.conId:
+                print(f"[IBKRBridge] Contract qualification failed for {sym}. Skipping.")
+                continue
 
-        print(f"\n[IBKRBridge] Transmitting Bracket Order for {sym} ({shares} shs)...")
-        # 1. Parent Market Buy Order
-        parent = MarketOrder("BUY", shares, transmit=False)
-        parent_trade = ib.placeOrder(contract, parent)
-        parent_id = parent_trade.order.orderId
+            print(f"\n[IBKRBridge] Transmitting Bracket Order for {sym} ({legs['total']} shs)...")
+            # 1. Parent Market Buy Order (not transmitted until the final child)
+            parent = MarketOrder("BUY", legs["total"], transmit=False)
+            parent_trade = ib.placeOrder(contract, parent)
+            parent_id = parent_trade.order.orderId
 
-        # 2. Child Stop Loss
-        stop_order = StopOrder("SELL", shares, t["stop_loss"], parentId=parent_id, transmit=False, tif="GTC")
-        ib.placeOrder(contract, stop_order)
+            # 2. Build exit legs. Each leg = stop + target in its own OCA group, sized to that leg,
+            #    so a filled target cancels only its own stop (no leftover stop -> no naked short).
+            child_orders = []
+            if legs["tier1"] > 0:
+                oca1 = f"OCA_{sym}_{parent_id}_T1"
+                child_orders.append(StopOrder("SELL", legs["tier1"], t["stop_loss"], parentId=parent_id, tif="GTC",
+                                              ocaGroup=oca1, ocaType=1, transmit=False))
+                child_orders.append(LimitOrder("SELL", legs["tier1"], t["tier1_target"], parentId=parent_id, tif="GTC",
+                                               ocaGroup=oca1, ocaType=1, transmit=False))
+            oca2 = f"OCA_{sym}_{parent_id}_T2"
+            child_orders.append(StopOrder("SELL", legs["tier2"], t["stop_loss"], parentId=parent_id, tif="GTC",
+                                          ocaGroup=oca2, ocaType=1, transmit=False))
+            child_orders.append(LimitOrder("SELL", legs["tier2"], t["tier2_target"], parentId=parent_id, tif="GTC",
+                                           ocaGroup=oca2, ocaType=1, transmit=False))
 
-        # 3. Child Profit Target 1 (50% scale-out)
-        t1_order = LimitOrder("SELL", t["tier1_shares"], t["tier1_target"], parentId=parent_id, transmit=False, tif="GTC")
-        ib.placeOrder(contract, t1_order)
+            # Last child transmits the whole bracket
+            child_orders[-1].transmit = True
+            for o in child_orders:
+                ib.placeOrder(contract, o)
 
-        # 4. Child Profit Target 2 (50% runner) - transmit=True arms the entire bracket!
-        t2_order = LimitOrder("SELL", t["tier2_shares"], t["tier2_target"], parentId=parent_id, transmit=True, tif="GTC")
-        ib.placeOrder(contract, t2_order)
-
-        print(f"[IBKRBridge] -> Bracket Armed for {sym}: Parent ID {parent_id} | Stop: ${t['stop_loss']:.2f} | T1: ${t['tier1_target']:.2f} | T2: ${t['tier2_target']:.2f}")
+            print(f"[IBKRBridge] -> Bracket Armed for {sym}: Parent ID {parent_id} | Stop: ${t['stop_loss']:.2f} | "
+                  f"T1: {legs['tier1']} @ ${t['tier1_target']:.2f} | T2: {legs['tier2']} @ ${t['tier2_target']:.2f}")
+            print("[IBKRBridge]    Note: after T1 fills, the T2 stop stays at the original level. "
+                  "Raise it to breakeven manually in TWS if desired.")
+        except Exception as e:
+            print(f"[IBKRBridge] Error submitting bracket for {sym}: {e}. Continuing with next ticket.")
 
     ib.sleep(2)
     ib.disconnect()

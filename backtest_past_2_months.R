@@ -41,17 +41,21 @@ feat_names <- pipeline_out$feature_names
 
 # Slicing the past 2 months (43 observations in labeled model dataset)
 eval_n <- 43
-train_idx <- 1:(nrow(df_model) - eval_n)
+# Embargo training window by 5 days to eliminate target leakage
+train_idx <- 1:(nrow(df_model) - eval_n - 5)
 test_idx  <- (nrow(df_model) - eval_n + 1):nrow(df_model)
 test_dates <- df_model$Date[test_idx]
 
-# 3. Train ElasticNet Out-of-Sample
+# 3. Train ElasticNet Out-of-Sample with Blocked Folds
 X_train <- as.matrix(df_model[train_idx, feat_names])
 y_train <- df_model$TargetBinary[train_idx]
 X_test  <- as.matrix(df_model[test_idx, feat_names])
 
 set.seed(42)
-cv_fit <- cv.glmnet(X_train, y_train, alpha = 0.5, family = "binomial")
+n_tr <- length(train_idx)
+nfolds <- 5
+foldid <- rep(1:nfolds, each = ceiling(n_tr / nfolds))[1:n_tr]
+cv_fit <- cv.glmnet(X_train, y_train, foldid = foldid, alpha = 0.5, family = "binomial")
 pred_probs <- predict(cv_fit, newx = X_test, s = "lambda.min", type = "response")
 pred_class <- ifelse(pred_probs > 0.58, 1, ifelse(pred_probs < 0.42, -1, 0))
 
@@ -144,7 +148,8 @@ cat(sprintf(" 2-Month Total Excess Return (Alpha):  %+.2f%% (Strategy: %+.2f%% v
             excess_return, strat_cum_num, spy_cum_num))
 cat(sprintf(" Annualized Jensen's Alpha:           %+.2f%%\n", alpha_ann * 100))
 cat(sprintf(" Beta to S&P 500:                     %.2f (Low Market Directional Exposure)\n", beta_spy))
-cat(sprintf(" Correlation with S&P 500:            %.2f\n", cor(strat_v, spy_v)))
+strat_cor <- if (!is.na(sd(strat_v)) && sd(strat_v) > 0) cor(strat_v, spy_v) else 0.0
+cat(sprintf(" Correlation with S&P 500:            %.2f\n", strat_cor))
 cat(sprintf(" Downside Protection (Max Drawdown):  %.2f%% (Strategy) vs %.2f%% (SNDK Buy & Hold)\n",
             as.numeric(sub("%", "", scorecard$Max_Drawdown[1])),
             as.numeric(sub("%", "", scorecard$Max_Drawdown[2]))))

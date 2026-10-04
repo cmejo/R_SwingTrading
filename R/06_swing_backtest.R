@@ -87,7 +87,8 @@ run_swing_backtest <- function(ohlcv,
   # Benchmark 2: Classic MA Crossover on the same test period
   fast_lm_fit <- pipeline_out$dual_lm$fast_lm$fit[test_dates]
   slow_lm_fit <- pipeline_out$dual_lm$slow_lm$fit[test_dates]
-  ma_raw_sig  <- ifelse(fast_lm_fit > slow_lm_fit, 1, ifelse(allow_short, -1, 0))
+  ma_sig_vec  <- ifelse(as.numeric(fast_lm_fit) > as.numeric(slow_lm_fit), 1, ifelse(allow_short, -1, 0))
+  ma_raw_sig  <- xts(ma_sig_vec, order.by = test_dates)
   ma_pos      <- lag.xts(ma_raw_sig, 1)[common_idx]
   ma_pos[is.na(ma_pos)] <- 0
   ma_ret      <- ma_pos * asset_rets
@@ -142,8 +143,8 @@ run_swing_backtest <- function(ohlcv,
     calc_metrics(bh_ret, paste0("Buy & Hold (", gsub("\\.[A-Za-z]+$", "", colnames(Cl(ohlcv))[1]), ")"))
   )
   
-  # Generate Trade Log
-  pos_vals <- as.numeric(effective_pos[common_idx])
+  # Generate Trade Log using discrete directional position (pos_xts)
+  pos_vals <- as.numeric(pos_xts[common_idx])
   trade_dates <- common_idx
   trades_list <- list()
   in_trade <- FALSE

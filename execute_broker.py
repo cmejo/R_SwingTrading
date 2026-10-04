@@ -28,7 +28,7 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
     tickets = []
     # Match order tickets
     ticket_blocks = re.findall(
-        r"--- ORDER TICKET #(\d+): (\w+) \(P\(Up\): ([\d\.]+)%.*?Sector: ([^\)]+)\) ---\n(.*?)(?=(?:--- ORDER TICKET|========================================================================================|\Z))",
+        r"--- ORDER TICKET #(\d+): ([A-Za-z0-9\.\-]+) \(P\(Up\): ([\d\.]+)%.*?Sector: ([^\)]+)\) ---\n(.*?)(?=(?:--- ORDER TICKET|========================================================================================|\Z))",
         content,
         re.DOTALL
     )
@@ -76,154 +76,77 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
     return tickets
 
 def build_ibkr_payload(ticket: Dict[str, Any]) -> Dict[str, Any]:
-    """Generates TWS / IB Gateway Bracket Order Specification."""
-    return {
-        "broker": "Interactive Brokers (IBKR)",
-        "symbol": ticket["symbol"],
-        "secType": "STK",
-        "exchange": "SMART",
-        "currency": "USD",
-        "parent_order": {
-            "action": "BUY",
-            "orderType": "MKT",
-            "totalQuantity": ticket["shares"],
-            "transmit": False
-        },
-        "child_stop_loss": {
-            "action": "SELL",
-            "orderType": "STP",
-            "auxPrice": ticket["stop_loss"],
-            "totalQuantity": ticket["shares"],
-            "tif": "GTC",
-            "transmit": False
-        },
-        "child_profit_target_1": {
-            "action": "SELL",
-            "orderType": "LMT",
-            "lmtPrice": ticket["tier1_target"],
-            "totalQuantity": ticket["tier1_shares"],
-            "tif": "GTC",
-            "transmit": False,
-            "note": "Tier 1: 50% scale-out (+1.5R)"
-        },
-        "child_profit_target_2": {
-            "action": "SELL",
-            "orderType": "LMT",
-            "lmtPrice": ticket["tier2_target"],
-            "totalQuantity": ticket["tier2_shares"],
-            "tif": "GTC",
-            "transmit": True,
-            "note": "Tier 2: 50% runner (+3.0R)"
-        }
-    }
+    """Generates TWS / IB Gateway Bracket Order Specification.
+    Delegates to execute_ibkr.py so both entry points share one OCA-linked bracket design."""
+    from execute_ibkr import build_ibkr_bracket_spec
+    return build_ibkr_bracket_spec(ticket)
 
-def build_schwab_payload(ticket: Dict[str, Any]) -> Dict[str, Any]:
-    """Generates Charles Schwab Trader API FIRST_TRIGGERS_OCO JSON payload."""
+
+def _schwab_leg_order(symbol: str, qty: int, stop_px: float, target_px: float) -> Dict[str, Any]:
+    """One Schwab FIRST_TRIGGERS_OCO order: BUY qty at market, then an OCO of
+    STOP (qty) and LIMIT target (qty). Stop and target are the same size, so a
+    filled target cancels the stop and nothing is left unprotected or oversized."""
+    instrument = {"symbol": symbol, "assetType": "EQUITY"}
     return {
-        "broker": "Charles Schwab Trader API",
         "orderStrategyType": "TRIGGER",
         "orderType": "MARKET",
         "session": "NORMAL",
         "duration": "DAY",
-        "orderLegCollection": [
-            {
-                "instruction": "BUY",
-                "quantity": ticket["shares"],
-                "instrument": {
-                    "symbol": ticket["symbol"],
-                    "assetType": "EQUITY"
+        "orderLegCollection": [{"instruction": "BUY", "quantity": qty, "instrument": instrument}],
+        "childOrderStrategies": [{
+            "orderStrategyType": "OCO",
+            "childOrderStrategies": [
+                {
+                    "orderStrategyType": "SINGLE",
+                    "orderType": "STOP",
+                    "session": "NORMAL",
+                    "duration": "GOOD_TILL_CANCEL",
+                    "stopPrice": round(stop_px, 2),
+                    "orderLegCollection": [{"instruction": "SELL", "quantity": qty, "instrument": instrument}]
+                },
+                {
+                    "orderStrategyType": "SINGLE",
+                    "orderType": "LIMIT",
+                    "session": "NORMAL",
+                    "duration": "GOOD_TILL_CANCEL",
+                    "price": round(target_px, 2),
+                    "orderLegCollection": [{"instruction": "SELL", "quantity": qty, "instrument": instrument}]
                 }
-            }
-        ],
-        "childOrderStrategies": [
-            {
-                "orderStrategyType": "OCO",
-                "childOrderStrategies": [
-                    {
-                        "orderType": "STOP",
-                        "session": "NORMAL",
-                        "duration": "GOOD_TILL_CANCEL",
-                        "stopPrice": ticket["stop_loss"],
-                        "orderLegCollection": [
-                            {
-                                "instruction": "SELL",
-                                "quantity": ticket["shares"],
-                                "instrument": {
-                                    "symbol": ticket["symbol"],
-                                    "assetType": "EQUITY"
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        "orderType": "LIMIT",
-                        "session": "NORMAL",
-                        "duration": "GOOD_TILL_CANCEL",
-                        "price": ticket["tier1_target"],
-                        "orderLegCollection": [
-                            {
-                                "instruction": "SELL",
-                                "quantity": ticket["tier1_shares"],
-                                "instrument": {
-                                    "symbol": ticket["symbol"],
-                                    "assetType": "EQUITY"
-                                }
-                            }
-                        ]
-                    }
-                ]
-            }
-        ]
+            ]
+        }]
     }
 
+
+def build_schwab_payloads(ticket: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Generates Charles Schwab Trader API orders for one ticket.
+
+    Schwab's API places whole-share orders, and one OCO can only pair one stop with
+    one target. To keep both profit tiers AND a stop on every share, the position is
+    split into two independent FIRST_TRIGGERS_OCO orders:
+      - Tier 1 leg (floor(shares/2)): stop + Tier 1 target
+      - Tier 2 leg (remainder):       stop + Tier 2 runner target
+    If the total is 1 share, only the Tier 2 leg is sent."""
+    total = int(ticket["shares"])
+    tier1 = total // 2
+    tier2 = total - tier1
+    orders = []
+    if tier1 > 0:
+        orders.append(_schwab_leg_order(ticket["symbol"], tier1, ticket["stop_loss"], ticket["tier1_target"]))
+    if tier2 > 0:
+        orders.append(_schwab_leg_order(ticket["symbol"], tier2, ticket["stop_loss"], ticket["tier2_target"]))
+    return orders
+
+
+def build_schwab_payload(ticket: Dict[str, Any]) -> Dict[str, Any]:
+    """Backward-compatible wrapper: returns a preview dict containing every leg order."""
+    return {"broker": "Charles Schwab Trader API", "orders": build_schwab_payloads(ticket)}
+
+
 def execute_ibkr(tickets: List[Dict[str, Any]], host: str, port: int, client_id: int, dry_run: bool):
-    print(f"\n[IBKR Bridge] Connecting to TWS/Gateway at {host}:{port} (Client ID: {client_id})...")
-    
-    if dry_run:
-        print("[IBKR Bridge] MODE: DRY RUN (Simulation only. No orders transmitted).")
-        for t in tickets:
-            payload = build_ibkr_payload(t)
-            print(f"\n--- Staging IBKR Bracket: {t['symbol']} ({t['shares']} shares) ---")
-            print(json.dumps(payload, indent=2))
-        print("\n[IBKR Bridge] Dry-run validation SUCCESS: All bracket payloads valid.")
-        return
-
-    # Live connection via ib_insync if installed
-    try:
-        from ib_insync import IB, Stock, MarketOrder, StopOrder, LimitOrder
-        ib = IB()
-        ib.connect(host, port, clientId=client_id)
-        print("[IBKR Bridge] Connected successfully to Interactive Brokers API.")
-
-        for t in tickets:
-            contract = Stock(t["symbol"], "SMART", "USD")
-            ib.qualifyContracts(contract)
-
-            # Build Bracket
-            parent = MarketOrder("BUY", t["shares"], transmit=False)
-            parent_trade = ib.placeOrder(contract, parent)
-
-            stop_order = StopOrder("SELL", t["shares"], t["stop_loss"], parentId=parent_trade.order.orderId, transmit=False, tif="GTC")
-            ib.placeOrder(contract, stop_order)
-
-            t1_order = LimitOrder("SELL", t["tier1_shares"], t["tier1_target"], parentId=parent_trade.order.orderId, transmit=False, tif="GTC")
-            ib.placeOrder(contract, t1_order)
-
-            t2_order = LimitOrder("SELL", t["tier2_shares"], t["tier2_target"], parentId=parent_trade.order.orderId, transmit=True, tif="GTC")
-            ib.placeOrder(contract, t2_order)
-
-            print(f"[IBKR Bridge] Submitted Live Bracket Order for {t['symbol']}: {t['shares']} shares")
-
-        ib.disconnect()
-        print("[IBKR Bridge] Live execution finished. Disconnected.")
-    except ImportError:
-        print("[IBKR Bridge] 'ib_insync' package not installed. Run: pip install ib_insync")
-        print("[IBKR Bridge] Generating simulated order verification payloads instead.")
-        for t in tickets:
-            print(json.dumps(build_ibkr_payload(t), indent=2))
-    except Exception as e:
-        print(f"[IBKR Bridge] Connection error: {e}")
-        sys.exit(1)
+    """Delegates to execute_ibkr.py (OCA-linked two-leg brackets, whole shares,
+    contract qualification checks)."""
+    from execute_ibkr import execute_ibkr as _execute_ibkr
+    _execute_ibkr(tickets, host=host, port=port, client_id=client_id, dry_run=dry_run)
 
 def load_dot_env(env_file: str = ".env"):
     if os.path.exists(env_file):
@@ -358,7 +281,7 @@ def execute_schwab(tickets: List[Dict[str, Any]], dry_run: bool):
         print("[Schwab Bridge] MODE: DRY RUN (Simulation only. No orders transmitted).")
         for t in tickets:
             payload = build_schwab_payload(t)
-            print(f"\n--- Staging Schwab REST Bracket: {t['symbol']} ({t['shares']} shares) ---")
+            print(f"\n--- Staging Schwab REST Bracket: {t['symbol']} ({int(t['shares'])} whole shares, {len(payload['orders'])} leg orders) ---")
             print(json.dumps(payload, indent=2))
         print("\n[Schwab Bridge] Dry-run validation SUCCESS: All Schwab order payloads valid.")
         return
@@ -381,10 +304,18 @@ def execute_schwab(tickets: List[Dict[str, Any]], dry_run: bool):
         print(f"[Schwab Bridge] Connected to Schwab Account: ***{acct_num[-4:]} (Hash: {acct_hash[:8]}...)")
 
         for t in tickets:
-            payload = build_schwab_payload(t)
-            print(f"[Schwab Bridge] Submitting Live Bracket for {t['symbol']} ({t['shares']} shares)...")
-            res = schwab.place_order(acct_hash, payload)
-            print(f"[Schwab Bridge] Order Submitted Successfully: {res}")
+            legs = build_schwab_payloads(t)
+            if not legs:
+                print(f"[Schwab Bridge] Skipping {t['symbol']}: {t['shares']} shares rounds to 0 whole shares.")
+                continue
+            for leg_i, leg in enumerate(legs, 1):
+                qty = leg["orderLegCollection"][0]["quantity"]
+                print(f"[Schwab Bridge] Submitting bracket leg {leg_i}/{len(legs)} for {t['symbol']} ({qty} shares)...")
+                try:
+                    res = schwab.place_order(acct_hash, leg)
+                    print(f"[Schwab Bridge] Order Submitted Successfully: {res}")
+                except Exception as leg_err:
+                    print(f"[Schwab Bridge] Leg {leg_i} for {t['symbol']} failed: {leg_err}")
     except Exception as e:
         print(f"[Schwab Bridge] Execution error: {e}")
         sys.exit(1)

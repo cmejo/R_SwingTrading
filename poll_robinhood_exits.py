@@ -171,9 +171,10 @@ def evaluate_exits(rh, dry_run: bool = True):
                 to_delete.append(sym)
             continue
 
-        # 2. Check Tier 2 Profit Target (Full Exit)
-        if curr_px >= t2_target and pos.get("tier1_executed", False):
-            rem_shares = pos.get("tier2_shares", shares)
+        # 2. Check Tier 2 Profit Target (Full Exit of everything still held).
+        #    Also fires on a gap past both targets before Tier 1 executed.
+        if curr_px >= t2_target:
+            rem_shares = shares
             msg = f"🎯 [ROBINHOOD TARGET 2 REACHED] {sym} reached ${curr_px:.2f} >= Target ${t2_target:.2f}! Selling remaining {rem_shares} shares."
             print(f"[{timestamp}] {msg}")
             send_alert(msg)

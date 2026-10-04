@@ -43,7 +43,7 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
 
     tickets = []
     ticket_blocks = re.findall(
-        r"--- ORDER TICKET #(\d+): (\w+) \(P\(Up\): ([\d\.]+)%.*?Sector: ([^\)]+)\) ---\n(.*?)(?=(?:--- ORDER TICKET|========================================================================================|\Z))",
+        r"--- ORDER TICKET #(\d+): ([A-Za-z0-9\.\-]+) \(P\(Up\): ([\d\.]+)%.*?Sector: ([^\)]+)\) ---\n(.*?)(?=(?:--- ORDER TICKET|========================================================================================|\Z))",
         content,
         re.DOTALL
     )
@@ -132,6 +132,31 @@ def login_robinhood():
     )
     return rh, login_res
 
+def wait_for_fill(rh, order_id: str, timeout_sec: int = 60, poll_sec: int = 3) -> Dict[str, Any]:
+    """Poll Robinhood until the order is filled, rejected, or the timeout passes.
+    Returns {'state', 'filled_qty', 'avg_price'}."""
+    import time
+    deadline = time.time() + timeout_sec
+    info = {}
+    while time.time() < deadline:
+        try:
+            info = rh.orders.get_stock_order_info(order_id) or {}
+        except Exception as e:
+            print(f"   [WARNING] Could not fetch order status: {e}")
+            info = {}
+        state = info.get("state", "unknown")
+        if state in ("filled", "rejected", "cancelled", "failed"):
+            break
+        time.sleep(poll_sec)
+    filled_qty = float(info.get("cumulative_quantity") or 0.0)
+    avg_px = info.get("average_price")
+    return {
+        "state": info.get("state", "unknown"),
+        "filled_qty": filled_qty,
+        "avg_price": float(avg_px) if avg_px not in (None, "") else None,
+    }
+
+
 def execute_buys(tickets: List[Dict[str, Any]], dry_run: bool = True):
     print(f"\n[RobinhoodBridge] Processing {len(tickets)} Actionable Order Tickets (Dry Run = {dry_run})...")
     positions_data = load_robinhood_positions()
@@ -140,8 +165,11 @@ def execute_buys(tickets: List[Dict[str, Any]], dry_run: bool = True):
     rh = None
     if not dry_run:
         rh, _ = login_robinhood()
-        profile = rh.profiles.load_account_profile()
-        buying_power = float(profile.get("buying_power", 0.0))
+        profile = rh.profiles.load_account_profile() or {}
+        raw_bp = profile.get("buying_power")
+        if raw_bp in (None, ""):
+            raw_bp = profile.get("portfolio_cash", 0.0)
+        buying_power = float(raw_bp or 0.0)
         print(f"[RobinhoodBridge] Logged in. Total Available Buying Power: ${buying_power:,.2f}")
 
     for t in tickets:
@@ -156,6 +184,9 @@ def execute_buys(tickets: List[Dict[str, Any]], dry_run: bool = True):
         print(f"\n-> Staging Buy: {sym} | Shares: {shares} | Target Outlay: ${outlay:.2f}")
         print(f"   Stop-Loss: ${t['stop_loss']:.2f} | T1 Target: ${t['tier1_target']:.2f} | T2 Target: ${t['tier2_target']:.2f}")
 
+        filled_shares = shares
+        entry_px = outlay / shares if shares > 0 else 0.0
+
         if dry_run:
             print(f"   [DRY RUN] Would submit market buy order for {shares} shares of {sym} on Robinhood.")
         else:
@@ -166,24 +197,41 @@ def execute_buys(tickets: List[Dict[str, Any]], dry_run: bool = True):
                     quantity=shares,
                     timeInForce="gfd"
                 )
-                if order and "id" in order:
-                    print(f"   [SUCCESS] Order submitted! Order ID: {order['id']} | State: {order.get('state')}")
-                else:
-                    print(f"   [WARNING] Order submission returned: {order}")
             except Exception as e:
                 print(f"   [ERROR] Failed to execute order on Robinhood: {e}")
                 continue
 
+            if not order or "id" not in order or order.get("state") in ("rejected", "failed", "cancelled"):
+                print(f"   [ERROR] Order rejected or not accepted: {order}. Not tracking {sym}.")
+                continue
+
+            print(f"   [SUBMITTED] Order ID: {order['id']} | State: {order.get('state')}. Waiting for fill...")
+            fill = wait_for_fill(rh, order["id"])
+            if fill["filled_qty"] <= 0:
+                print(f"   [WARNING] {sym} order not filled (state: {fill['state']}). Not tracking it. "
+                      f"Check the Robinhood app and cancel or record it manually.")
+                continue
+            if fill["filled_qty"] < shares:
+                print(f"   [WARNING] Partial fill: {fill['filled_qty']} of {shares} shares (state: {fill['state']}).")
+            filled_shares = fill["filled_qty"]
+            if fill["avg_price"]:
+                entry_px = fill["avg_price"]
+            print(f"   [FILLED] {filled_shares} shares of {sym} @ ${entry_px:.2f}")
+
+        # Scale tier sizes to what was actually filled
+        t1_shares = round(filled_shares / 2.0, 4)
+        t2_shares = round(filled_shares - t1_shares, 4)
+
         # Register position for local background stop/target monitoring
         active_positions[sym] = {
             "symbol": sym,
-            "shares": shares,
-            "entry_estimated_price": outlay / shares if shares > 0 else 0.0,
+            "shares": filled_shares,
+            "entry_estimated_price": entry_px,
             "stop_loss": t["stop_loss"],
-            "tier1_shares": t["tier1_shares"],
+            "tier1_shares": t1_shares,
             "tier1_target": t["tier1_target"],
             "tier1_executed": False,
-            "tier2_shares": t["tier2_shares"],
+            "tier2_shares": t2_shares,
             "tier2_target": t["tier2_target"],
             "tier2_executed": False,
             "breakeven_stop_active": False

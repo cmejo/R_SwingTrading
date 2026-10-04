@@ -47,7 +47,8 @@ feat_names <- pipeline_out$feature_names
 
 n_total <- nrow(df_model)
 eval_n <- min(DAYS, floor(n_total * 0.4))
-train_idx <- 1:(n_total - eval_n)
+# Embargo training window by 5 days to eliminate target leakage
+train_idx <- 1:(n_total - eval_n - 5)
 test_idx <- (n_total - eval_n + 1):n_total
 
 X_train <- as.matrix(df_model[train_idx, feat_names])
@@ -56,7 +57,10 @@ X_test  <- as.matrix(df_model[test_idx, feat_names])
 y_test  <- df_model$TargetBinary[test_idx]
 
 set.seed(42)
-cv_fit <- cv.glmnet(X_train, y_train, alpha = 0.5, family = "binomial")
+n_tr <- length(train_idx)
+nfolds <- 5
+foldid <- rep(1:nfolds, each = ceiling(n_tr / nfolds))[1:n_tr]
+cv_fit <- cv.glmnet(X_train, y_train, foldid = foldid, alpha = 0.5, family = "binomial")
 pred_probs <- predict(cv_fit, newx = X_test, s = "lambda.min", type = "response")
 pred_class <- ifelse(pred_probs > 0.58, 1, ifelse(pred_probs < 0.42, -1, 0))
 
@@ -83,7 +87,7 @@ strat_ret_num <- as.numeric(sub("%", "", strat_row$Cumulative_Return))
 bh_ret_num    <- as.numeric(sub("%", "", bh_row$Cumulative_Return))
 strat_dd_num  <- as.numeric(sub("%", "", strat_row$Max_Drawdown))
 win_rate_num  <- as.numeric(sub("%", "", strat_row$Win_Rate))
-pf_num        <- as.numeric(strat_row$Profit_Factor)
+pf_num        <- if (!is.na(as.numeric(strat_row$Profit_Factor))) as.numeric(strat_row$Profit_Factor) else 999.0
 
 # Strategy Health Diagnosis
 health_status <- "HEALTHY (NOMINAL OPERATION)"

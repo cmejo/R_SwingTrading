@@ -268,8 +268,14 @@ for (sym in SYMBOLS) {
     train_slice <- if (n_obs > TRAIN_WINDOW) tail(df_model, TRAIN_WINDOW) else df_model
     X_train <- as.matrix(train_slice[, feat_names])
     y_train <- train_slice$TargetBinary
+    if (length(unique(y_train)) < 2) {
+      stop(sprintf("Training slice for %s contains only 1 target class.", sym))
+    }
     set.seed(42)
-    cv_fit <- cv.glmnet(X_train, y_train, alpha = 0.5, family = "binomial", type.measure = "deviance")
+    n_tr <- nrow(X_train)
+    nfolds <- min(5, max(3, floor(n_tr / 20)))
+    foldid <- rep(1:nfolds, each = ceiling(n_tr / nfolds))[1:n_tr]
+    cv_fit <- cv.glmnet(X_train, y_train, foldid = foldid, alpha = 0.5, family = "binomial", type.measure = "deviance")
     
     # Today's features
     dual_lm <- calculate_dual_lmMA(price, fast_n = FAST_N, slow_n = SLOW_N)
@@ -673,6 +679,8 @@ if (isTRUE(IS_FRIDAY)) {
       actionable_df <- unowned_buys[unowned_buys$Symbol %in% candidate_syms, ]
       vince_alloc <- NULL
       
+      slot_capital_equal <- purchasing_power / empty_slots
+
       # Ralph Vince Leverage Space Model Sizing
       if (SIZING_MODE == "vince") {
         cat(sprintf(" Sizing Engine: Ralph Vince Leverage Space Model (Safe f = %.2f, %d-Day Scenarios, Fractional: %s, Leverage: %.2fx)\n",
@@ -684,9 +692,26 @@ if (isTRUE(IS_FRIDAY)) {
             sub_events <- joint_events[, avail_syms, drop = FALSE]
             vince_opt <- vince_optimal_f(sub_events, max_leverage = LEVERAGE, safety_factor = EFFECTIVE_SAFETY_FACTOR)
             cur_px_map <- setNames(actionable_df$Close[match(avail_syms, actionable_df$Symbol)], avail_syms)
-            vince_alloc <- vince_portfolio_allocation(vince_opt, total_cash = purchasing_power, current_prices = cur_px_map, allow_fractional = ALLOW_FRACTIONAL)
-            cat(sprintf(" -> Optimized Portfolio GHPR: %.4f (Expected Geometric Growth: %+.2f%% / day)\n\n",
-                        vince_opt$ghpr, vince_opt$expected_growth_pct))
+            
+            # Cap deployable cash to slot budget across available symbols to prevent oversizing
+            allocable_cash <- min(purchasing_power, slot_capital_equal * length(avail_syms))
+            vince_alloc <- vince_portfolio_allocation(vince_opt, total_cash = allocable_cash, current_prices = cur_px_map, allow_fractional = ALLOW_FRACTIONAL)
+            
+            # Enforce max 1.25x equal-weight slot cap per individual position to preserve diversification
+            max_single_alloc <- slot_capital_equal * 1.25
+            if (any(vince_alloc$Dollar_Allocation > max_single_alloc)) {
+              vince_alloc$Dollar_Allocation <- pmin(max_single_alloc, vince_alloc$Dollar_Allocation)
+              vince_alloc$Weight <- vince_alloc$Dollar_Allocation / sum(vince_alloc$Dollar_Allocation)
+              if (isTRUE(ALLOW_FRACTIONAL)) {
+                vince_alloc$Shares <- round(vince_alloc$Dollar_Allocation / vince_alloc$Current_Price, 3)
+              } else {
+                vince_alloc$Shares <- floor(vince_alloc$Dollar_Allocation / vince_alloc$Current_Price)
+              }
+              vince_alloc$Actual_Outlay <- round(vince_alloc$Shares * vince_alloc$Current_Price, 2)
+              vince_alloc$Cash_Left <- round(vince_alloc$Dollar_Allocation - vince_alloc$Actual_Outlay, 2)
+            }
+            cat(sprintf(" -> Optimized Portfolio GHPR: %.4f (Expected Geometric Growth: %+.2f%% / day | Allocable Cash: $%.2f)\n\n",
+                        vince_opt$ghpr, vince_opt$expected_growth_pct, allocable_cash))
           }
         }, error = function(e) {
           cat(sprintf(" -> Leverage Space note: %s. Using Equal-Weight slots.\n\n", e$message))
@@ -694,7 +719,6 @@ if (isTRUE(IS_FRIDAY)) {
         })
       }
       
-      slot_capital_equal <- purchasing_power / empty_slots
       if (is.null(vince_alloc)) {
         cat(sprintf(" Sizing Mode: Equal-Weight Cash Allocation ($%.2f per slot with %.2fx leverage)\n\n", slot_capital_equal, LEVERAGE))
       }

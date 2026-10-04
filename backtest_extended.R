@@ -94,11 +94,19 @@ run_walkforward_backtest <- function(symbol = "AMD", test_bars = 252, horizon_na
     # Retrain model every 20 trading days (~monthly)
     if (i %% 20 == 1 || is.null(current_cv_fit)) {
       tr_start <- max(1, cur_idx - train_window)
-      tr_end   <- cur_idx - 1
-      X_tr <- as.matrix(df_model[tr_start:tr_end, feat_names])
-      y_tr <- df_model$TargetBinary[tr_start:tr_end]
-      set.seed(42)
-      current_cv_fit <- glmnet::cv.glmnet(X_tr, y_tr, alpha = 0.5, family = "binomial", type.measure = "deviance")
+      # Embargo training target by look_ahead window (5 days) to eliminate lookahead leakage
+      tr_end   <- cur_idx - 5
+      if (tr_end > (tr_start + 25)) {
+        X_tr <- as.matrix(df_model[tr_start:tr_end, feat_names])
+        y_tr <- df_model$TargetBinary[tr_start:tr_end]
+        if (length(unique(y_tr)) >= 2) {
+          set.seed(42)
+          n_tr <- nrow(X_tr)
+          nfolds <- min(5, max(3, floor(n_tr / 20)))
+          foldid <- rep(1:nfolds, each = ceiling(n_tr / nfolds))[1:n_tr]
+          current_cv_fit <- glmnet::cv.glmnet(X_tr, y_tr, foldid = foldid, alpha = 0.5, family = "binomial", type.measure = "deviance")
+        }
+      }
     }
     x_cur <- matrix(as.numeric(df_model[cur_idx, feat_names]), nrow = 1)
     p <- as.numeric(predict(current_cv_fit, newx = x_cur, s = "lambda.min", type = "response"))
@@ -114,27 +122,24 @@ run_walkforward_backtest <- function(symbol = "AMD", test_bars = 252, horizon_na
   # 2. ML Swing Strategy (1.5x Margin Leverage)
   bt_15 <- run_swing_backtest(ohlcv, model_res, pipeline_out, allow_short = FALSE, target_vol = 0.30, max_leverage = 1.5)
   
-  # Benchmarks
+  # Benchmarks (calculate full arithmetic returns first to preserve bar 1)
   spy_ohlcv <- load_stock_data("SPY")
-  spy_cl    <- Cl(spy_ohlcv)[test_dates]
-  spy_ret   <- na.omit(diff(log(spy_cl)))
+  spy_cl    <- Cl(spy_ohlcv)
+  spy_ret_all <- na.omit((spy_cl / lag.xts(spy_cl, 1)) - 1)
   
   qqq_ohlcv <- load_stock_data("QQQ")
-  qqq_cl    <- Cl(qqq_ohlcv)[test_dates]
-  qqq_ret   <- na.omit(diff(log(qqq_cl)))
+  qqq_cl    <- Cl(qqq_ohlcv)
+  qqq_ret_all <- na.omit((qqq_cl / lag.xts(qqq_cl, 1)) - 1)
   
-  # Extract returns
-  ml_10_ret <- bt_10$equity_curves$ML_Swing_Strategy
-  ml_10_r   <- na.omit(diff(log(ml_10_ret)))
+  # Extract exact arithmetic returns from backtest
+  ml_10_r   <- bt_10$strat_net_ret
+  ml_15_r   <- bt_15$strat_net_ret
+  ma_r      <- bt_10$ma_ret
+  bh_r      <- bt_10$bh_ret
   
-  ml_15_ret <- bt_15$equity_curves$ML_Swing_Strategy
-  ml_15_r   <- na.omit(diff(log(ml_15_ret)))
-  
-  ma_ret    <- bt_10$equity_curves$Classic_MA_Cross
-  ma_r      <- na.omit(diff(log(ma_ret)))
-  
-  bh_ret    <- bt_10$equity_curves$Buy_and_Hold
-  bh_r      <- na.omit(diff(log(bh_ret)))
+  common_idx <- index(ml_10_r)
+  spy_ret   <- spy_ret_all[common_idx]
+  qqq_ret   <- qqq_ret_all[common_idx]
   
   # Metrics Table
   stats_df <- rbind(
@@ -146,20 +151,16 @@ run_walkforward_backtest <- function(symbol = "AMD", test_bars = 252, horizon_na
     calc_stats(qqq_ret, "Nasdaq 100 Index (QQQ)")
   )
   
-  # Align equity curves to base $10,000
+  # Align equity curves to base $10,000 using arithmetic compounding
   init_cap <- 10000
-  eq_ml10 <- init_cap * cumprod(1 + ml_10_r)
-  eq_ml15 <- init_cap * cumprod(1 + ml_15_r)
-  eq_ma   <- init_cap * cumprod(1 + ma_r)
-  eq_bh   <- init_cap * cumprod(1 + bh_r)
+  eq_ml10 <- init_cap * cumprod(1 + as.numeric(ml_10_r))
+  eq_ml15 <- init_cap * cumprod(1 + as.numeric(ml_15_r))
+  eq_ma   <- init_cap * cumprod(1 + as.numeric(ma_r))
+  eq_bh   <- init_cap * cumprod(1 + as.numeric(bh_r))
+  eq_spy  <- init_cap * cumprod(1 + as.numeric(spy_ret))
+  eq_qqq  <- init_cap * cumprod(1 + as.numeric(qqq_ret))
   
-  common_idx <- index(eq_ml10)
-  spy_sub <- spy_ret[common_idx]
-  qqq_sub <- qqq_ret[common_idx]
-  eq_spy  <- init_cap * cumprod(1 + spy_sub)
-  eq_qqq  <- init_cap * cumprod(1 + qqq_sub)
-  
-  eq_all <- merge(eq_ml10, eq_ml15, eq_ma, eq_bh, eq_spy, eq_qqq)
+  eq_all <- xts(cbind(eq_ml10, eq_ml15, eq_ma, eq_bh, eq_spy, eq_qqq), order.by = common_idx)
   colnames(eq_all) <- c("ML_1.0x", "ML_1.5x_Margin", "Classic_MA", "Buy_Hold", "SPY_500", "QQQ_100")
   
   return(list(stats = stats_df, equity = eq_all, symbol = symbol, horizon = horizon_name, dates = test_dates))

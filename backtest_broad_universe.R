@@ -99,11 +99,19 @@ sim_single_stock <- function(sym) {
     cur_idx <- test_start_idx + i - 1
     if (i %% 20 == 1 || is.null(current_cv_fit)) {
       tr_start <- max(1, cur_idx - train_window)
-      tr_end   <- cur_idx - 1
-      X_tr <- as.matrix(df_m[tr_start:tr_end, feat_names])
-      y_tr <- df_m$TargetBinary[tr_start:tr_end]
-      set.seed(42)
-      current_cv_fit <- glmnet::cv.glmnet(X_tr, y_tr, alpha = 0.5, family = "binomial", type.measure = "deviance")
+      # Embargo training target by look_ahead window (5 days) to eliminate lookahead leakage
+      tr_end   <- cur_idx - 5
+      if (tr_end > (tr_start + 25)) {
+        X_tr <- as.matrix(df_m[tr_start:tr_end, feat_names])
+        y_tr <- df_m$TargetBinary[tr_start:tr_end]
+        if (length(unique(y_tr)) >= 2) {
+          set.seed(42)
+          n_tr <- nrow(X_tr)
+          nfolds <- min(5, max(3, floor(n_tr / 20)))
+          foldid <- rep(1:nfolds, each = ceiling(n_tr / nfolds))[1:n_tr]
+          current_cv_fit <- glmnet::cv.glmnet(X_tr, y_tr, foldid = foldid, alpha = 0.5, family = "binomial", type.measure = "deviance")
+        }
+      }
     }
     x_cur <- matrix(as.numeric(df_m[cur_idx, feat_names]), nrow = 1)
     p <- as.numeric(predict(current_cv_fit, newx = x_cur, s = "lambda.min", type = "response"))
@@ -113,20 +121,16 @@ sim_single_stock <- function(sym) {
   model_res <- list(test_dates = test_dates, test_idx = test_start_idx:total_bars, pred_class = pred_class)
   bt <- run_swing_backtest(ohlcv, model_res, pipe, allow_short = FALSE, target_vol = 0.30, max_leverage = 1.0)
   
-  ml_eq <- bt$equity_curves$ML_Swing_Strategy
-  ml_r  <- na.omit(diff(log(ml_eq)))
-  
-  ma_eq <- bt$equity_curves$Classic_MA_Cross
-  ma_r  <- na.omit(diff(log(ma_eq)))
-  
-  bh_eq <- bt$equity_curves$Buy_and_Hold
-  bh_r  <- na.omit(diff(log(bh_eq)))
+  # Extract exact arithmetic returns from backtest
+  ml_r  <- bt$strat_net_ret
+  ma_r  <- bt$ma_ret
+  bh_r  <- bt$bh_ret
   
   m <- calc_metrics(ml_r, sym)
   if (is.null(m)) return(NULL)
   
-  m$BuyHold_Ret <- (as.numeric(tail(bh_eq, 1)) / as.numeric(head(bh_eq, 1))) - 1
-  m$MA_Ret      <- (as.numeric(tail(ma_eq, 1)) / as.numeric(head(ma_eq, 1))) - 1
+  m$BuyHold_Ret <- prod(1 + as.numeric(bh_r)) - 1
+  m$MA_Ret      <- prod(1 + as.numeric(ma_r)) - 1
   
   return(list(metric = m, ml_r = ml_r, ma_r = ma_r, bh_r = bh_r))
 }
@@ -159,38 +163,37 @@ for (sym in symbols) {
 
 cat(sprintf("\nSuccessfully simulated %d assets across the broad watchlist.\n\n", valid_count))
 
-# Merge common test dates for portfolio construction
-common_dates <- Reduce(intersect, lapply(ml_returns_list, function(r) as.character(index(r))))
-common_dates <- as.Date(common_dates)
-common_dates <- sort(common_dates)
+if (valid_count == 0) {
+  stop("No valid assets processed.")
+}
+
+# Merge all stock return series by date into an xts matrix
+all_ml_xts <- do.call(merge, ml_returns_list)
+all_ma_xts <- do.call(merge, ma_returns_list)
+all_bh_xts <- do.call(merge, bh_returns_list)
+
+# Take common trading dates with at least 50% coverage
+date_coverage <- rowSums(!is.na(all_ml_xts))
+common_dates <- index(all_ml_xts)[date_coverage >= max(5, floor(0.5 * valid_count))]
 
 cat(sprintf("Constructing aggregate broad portfolio over %d shared out-of-sample trading days (%s to %s)...\n",
             length(common_dates), as.character(first(common_dates)), as.character(last(common_dates))))
 
-# Aggregate Daily Returns across all valid symbols
-ml_mat <- do.call(cbind, lapply(ml_returns_list, function(r) as.numeric(r[common_dates])))
-ma_mat <- do.call(cbind, lapply(ma_returns_list, function(r) as.numeric(r[common_dates])))
-bh_mat <- do.call(cbind, lapply(bh_returns_list, function(r) as.numeric(r[common_dates])))
+# Portfolio Returns (Equal-weighted cross-asset basket on common trading days)
+port_ml_r <- rowMeans(all_ml_xts[common_dates], na.rm = TRUE)
+port_ma_r <- rowMeans(all_ma_xts[common_dates], na.rm = TRUE)
+port_bh_r <- rowMeans(all_bh_xts[common_dates], na.rm = TRUE)
 
-# Portfolio Returns (Equal-weighted cross-asset basket)
-port_ml_r <- rowMeans(ml_mat, na.rm = TRUE)
-port_ma_r <- rowMeans(ma_mat, na.rm = TRUE)
-port_bh_r <- rowMeans(bh_mat, na.rm = TRUE)
+# Benchmark Returns: calculate full arithmetic returns first
+spy_r_all <- na.omit((Cl(spy_ohlcv) / lag.xts(Cl(spy_ohlcv), 1)) - 1)
+qqq_r_all <- na.omit((Cl(qqq_ohlcv) / lag.xts(Cl(qqq_ohlcv), 1)) - 1)
 
-# Benchmark Returns aligned to same common dates
-spy_cl_c <- Cl(spy_ohlcv)[common_dates]
-spy_r_c  <- na.omit(diff(log(spy_cl_c)))
-
-qqq_cl_c <- Cl(qqq_ohlcv)[common_dates]
-qqq_r_c  <- na.omit(diff(log(qqq_cl_c)))
-
-# Aligned return vectors
-eval_dates <- common_dates[-1] # Drop first date due to diff
-port_ml_vec  <- port_ml_r[-1]
-port_ma_vec  <- port_ma_r[-1]
-port_bh_vec  <- port_bh_r[-1]
-spy_vec      <- as.numeric(spy_r_c)
-qqq_vec      <- as.numeric(qqq_r_c)
+eval_dates   <- common_dates
+port_ml_vec  <- as.numeric(port_ml_r)
+port_ma_vec  <- as.numeric(port_ma_r)
+port_bh_vec  <- as.numeric(port_bh_r)
+spy_vec      <- as.numeric(spy_r_all[common_dates])
+qqq_vec      <- as.numeric(qqq_r_all[common_dates])
 
 # 1.5x Margin Leveraged Portfolio
 port_ml15_vec <- port_ml_vec * 1.5 - (0.07 / 252 * 0.5) # Deduct 7% margin interest on borrowed 0.5x
