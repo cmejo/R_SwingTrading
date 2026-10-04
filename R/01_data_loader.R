@@ -38,7 +38,7 @@ load_stock_data <- function(symbol = "SNDK",
     cat(sprintf("[DataLoader] Attempting to fetch '%s' from Yahoo Finance (%s to %s)...\n", 
                 symbol, from, as.character(to)))
     tryCatch({
-      data_xts <- getSymbols(symbol, src = "yahoo", from = from, to = to, auto.assign = FALSE)
+      data_xts <- suppressWarnings(getSymbols(symbol, src = "yahoo", from = from, to = to, auto.assign = FALSE))
       cat(sprintf("[DataLoader] Successfully fetched %d bars from Yahoo Finance.\n", nrow(data_xts)))
       # Cache downloaded data
       if (!is.null(cache_file)) {

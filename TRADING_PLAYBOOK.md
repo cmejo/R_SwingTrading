@@ -97,6 +97,26 @@ You can stage and submit bracket orders directly to your broker using the built-
    ```bash
    # 1. Preview Schwab FIRST_TRIGGERS_OCO JSON payloads
    Rscript execute_orders.R --broker=schwab --dry_run=TRUE
+
+   # 2. Transmit live orders to Charles Schwab Trader API
+   Rscript execute_orders.R --broker=schwab --dry_run=FALSE --yes
+   ```
+3. **Robinhood**:
+   ```bash
+   # 1. Preview buy order staging
+   Rscript execute_orders.R --broker=robinhood --dry_run=TRUE
+
+   # 2. Execute buy orders on Robinhood
+   Rscript execute_orders.R --broker=robinhood --dry_run=FALSE
+
+   # 3. Start background stop-loss and profit target exit daemon
+   python3 poll_robinhood_exits.py --interval=30 --dry_run=false
+   ```
+4. **Turnkey Automated Daily Pipelines**:
+   ```bash
+   ./auto_trade_ibkr.sh --dry_run=true      # IBKR Pro preview / staging
+   ./auto_trade_schwab.sh --dry_run=true    # Schwab preview / staging
+   ./auto_trade_robinhood.sh --dry_run=true # Robinhood preview / staging
    ```
 
 #### Option B: Manual Execution via Broker Web / Mobile App

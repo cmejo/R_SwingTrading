@@ -86,8 +86,10 @@ bh_row <- perf[3, ]
 strat_ret_num <- as.numeric(sub("%", "", strat_row$Cumulative_Return))
 bh_ret_num    <- as.numeric(sub("%", "", bh_row$Cumulative_Return))
 strat_dd_num  <- as.numeric(sub("%", "", strat_row$Max_Drawdown))
-win_rate_num  <- as.numeric(sub("%", "", strat_row$Win_Rate))
-pf_num        <- if (!is.na(as.numeric(strat_row$Profit_Factor))) as.numeric(strat_row$Profit_Factor) else 999.0
+win_rate_num  <- suppressWarnings(as.numeric(sub("%", "", strat_row$Win_Rate)))
+if (is.na(win_rate_num)) win_rate_num <- 0.0
+pf_val <- suppressWarnings(as.numeric(strat_row$Profit_Factor))
+pf_num <- if (!is.na(pf_val)) pf_val else 999.0
 
 # Strategy Health Diagnosis
 health_status <- "HEALTHY (NOMINAL OPERATION)"

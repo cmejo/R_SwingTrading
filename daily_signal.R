@@ -189,7 +189,8 @@ spy_px <- as.numeric(last(Cl(spy_ohlcv)))
 # Dynamic CBOE VIX Volatility Regime
 vix_info <- tryCatch({
   vix_ohlcv <- load_stock_data("^VIX")
-  vix_px <- as.numeric(last(Cl(vix_ohlcv)))
+  vix_close <- suppressWarnings(na.omit(Cl(vix_ohlcv)))
+  vix_px <- as.numeric(last(vix_close))
   v_reg <- if (vix_px < 20) "NORMAL (Low Volatility)" else if (vix_px <= 28) "ELEVATED (Caution)" else "CRISIS (Extreme Volatility)"
   list(close = vix_px, regime = v_reg)
 }, error = function(e) {

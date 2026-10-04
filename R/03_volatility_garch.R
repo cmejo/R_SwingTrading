@@ -86,12 +86,14 @@ compute_garch_volatility <- function(price_xts, train_idx = NULL) {
       eps_prev2 <- rets_vec[t - 1]^2
       sigma2[t] <- a0 + a1 * eps_prev2 + b1 * sigma2[t - 1]
     }
-    sigma_vec <- sqrt(sigma2)
+    sigma_vec <- sqrt(pmax(sigma2, 1e-8))
   } else {
     # Fallback to rolling standard deviation (20-day window)
     sigma_vec <- as.numeric(TTR::runSD(rets, n = 20))
     # Replace initial NAs with sample sd
-    sigma_vec[is.na(sigma_vec)] <- sd(rets_vec, na.rm = TRUE)
+    fallback_sd <- sd(rets_vec, na.rm = TRUE)
+    if (is.na(fallback_sd) || fallback_sd <= 0) fallback_sd <- 0.02
+    sigma_vec[is.na(sigma_vec) | sigma_vec <= 0] <- fallback_sd
   }
   
   # Standardized shocks: z_t = r_t / sigma_t

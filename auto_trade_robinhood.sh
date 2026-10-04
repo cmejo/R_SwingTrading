@@ -77,7 +77,7 @@ Rscript daily_signal.R \
   --leverage="$LEVERAGE" \
   --max_pos="$MAX_POS" \
   --max_per_sector="$MAX_PER_SECTOR" \
-  --portfolio_file="$PROJECT_DIR/portfolio.json" 2>&1 | tee "$LOG_FILE" > "$LATEST_TICKET"
+  --portfolio_file="$PROJECT_DIR/portfolio.json" 2>&1 | tee "$LOG_FILE" "$LATEST_TICKET"
 
 # Step 2: Check for Actionable Buy Tickets
 N_ACTIONABLE=$(grep -c "Action: *BUY [0-9]" "$LATEST_TICKET" || true)

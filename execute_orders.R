@@ -33,24 +33,38 @@ if (python_bin == "") {
   python_bin <- "/usr/bin/python3"
 }
 
-cmd_args <- c(
-  "execute_broker.py",
-  sprintf("--broker=%s", broker),
-  sprintf("--dry_run=%s", dry_run),
-  sprintf("--ticket_file=%s", ticket_file),
-  sprintf("--port=%s", port)
-)
-if (symbols != "") {
-  cmd_args <- c(cmd_args, sprintf("--symbols=%s", symbols))
-}
-if (interactive_flag) {
-  cmd_args <- c(cmd_args, "--interactive")
-}
-if (yes_flag) {
-  cmd_args <- c(cmd_args, "--yes")
-}
-if (sync_flag) {
-  cmd_args <- c(cmd_args, "--sync")
+initial_options <- commandArgs(trailingOnly = FALSE)
+file_arg <- grep("--file=", initial_options, value = TRUE)
+script_dir <- if (length(file_arg) > 0) dirname(sub("^--file=", "", file_arg)) else "."
+
+if (broker == "robinhood") {
+  broker_py <- file.path(script_dir, "execute_robinhood.py")
+  cmd_args <- c(
+    broker_py,
+    sprintf("--dry_run=%s", dry_run),
+    sprintf("--ticket_file=%s", ticket_file)
+  )
+} else {
+  broker_py <- file.path(script_dir, "execute_broker.py")
+  cmd_args <- c(
+    broker_py,
+    sprintf("--broker=%s", broker),
+    sprintf("--dry_run=%s", dry_run),
+    sprintf("--ticket_file=%s", ticket_file),
+    sprintf("--port=%s", port)
+  )
+  if (symbols != "") {
+    cmd_args <- c(cmd_args, sprintf("--symbols=%s", symbols))
+  }
+  if (interactive_flag) {
+    cmd_args <- c(cmd_args, "--interactive")
+  }
+  if (yes_flag) {
+    cmd_args <- c(cmd_args, "--yes")
+  }
+  if (sync_flag) {
+    cmd_args <- c(cmd_args, "--sync")
+  }
 }
 
 exit_code <- system2(python_bin, args = cmd_args)

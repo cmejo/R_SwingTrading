@@ -160,8 +160,10 @@ vince_optimal_f <- function(events, max_leverage = 1.0, safety_factor = 0.50) {
   ghpr_val <- if (all(hpr_opt > 0)) exp(mean(log(hpr_opt))) else 1.0
   
   # Compute relative capital allocation weights
-  if (sum(safe_f) > 0) {
-    weights <- safe_f / sum(safe_f)
+  # In Leverage Space Model, dollar exposure is proportional to safe_f / abs_max_losses
+  raw_leverage_weights <- safe_f / abs_max_losses
+  if (sum(raw_leverage_weights) > 0) {
+    weights <- raw_leverage_weights / sum(raw_leverage_weights)
   } else {
     weights <- rep(1 / K, K)
     names(weights) <- colnames(events)

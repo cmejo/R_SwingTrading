@@ -27,6 +27,8 @@ LEVERAGE="1.0"
 MAX_POS="5"
 MAX_PER_SECTOR="2"
 
+CAPITAL="10000"
+
 # Parse CLI arguments
 for arg in "$@"; do
   case $arg in
@@ -45,6 +47,9 @@ for arg in "$@"; do
     --max_per_sector=*)
       MAX_PER_SECTOR="${arg#*=}"
       ;;
+    --capital=*)
+      CAPITAL="${arg#*=}"
+      ;;
   esac
 done
 
@@ -59,6 +64,7 @@ echo "          AUTOMATED SCANNER & CHARLES SCHWAB EXECUTION PIPELINE           
 echo "================================================================================"
 echo " Mode:         $([ "$DRY_RUN" = "false" ] && echo '🔴 LIVE EXECUTION' || echo '🟡 DRY RUN (Preview)')"
 echo " Watchlist:    $SYMBOLS_FILE"
+echo " Capital:      \$$CAPITAL"
 echo " Leverage:     ${LEVERAGE}x"
 echo " Max Holdings: $MAX_POS (Max $MAX_PER_SECTOR per sector)"
 echo " Timestamp:    $(date)"
@@ -67,14 +73,15 @@ echo "==========================================================================
 # Step 1: Run Multi-Asset Scanner & Risk Management Engine
 echo "\n[Step 1/3] Running Quantitative Scanner & Ralph Vince Leverage Sizing..."
 Rscript daily_signal.R \
+  --capital="$CAPITAL" \
   --symbols_file="$SYMBOLS_FILE" \
   --leverage="$LEVERAGE" \
   --max_pos="$MAX_POS" \
   --max_per_sector="$MAX_PER_SECTOR" \
-  --portfolio_file="$PROJECT_DIR/portfolio.json" 2>&1 | tee "$LOG_FILE" > "$LATEST_TICKET"
+  --portfolio_file="$PROJECT_DIR/portfolio.json" 2>&1 | tee "$LOG_FILE" "$LATEST_TICKET"
 
 # Step 2: Check for Actionable Buy Tickets
-N_ACTIONABLE=$(grep -c "Action: *BUY [1-9]" "$LATEST_TICKET" || true)
+N_ACTIONABLE=$(grep -c "Action: *BUY [0-9]" "$LATEST_TICKET" || true)
 MACRO_GATE=$(grep -m 1 "Macro Gate:" "$LATEST_TICKET" | sed 's/.*Macro Gate: \([^ |]*\).*/\1/' || echo "Active")
 
 echo "\n[Step 2/3] Scanner Finished. Macro Gate: [$MACRO_GATE] | Qualifying Orders: $N_ACTIONABLE"

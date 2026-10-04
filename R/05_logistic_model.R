@@ -54,7 +54,9 @@ fit_logistic_swing_model <- function(df_model,
   cat(sprintf("[LogisticModel] Training set: %d bars (%s to %s | 5-day embargo applied)\n",
               length(train_idx), df_model$Date[1], df_model$Date[max(train_idx)]))
   cat(sprintf("[LogisticModel] Testing set:  %d bars (%s to %s)\n",
-              length(test_idx), df_model$Date[n_train + 1], df_model$Date[n]))
+              length(test_idx),
+              if (length(test_idx) > 0) df_model$Date[test_idx[1]] else "NA",
+              if (length(test_idx) > 0) df_model$Date[tail(test_idx, 1)] else "NA"))
   
   # 1. Fit Regularized Logistic Regression (ElasticNet)
   cat(sprintf("[LogisticModel] Fitting cv.glmnet with alpha=%.2f (ElasticNet)...\n", alpha))
