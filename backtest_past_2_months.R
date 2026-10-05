@@ -24,6 +24,7 @@ source("R/03_volatility_garch.R")
 source("R/04_feature_pipeline.R")
 source("R/05_logistic_model.R")
 source("R/06_swing_backtest.R")
+source("R/08_metrics.R")
 
 cat("\n========================================================================\n")
 cat(" OUT-OF-SAMPLE BACKTEST: PAST 2 MONTHS VS S&P 500 (SPY)\n")
@@ -35,7 +36,10 @@ ohlcv_spy  <- load_stock_data("SPY")
 ohlcv_qqq  <- load_stock_data("QQQ")
 
 # 2. Build Features on SNDK
-pipeline_out <- build_feature_dataset(ohlcv_sndk, fast_n = 20, slow_n = 50, look_ahead = 5)
+eval_n <- 43
+n_raw <- nrow(ohlcv_sndk)
+train_end_idx <- max(1, n_raw - eval_n - 50)
+pipeline_out <- build_feature_dataset(ohlcv_sndk, fast_n = 20, slow_n = 50, look_ahead = 5, train_idx = 1:train_end_idx)
 df_model <- pipeline_out$model_data
 feat_names <- pipeline_out$feature_names
 
@@ -90,30 +94,7 @@ start_d <- as.character(common_dates[1])
 end_d   <- as.character(tail(common_dates, 1))
 
 calc_stat <- function(r_series, name) {
-  r <- as.numeric(r_series)
-  cum_ret <- prod(1 + r) - 1
-  n_days <- length(r)
-  ann_ret <- (1 + cum_ret)^(252 / n_days) - 1
-  ann_vol <- sd(r) * sqrt(252)
-  sharpe  <- if (!is.na(ann_vol) && ann_vol > 0) (mean(r) / sd(r)) * sqrt(252) else 0
-  cum_c   <- cumprod(1 + r)
-  max_dd  <- max((cummax(cum_c) - cum_c) / cummax(cum_c))
-  win_rate <- if (sum(r != 0) > 0) mean(r[r != 0] > 0) * 100 else 0
-  pos_sum  <- sum(r[r > 0])
-  neg_sum  <- abs(sum(r[r < 0]))
-  pf <- if (neg_sum > 0) pos_sum / neg_sum else NA
-  
-  data.frame(
-    Strategy = name,
-    Cumulative_Return = sprintf("%+.2f%%", cum_ret * 100),
-    Annualized_Return = sprintf("%+.2f%%", ann_ret * 100),
-    Annualized_Vol    = sprintf("%.2f%%", ann_vol * 100),
-    Sharpe_Ratio      = sprintf("%.2f", sharpe),
-    Max_Drawdown      = sprintf("%.2f%%", max_dd * 100),
-    Win_Rate          = sprintf("%.1f%%", win_rate),
-    Profit_Factor     = sprintf("%.2f", pf),
-    stringsAsFactors = FALSE
-  )
+  calc_performance_metrics(r_series, name = name)$formatted
 }
 
 scorecard <- rbind(

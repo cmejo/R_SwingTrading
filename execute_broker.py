@@ -75,6 +75,9 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
 
     return tickets
 
+# Alias for backwards compatibility across bridges
+read_latest_tickets = parse_latest_tickets
+
 def build_ibkr_payload(ticket: Dict[str, Any]) -> Dict[str, Any]:
     """Generates TWS / IB Gateway Bracket Order Specification.
     Delegates to execute_ibkr.py so both entry points share one OCA-linked bracket design."""
@@ -366,6 +369,13 @@ def sync_schwab(portfolio_file: str, dry_run: bool):
         port_data["total_capital"] = round(float(liquidation_val), 2)
         port_data["peak_equity"] = max(port_data.get("peak_equity", float(liquidation_val)), float(liquidation_val))
 
+        ticket_lookup = {}
+        if os.path.exists("LATEST_TICKET.txt"):
+            try:
+                ticket_lookup = {t["symbol"]: t for t in read_latest_tickets("LATEST_TICKET.txt")}
+            except Exception:
+                pass
+
         positions = sec_acct.get("positions", [])
         active_symbols = set()
         for p in positions:
@@ -379,13 +389,16 @@ def sync_schwab(portfolio_file: str, dry_run: bool):
                     existing[0]["shares"] = long_qty
                     existing[0]["cost_basis"] = round(long_qty * avg_px, 2)
                 else:
+                    t_match = ticket_lookup.get(sym)
+                    stop_px = round(float(t_match["stop_loss"]), 2) if t_match else round(avg_px * 0.95, 2)
+                    tgt_px = round(float(t_match["tier2_target"]), 2) if t_match else round(avg_px * 1.10, 2)
                     port_data["positions"].append({
                         "symbol": sym,
                         "shares": long_qty,
                         "entry_price": avg_px,
                         "entry_date": str(datetime.date.today()),
-                        "stop_loss": round(avg_px * 0.95, 2),
-                        "take_profit": round(avg_px * 1.10, 2),
+                        "stop_loss": stop_px,
+                        "take_profit": tgt_px,
                         "cost_basis": round(long_qty * avg_px, 2),
                         "status": "OPEN"
                     })
@@ -393,6 +406,14 @@ def sync_schwab(portfolio_file: str, dry_run: bool):
         remaining = [pos for pos in port_data["positions"] if pos["symbol"] in active_symbols]
         closed = [pos for pos in port_data["positions"] if pos["symbol"] not in active_symbols]
         for c in closed:
+            exit_px = _get_quote_or_fallback(c["symbol"])
+            if exit_px is None or exit_px <= 0:
+                exit_px = float(c.get("current_price") or c.get("entry_price") or 0.0)
+            c["exit_price"] = round(exit_px, 2)
+            ent_px = float(c.get("entry_price", 0.0))
+            shs = float(c.get("shares", 0.0))
+            c["pnl_dollar"] = round((exit_px - ent_px) * shs, 2)
+            c["pnl_pct"] = round(((exit_px / ent_px) - 1.0) * 100.0, 2) if ent_px > 0 else 0.0
             c["exit_date"] = str(datetime.date.today())
             c["reason"] = "SCHWAB_SYNC_CLOSED"
             port_data["closed_trades"].append(c)
@@ -407,6 +428,22 @@ def sync_schwab(portfolio_file: str, dry_run: bool):
     except Exception as e:
         print(f"[Schwab Sync] Error: {e}")
         sys.exit(1)
+
+def _get_quote_or_fallback(symbol: str):
+    """Fetches latest quote for a symbol with fallback to Yahoo finance chart API."""
+    try:
+        import urllib.request
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=1d"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+            meta = data["chart"]["result"][0]["meta"]
+            px = meta.get("regularMarketPrice") or meta.get("chartPreviousClose")
+            if px:
+                return float(px)
+    except Exception:
+        pass
+    return None
 
 def sync_ibkr(portfolio_file: str, host: str, port: int, client_id: int, dry_run: bool):
     import datetime
@@ -458,6 +495,13 @@ def sync_ibkr(portfolio_file: str, host: str, port: int, client_id: int, dry_run
             port_data["total_capital"] = round(equity_val, 2)
             port_data["peak_equity"] = max(port_data.get("peak_equity", equity_val), equity_val)
             
+        ticket_lookup = {}
+        if os.path.exists("LATEST_TICKET.txt"):
+            try:
+                ticket_lookup = {t["symbol"]: t for t in read_latest_tickets("LATEST_TICKET.txt")}
+            except Exception:
+                pass
+
         active_symbols = set()
         for p in ib_positions:
             if p.position > 0:
@@ -468,13 +512,16 @@ def sync_ibkr(portfolio_file: str, host: str, port: int, client_id: int, dry_run
                     existing[0]["shares"] = float(p.position)
                     existing[0]["cost_basis"] = round(float(p.position) * float(p.avgCost), 2)
                 else:
+                    t_match = ticket_lookup.get(sym)
+                    stop_px = round(float(t_match["stop_loss"]), 2) if t_match else round(float(p.avgCost) * 0.95, 2)
+                    tgt_px = round(float(t_match["tier2_target"]), 2) if t_match else round(float(p.avgCost) * 1.10, 2)
                     port_data["positions"].append({
                         "symbol": sym,
                         "shares": float(p.position),
                         "entry_price": round(float(p.avgCost), 2),
                         "entry_date": str(datetime.date.today()),
-                        "stop_loss": round(float(p.avgCost) * 0.95, 2),
-                        "take_profit": round(float(p.avgCost) * 1.10, 2),
+                        "stop_loss": stop_px,
+                        "take_profit": tgt_px,
                         "cost_basis": round(float(p.position) * float(p.avgCost), 2),
                         "status": "OPEN"
                     })
@@ -488,10 +535,18 @@ def sync_ibkr(portfolio_file: str, host: str, port: int, client_id: int, dry_run
                 remaining.append(pos)
                 
         for c in closed:
+            exit_px = _get_quote_or_fallback(c["symbol"])
+            if exit_px is None or exit_px <= 0:
+                exit_px = float(c.get("current_price") or c.get("entry_price") or 0.0)
+            c["exit_price"] = round(exit_px, 2)
+            ent_px = float(c.get("entry_price", 0.0))
+            shs = float(c.get("shares", 0.0))
+            c["pnl_dollar"] = round((exit_px - ent_px) * shs, 2)
+            c["pnl_pct"] = round(((exit_px / ent_px) - 1.0) * 100.0, 2) if ent_px > 0 else 0.0
             c["exit_date"] = str(datetime.date.today())
-            c["reason"] = "BROKER_SYNC_CLOSED"
+            c["reason"] = "IBKR_SYNC_CLOSED"
             port_data["closed_trades"].append(c)
-            print(f"[IBKR Sync] Archived closed position: {c['symbol']}")
+            print(f"[IBKR Sync] Archived closed position: {c['symbol']} @ ${exit_px:.2f} (PnL: ${c['pnl_dollar']:+.2f})")
             
         port_data["positions"] = remaining
         port_data["last_updated"] = str(datetime.datetime.now())

@@ -19,45 +19,13 @@ source("R/03_volatility_garch.R")
 source("R/04_feature_pipeline.R")
 source("R/05_logistic_model.R")
 source("R/06_swing_backtest.R")
+source("R/08_metrics.R")
 
 OUTPUT_DIR <- "output"
 dir.create(OUTPUT_DIR, showWarnings = FALSE, recursive = TRUE)
 
 calc_stats <- function(r_series, name = "Strategy") {
-  r_vec <- as.numeric(r_series)
-  r_vec <- na.omit(r_vec)
-  n_days <- length(r_vec)
-  if (n_days == 0) return(NULL)
-  
-  cum_ret <- prod(1 + r_vec) - 1
-  ann_ret <- (1 + cum_ret)^(252 / max(n_days, 1)) - 1
-  ann_vol <- sd(r_vec) * sqrt(252)
-  sharpe  <- if (ann_vol > 0) ann_ret / ann_vol else 0
-  
-  # Drawdowns
-  eq <- cumprod(1 + r_vec)
-  peaks <- cummax(eq)
-  dds <- (eq - peaks) / peaks
-  max_dd <- abs(min(dds))
-  calmar <- if (max_dd > 0) ann_ret / max_dd else NA
-  
-  pos_trades <- r_vec[r_vec > 0]
-  neg_trades <- r_vec[r_vec < 0]
-  win_rate <- if (length(r_vec[r_vec != 0]) > 0) length(pos_trades) / length(r_vec[r_vec != 0]) else 0
-  profit_factor <- if (sum(abs(neg_trades)) > 0) sum(pos_trades) / sum(abs(neg_trades)) else NA
-  
-  data.frame(
-    Strategy          = name,
-    Cumulative_Return = sprintf("%+.2f%%", cum_ret * 100),
-    Annualized_Return = sprintf("%+.2f%%", ann_ret * 100),
-    Annualized_Vol    = sprintf("%.2f%%", ann_vol * 100),
-    Sharpe_Ratio      = sprintf("%.2f", sharpe),
-    Max_Drawdown      = sprintf("-%.2f%%", max_dd * 100),
-    Calmar_Ratio      = if (!is.na(calmar)) sprintf("%.2f", calmar) else "N/A",
-    Win_Rate          = sprintf("%.1f%%", win_rate * 100),
-    Profit_Factor     = if (!is.na(profit_factor)) sprintf("%.2f", profit_factor) else "N/A",
-    stringsAsFactors  = FALSE
-  )
+  calc_performance_metrics(r_series, name = name)$formatted
 }
 
 run_walkforward_backtest <- function(symbol = "AMD", test_bars = 252, horizon_name = "1 Year") {
@@ -65,7 +33,9 @@ run_walkforward_backtest <- function(symbol = "AMD", test_bars = 252, horizon_na
               symbol, horizon_name, test_bars))
   
   ohlcv <- load_stock_data(symbol)
-  pipeline_out <- build_feature_dataset(ohlcv, fast_n = 20, slow_n = 50, look_ahead = 5)
+  n_raw <- nrow(ohlcv)
+  approx_test_start <- max(1, n_raw - test_bars - 55)
+  pipeline_out <- build_feature_dataset(ohlcv, fast_n = 20, slow_n = 50, look_ahead = 5, train_idx = 1:approx_test_start)
   df_model <- pipeline_out$model_data
   feat_names <- pipeline_out$feature_names
   
@@ -133,23 +103,37 @@ run_walkforward_backtest <- function(symbol = "AMD", test_bars = 252, horizon_na
   
   # Extract exact arithmetic returns from backtest
   ml_10_r   <- bt_10$strat_net_ret
-  ml_15_r   <- bt_15$strat_net_ret
+  # 1.5x Margin Leveraged return: explicitly scales net return minus 7% annual margin interest on borrowed 0.5x
+  ml_15_r   <- ml_10_r * 1.5 - ifelse(ml_10_r != 0, (0.07 / 252) * 0.5, 0.0)
   ma_r      <- bt_10$ma_ret
   bh_r      <- bt_10$bh_ret
   
+  # Event-Driven Bracket Simulation (Live rules: 2-tier exits, breakeven ratchet, 5-day exit)
+  sim_bracket <- tryCatch({
+    simulate_bracket_backtest(ohlcv, model_res, pipeline_out)
+  }, error = function(e) NULL)
+
   common_idx <- index(ml_10_r)
   spy_ret   <- spy_ret_all[common_idx]
   qqq_ret   <- qqq_ret_all[common_idx]
   
   # Metrics Table
-  stats_df <- rbind(
+  stats_rows <- list(
     calc_stats(ml_10_r, "ML Swing Strategy (1.0x Cash)"),
-    calc_stats(ml_15_r, "ML Swing Strategy (1.5x Margin)"),
-    calc_stats(ma_r,    "Classic MA Trend Cross (20/50)"),
-    calc_stats(bh_r,    sprintf("Buy & Hold %s", symbol)),
-    calc_stats(spy_ret, "S&P 500 Index (SPY)"),
-    calc_stats(qqq_ret, "Nasdaq 100 Index (QQQ)")
+    calc_stats(ml_15_r, "ML Swing Strategy (1.5x Margin)")
   )
+  if (!is.null(sim_bracket) && length(sim_bracket$daily_returns) > 0) {
+    bracket_ret <- sim_bracket$daily_returns[common_idx]
+    if (length(na.omit(bracket_ret)) > 5) {
+      stats_rows[[length(stats_rows) + 1]] <- calc_stats(bracket_ret, "Event-Driven Bracket Execution (Real Rules)")
+    }
+  }
+  stats_rows[[length(stats_rows) + 1]] <- calc_stats(ma_r,    "Classic MA Trend Cross (20/50)")
+  stats_rows[[length(stats_rows) + 1]] <- calc_stats(bh_r,    sprintf("Buy & Hold %s", symbol))
+  stats_rows[[length(stats_rows) + 1]] <- calc_stats(spy_ret, "S&P 500 Index (SPY)")
+  stats_rows[[length(stats_rows) + 1]] <- calc_stats(qqq_ret, "Nasdaq 100 Index (QQQ)")
+
+  stats_df <- do.call(rbind, stats_rows)
   
   # Align equity curves to base $10,000 using arithmetic compounding
   init_cap <- 10000

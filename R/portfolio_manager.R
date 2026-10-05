@@ -97,31 +97,49 @@ record_fill <- function(portfolio, symbol, shares, entry_price, stop_loss, take_
     status = "OPEN"
   )
   
-  # Replace existing position for same symbol or append
+  # Accumulate into existing position for same symbol or append new position
   existing_idx <- if (length(portfolio$positions) > 0) {
     which(sapply(portfolio$positions, function(p) p$symbol == toupper(symbol)))
   } else {
     integer(0)
   }
   if (length(existing_idx) > 0) {
-    portfolio$positions[[existing_idx[1]]] <- new_pos
+    old_pos <- portfolio$positions[[existing_idx[1]]]
+    comb_shares <- round(as.numeric(old_pos$shares) + shares, 4)
+    comb_cost   <- round(as.numeric(old_pos$cost_basis) + cost_basis, 2)
+    avg_price   <- round(comb_cost / max(1e-6, comb_shares), 2)
+    
+    portfolio$positions[[existing_idx[1]]] <- list(
+      symbol         = toupper(symbol),
+      shares         = comb_shares,
+      entry_price    = avg_price,
+      entry_date     = old_pos$entry_date,
+      stop_loss      = max(as.numeric(old_pos$stop_loss), stop_loss),
+      take_profit    = take_profit,
+      cost_basis     = comb_cost,
+      highest_price  = max(if (!is.null(old_pos$highest_price)) as.numeric(old_pos$highest_price) else 0, avg_price),
+      status         = "OPEN"
+    )
   } else {
+    new_pos$highest_price <- entry_price
     portfolio$positions[[length(portfolio$positions) + 1]] <- new_pos
   }
   
   return(portfolio)
 }
 
-#' Record Trade Exit (Close)
+#' Record Trade Exit (Close or Partial Scale-Out)
 #'
 #' @param portfolio Portfolio state list.
 #' @param symbol Stock ticker symbol.
 #' @param exit_price Sale price per share.
 #' @param exit_date Exit date string (YYYY-MM-DD). Defaults to Sys.Date().
 #' @param reason Exit trigger reason.
+#' @param shares_to_exit Optional quantity of shares to sell (default: NULL = full position).
 #' @return Updated portfolio state list.
 #' @export
-record_exit <- function(portfolio, symbol, exit_price, exit_date = as.character(Sys.Date()), reason = "MANUAL_EXIT") {
+record_exit <- function(portfolio, symbol, exit_price, exit_date = as.character(Sys.Date()), 
+                        reason = "MANUAL_EXIT", shares_to_exit = NULL) {
   symbol <- toupper(symbol)
   idx <- if (length(portfolio$positions) > 0) {
     which(sapply(portfolio$positions, function(p) p$symbol == symbol))
@@ -136,28 +154,47 @@ record_exit <- function(portfolio, symbol, exit_price, exit_date = as.character(
   
   pos <- portfolio$positions[[idx[1]]]
   exit_price <- as.numeric(exit_price)
-  proceeds   <- round(pos$shares * exit_price, 2)
-  pnl_dollar <- round(proceeds - pos$cost_basis, 2)
-  pnl_pct    <- round((exit_price / pos$entry_price - 1) * 100, 2)
+  total_pos_shares <- as.numeric(pos$shares)
+  
+  # Determine if full or partial scale-out
+  close_qty <- if (is.null(shares_to_exit) || shares_to_exit >= total_pos_shares) {
+    total_pos_shares
+  } else {
+    round(as.numeric(shares_to_exit), 4)
+  }
+  
+  portion <- close_qty / max(1e-6, total_pos_shares)
+  portion_cost <- round(as.numeric(pos$cost_basis) * portion, 2)
+  proceeds     <- round(close_qty * exit_price, 2)
+  pnl_dollar   <- round(proceeds - portion_cost, 2)
+  pnl_pct      <- round((exit_price / as.numeric(pos$entry_price) - 1) * 100, 2)
   
   # Return proceeds to cash
-  portfolio$cash_balance <- round(portfolio$cash_balance + proceeds, 2)
+  portfolio$cash_balance  <- round(portfolio$cash_balance + proceeds, 2)
   portfolio$total_capital <- round(portfolio$total_capital + pnl_dollar, 2)
   
   closed_trade <- list(
-    symbol = pos$symbol,
-    shares = pos$shares,
+    symbol      = pos$symbol,
+    shares      = close_qty,
     entry_price = pos$entry_price,
-    entry_date = pos$entry_date,
-    exit_price = exit_price,
-    exit_date = exit_date,
-    pnl_dollar = pnl_dollar,
-    pnl_pct = pnl_pct,
-    reason = reason
+    entry_date  = pos$entry_date,
+    exit_price  = exit_price,
+    exit_date   = exit_date,
+    pnl_dollar  = pnl_dollar,
+    pnl_pct     = pnl_pct,
+    reason      = reason
   )
-  
   portfolio$closed_trades[[length(portfolio$closed_trades) + 1]] <- closed_trade
-  portfolio$positions[[idx[1]]] <- NULL # Remove open position
+  
+  if (close_qty >= total_pos_shares - 1e-4) {
+    portfolio$positions[[idx[1]]] <- NULL # Full exit
+  } else {
+    # Partial scale-out: update remaining open position
+    rem_shares <- round(total_pos_shares - close_qty, 4)
+    rem_cost   <- round(as.numeric(pos$cost_basis) - portion_cost, 2)
+    portfolio$positions[[idx[1]]]$shares <- rem_shares
+    portfolio$positions[[idx[1]]]$cost_basis <- rem_cost
+  }
   
   return(portfolio)
 }
@@ -207,9 +244,15 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
       total_invested <- total_invested + mv
       pnl <- round(mv - p$cost_basis, 2)
       pnl_pct <- (cp / p$entry_price - 1) * 100
-      # Count actual trading days (exclude weekends)
-      all_days_seq <- seq(as.Date(p$entry_date) + 1, as.Date(current_date), by = "day")
-      days_held <- sum(!weekdays(all_days_seq) %in% c("Saturday", "Sunday"))
+      # Count actual trading days (exclude weekends, safely handle same-day entries)
+      ent_dt <- as.Date(p$entry_date)
+      cur_dt <- as.Date(current_date)
+      days_held <- if (cur_dt <= ent_dt) {
+        0L
+      } else {
+        all_days_seq <- seq(ent_dt + 1, cur_dt, by = "day")
+        as.integer(sum(!weekdays(all_days_seq) %in% c("Saturday", "Sunday")))
+      }
       
       suggested_stop <- p$stop_loss
       # Breakeven escalation rule: If position is up by >= 1R, raise stop to Entry Price
@@ -220,7 +263,7 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
       
       # ATR Chandelier Trailing Stop for Tier 2 runners
       # Persist highest_price so the trailing stop only ratchets upward
-      prev_highest <- if (!is.null(p$highest_price)) p$highest_price else p$entry_price
+      prev_highest <- if (!is.null(p$highest_price)) as.numeric(p$highest_price) else as.numeric(p$entry_price)
       highest_seen <- max(prev_highest, cp)
       portfolio$positions[[i]]$highest_price <- highest_seen
       
@@ -313,8 +356,8 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
   }
   
   total_account_value <- round(portfolio$cash_balance + total_invested, 2)
-  peak_equity <- if (!is.null(portfolio$peak_equity)) max(portfolio$peak_equity, total_account_value) else total_account_value
-  drawdown_pct <- round(((total_account_value - peak_equity) / peak_equity) * 100, 2)
+  peak_equity <- if (!is.null(portfolio$peak_equity)) max(as.numeric(portfolio$peak_equity), total_account_value) else total_account_value
+  drawdown_pct <- round(((total_account_value - peak_equity) / max(1.0, peak_equity)) * 100, 2)
   circuit_breaker_active <- (drawdown_pct <= -4.0)
   
   if (circuit_breaker_active) {
@@ -323,16 +366,22 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
   
   available_slots <- max(0, portfolio$max_positions - nrow(pos_df))
   
+  # Update portfolio state attributes
+  portfolio$total_capital <- total_account_value
+  portfolio$peak_equity   <- peak_equity
+  portfolio$last_updated  <- as.character(Sys.time())
+  
   return(list(
-    holdings_df = pos_df,
-    total_invested = total_invested,
-    cash_balance = portfolio$cash_balance,
-    total_account_value = total_account_value,
-    peak_equity = peak_equity,
-    drawdown_pct = drawdown_pct,
+    holdings_df            = pos_df,
+    total_invested         = total_invested,
+    cash_balance           = portfolio$cash_balance,
+    total_account_value    = total_account_value,
+    peak_equity            = peak_equity,
+    drawdown_pct           = drawdown_pct,
     circuit_breaker_active = circuit_breaker_active,
-    available_slots = available_slots,
-    active_count = nrow(pos_df),
-    alerts = alerts
+    available_slots        = available_slots,
+    active_count           = nrow(pos_df),
+    alerts                 = alerts,
+    updated_portfolio      = portfolio
   ))
 }

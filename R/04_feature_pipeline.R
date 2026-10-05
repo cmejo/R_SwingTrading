@@ -193,66 +193,89 @@ build_feature_dataset <- function(ohlcv,
   target_ret <- (fwd_price - price) / price
   colnames(target_ret) <- "TargetRet"
   
-  # 8. Merge all into single xts
-  merged_xts <- merge(
-    target_ret,
-    feat_slope_fast,
-    feat_slope_slow,
-    feat_slope_weekly,
-    feat_rsq_fast,
-    feat_dist_pct,
-    feat_zscore,
-    feat_garch_vol,
-    feat_garch_shock,
-    feat_garch_pct,
-    feat_vol_ratio,
-    feat_obv_slope,
-    feat_rsi,
-    feat_macd_hist,
-    feat_bbpct,
-    feat_rs_20
-  )
-  
-  # Clean NA created by rolling windows & lookahead
-  clean_xts <- na.omit(merged_xts)
-  dates <- index(clean_xts)
-  
-  # Convert to standard data.frame for model training
-  df_model <- data.frame(
-    Date = dates,
-    TargetRet = as.numeric(clean_xts$TargetRet),
-    TargetBinary = ifelse(as.numeric(clean_xts$TargetRet) > 0, 1, 0),
-    SlopeFast = as.numeric(clean_xts$SlopeFast),
-    SlopeSlow = as.numeric(clean_xts$SlopeSlow),
-    SlopeWeeklyPct = as.numeric(clean_xts$SlopeWeeklyPct),
-    TrendQuality = as.numeric(clean_xts$TrendQuality),
-    DistPct = as.numeric(clean_xts$DistPct),
-    ZScore = as.numeric(clean_xts$ZScore),
-    GARCH_Vol = as.numeric(clean_xts$GARCH_Vol),
-    GARCH_Shock = as.numeric(clean_xts$GARCH_Shock),
-    GARCH_VolPct = as.numeric(clean_xts$GARCH_VolPct),
-    VolumeRatio = as.numeric(clean_xts$VolumeRatio),
-    OBV_Slope = as.numeric(clean_xts$OBV_Slope),
-    RSI_14 = as.numeric(clean_xts$RSI_14),
-    MACD_Hist = as.numeric(clean_xts$MACD_Hist),
-    BB_PctB = as.numeric(clean_xts$BB_PctB),
-    RS_20 = as.numeric(clean_xts$RS_20)
+  # 8. Merge all 15 predictor features
+  features_xts <- merge(
+    SlopeFast      = feat_slope_fast,
+    SlopeSlow      = feat_slope_slow,
+    SlopeWeeklyPct = feat_slope_weekly,
+    TrendQuality   = feat_rsq_fast,
+    DistPct        = feat_dist_pct,
+    ZScore         = feat_zscore,
+    GARCH_Vol      = feat_garch_vol,
+    GARCH_Shock    = feat_garch_shock,
+    GARCH_VolPct   = feat_garch_pct,
+    VolumeRatio    = feat_vol_ratio,
+    OBV_Slope      = feat_obv_slope,
+    RSI_14         = feat_rsi,
+    MACD_Hist      = feat_macd_hist,
+    BB_PctB        = feat_bbpct,
+    RS_20          = feat_rs_20
   )
   
   feature_names <- c("SlopeFast", "SlopeSlow", "SlopeWeeklyPct", "TrendQuality", "DistPct", 
                      "ZScore", "GARCH_Vol", "GARCH_Shock", "GARCH_VolPct", "VolumeRatio", "OBV_Slope",
                      "RSI_14", "MACD_Hist", "BB_PctB", "RS_20")
   
+  # Clean warm-up NAs across features
+  clean_feats_xts <- na.omit(features_xts)
+  
+  # Latest available feature observation (unlabeled, up to latest price bar)
+  latest_feat_row <- tail(clean_feats_xts, 1)
+  latest_feature_matrix <- matrix(as.numeric(latest_feat_row), nrow = 1)
+  colnames(latest_feature_matrix) <- feature_names
+  
+  # Exact column indexing (prevent zoo partial name matching bug)
+  latest_ann_vol <- as.numeric(latest_feat_row[, "GARCH_Vol"])
+  if (is.na(latest_ann_vol) || latest_ann_vol < 0.05 || latest_ann_vol > 3.0) {
+    # Sanity fallback to 20-day realized volatility if GARCH estimate is outside reasonable bounds
+    realized_vol <- as.numeric(tail(na.omit(TTR::runSD(diff(log(price)), n = 20) * sqrt(252)), 1))
+    latest_ann_vol <- if (!is.na(realized_vol) && realized_vol > 0.05) realized_vol else 0.25
+  }
+  
+  latest_vol_pct <- as.numeric(latest_feat_row[, "GARCH_VolPct"])
+  
+  # 9. Supervised learning target: align with forward returns
+  merged_with_target <- merge(target_ret, clean_feats_xts)
+  clean_model_xts <- na.omit(merged_with_target)
+  dates <- index(clean_model_xts)
+  
+  # Convert to standard data.frame for model training
+  df_model <- data.frame(
+    Date           = dates,
+    TargetRet      = as.numeric(clean_model_xts[, "TargetRet"]),
+    TargetBinary   = ifelse(as.numeric(clean_model_xts[, "TargetRet"]) > 0, 1, 0),
+    SlopeFast      = as.numeric(clean_model_xts[, "SlopeFast"]),
+    SlopeSlow      = as.numeric(clean_model_xts[, "SlopeSlow"]),
+    SlopeWeeklyPct = as.numeric(clean_model_xts[, "SlopeWeeklyPct"]),
+    TrendQuality   = as.numeric(clean_model_xts[, "TrendQuality"]),
+    DistPct        = as.numeric(clean_model_xts[, "DistPct"]),
+    ZScore         = as.numeric(clean_model_xts[, "ZScore"]),
+    GARCH_Vol      = as.numeric(clean_model_xts[, "GARCH_Vol"]),
+    GARCH_Shock    = as.numeric(clean_model_xts[, "GARCH_Shock"]),
+    GARCH_VolPct   = as.numeric(clean_model_xts[, "GARCH_VolPct"]),
+    VolumeRatio    = as.numeric(clean_model_xts[, "VolumeRatio"]),
+    OBV_Slope      = as.numeric(clean_model_xts[, "OBV_Slope"]),
+    RSI_14         = as.numeric(clean_model_xts[, "RSI_14"]),
+    MACD_Hist      = as.numeric(clean_model_xts[, "MACD_Hist"]),
+    BB_PctB        = as.numeric(clean_model_xts[, "BB_PctB"]),
+    RS_20          = as.numeric(clean_model_xts[, "RS_20"])
+  )
+  
   cat(sprintf("[Pipeline] Complete. Result: %d valid observation rows across %d features.\n",
               nrow(df_model), length(feature_names)))
   
   return(list(
-    model_data = df_model,
-    dates = dates,
-    price = price[dates],
-    dual_lm = dual_lm,
+    model_data              = df_model,
+    dates                   = dates,
+    price                   = price[dates],
+    dual_lm                 = dual_lm,
+    latest_feature_matrix   = latest_feature_matrix,
+    latest_ann_vol          = latest_ann_vol,
+    latest_vol_pct          = latest_vol_pct,
     latest_weekly_slope_pct = as.numeric(tail(feat_slope_weekly, 1)),
-    latest_rs_20 = as.numeric(tail(feat_rs_20, 1)),
-    feature_names = feature_names
+    latest_rs_20            = as.numeric(tail(feat_rs_20, 1)),
+    feature_names           = feature_names,
+    features_xts            = clean_feats_xts,
+    garch_out               = if (use_garch) garch_out else NULL
   ))
 }

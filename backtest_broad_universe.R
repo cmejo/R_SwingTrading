@@ -17,8 +17,8 @@ source("R/01_data_loader.R")
 source("R/02_trend_lmMA.R")
 source("R/03_volatility_garch.R")
 source("R/04_feature_pipeline.R")
-source("R/05_logistic_model.R")
 source("R/06_swing_backtest.R")
+source("R/08_metrics.R")
 
 OUTPUT_DIR <- "output"
 dir.create(OUTPUT_DIR, showWarnings = FALSE, recursive = TRUE)
@@ -40,43 +40,28 @@ qqq_ohlcv <- load_stock_data("QQQ")
 TEST_BARS <- 252 # 1 Year
 
 calc_metrics <- function(r_vec, name = "Strategy") {
-  r_vec <- na.omit(as.numeric(r_vec))
-  n_days <- length(r_vec)
-  if (n_days == 0) return(NULL)
-  
-  cum_ret <- prod(1 + r_vec) - 1
-  ann_ret <- (1 + cum_ret)^(252 / max(n_days, 1)) - 1
-  ann_vol <- sd(r_vec) * sqrt(252)
-  sharpe  <- if (ann_vol > 0) ann_ret / ann_vol else 0
-  
-  eq <- cumprod(1 + r_vec)
-  peaks <- cummax(eq)
-  dds <- (eq - peaks) / peaks
-  max_dd <- abs(min(dds))
-  calmar <- if (max_dd > 0) ann_ret / max_dd else NA
-  
-  pos_trades <- r_vec[r_vec > 0]
-  neg_trades <- r_vec[r_vec < 0]
-  win_rate <- if (length(r_vec[r_vec != 0]) > 0) length(pos_trades) / length(r_vec[r_vec != 0]) else 0
-  profit_factor <- if (sum(abs(neg_trades)) > 0) sum(pos_trades) / sum(abs(neg_trades)) else NA
-  
+  res <- calc_performance_metrics(r_vec, name = name)
+  if (length(res$raw) == 0) return(NULL)
+  raw <- res$raw
   list(
-    Strategy      = name,
-    Cum_Ret       = cum_ret,
-    Ann_Ret       = ann_ret,
-    Ann_Vol       = ann_vol,
-    Sharpe        = sharpe,
-    Max_DD        = max_dd,
-    Calmar        = calmar,
-    Win_Rate      = win_rate,
-    Profit_Factor = profit_factor,
-    n_days        = n_days
+    Strategy      = raw$strategy,
+    Cum_Ret       = raw$cum_ret,
+    Ann_Ret       = raw$ann_ret,
+    Ann_Vol       = raw$ann_vol,
+    Sharpe        = raw$sharpe,
+    Max_DD        = raw$max_dd,
+    Calmar        = raw$calmar,
+    Win_Rate      = raw$win_rate,
+    Profit_Factor = raw$profit_factor,
+    n_days        = raw$n_days
   )
 }
 
 sim_single_stock <- function(sym) {
   ohlcv <- load_stock_data(sym)
-  pipe <- build_feature_dataset(ohlcv, fast_n = 20, slow_n = 50, look_ahead = 5)
+  n_raw <- nrow(ohlcv)
+  approx_tr_end <- max(1, n_raw - TEST_BARS - 50)
+  pipe <- build_feature_dataset(ohlcv, fast_n = 20, slow_n = 50, look_ahead = 5, train_idx = 1:approx_tr_end)
   df_m <- pipe$model_data
   feat_names <- pipe$feature_names
   total_bars <- nrow(df_m)

@@ -278,35 +278,15 @@ for (sym in SYMBOLS) {
     foldid <- rep(1:nfolds, each = ceiling(n_tr / nfolds))[1:n_tr]
     cv_fit <- cv.glmnet(X_train, y_train, foldid = foldid, alpha = 0.5, family = "binomial", type.measure = "deviance")
     
-    # Today's features
-    dual_lm <- calculate_dual_lmMA(price, fast_n = FAST_N, slow_n = SLOW_N)
-    residuals <- price - dual_lm$fast_lm$fit
-    resid_vol <- TTR::runSD(residuals, n = FAST_N)
-    zscore <- residuals / resid_vol
-    garch_out <- compute_garch_volatility(price)
-    
-    feat_slope_weekly <- xts(rep(weekly_slope_pct, nrow(price)), order.by = index(price))
-    
-    # Volume features
-    vol <- tryCatch(Vo(ohlcv), error = function(e) xts(rep(1, nrow(price)), order.by = index(price)))
-    vol_ma <- TTR::runMean(vol, n = FAST_N)
-    feat_vol_ratio <- vol / (vol_ma + 1e-6)
-    
-    obv <- tryCatch(TTR::OBV(price, vol), error = function(e) xts(rep(0, nrow(price)), order.by = index(price)))
-    obv_lm <- calculate_dual_lmMA(obv, fast_n = FAST_N, slow_n = SLOW_N)$fast_lm
-    obv_sd <- TTR::runSD(obv, n = FAST_N)
-    feat_obv_slope <- obv_lm$slope / (obv_sd + 1e-6)
+    coefs <- coef(cv_fit, s = "lambda.min")
+    active_coefs <- sum(as.numeric(coefs[-1]) != 0)
+    is_intercept_only <- (active_coefs == 0)
 
-    # Relative Strength vs SPY Benchmark (20-day excess return)
-    spy_price <- Cl(spy_ohlcv)
-    merged_sp <- merge(price, spy_price)
-    merged_sp <- na.locf(merged_sp, na.rm = FALSE)
-    ret_stk_20 <- (merged_sp[, 1] / lag.xts(merged_sp[, 1], k = FAST_N)) - 1
-    ret_sp_20  <- (merged_sp[, 2] / lag.xts(merged_sp[, 2], k = FAST_N)) - 1
-    feat_rs_20 <- ret_stk_20 - ret_sp_20
-    colnames(feat_rs_20) <- "RS_20"
-    latest_rs_20 <- as.numeric(tail(feat_rs_20, 1))
-    is_rs_leader <- (!is.na(latest_rs_20) && latest_rs_20 >= 0)
+    # Use single source of truth for features and volatility from pipeline_out
+    latest_feat_matrix <- pipeline_out$latest_feature_matrix
+    curr_ann_vol       <- pipeline_out$latest_ann_vol
+    latest_rs_20       <- pipeline_out$latest_rs_20
+    is_rs_leader       <- (!is.na(latest_rs_20) && latest_rs_20 >= 0)
 
     # 14-day ATR & Dynamic Chandelier Trailing Stop anchor
     atr_14 <- tryCatch({
@@ -314,59 +294,18 @@ for (sym in SYMBOLS) {
     }, error = function(e) 0.02 * latest_close)
     chandelier_stop <- round(latest_close - (2.5 * atr_14), 2)
 
-    # RSI(14), MACD Histogram, Bollinger %B (matching pipeline features)
-    feat_rsi <- tryCatch({
-      rsi_raw <- TTR::RSI(price, n = 14)
-      (rsi_raw - 50) / 50
-    }, error = function(e) xts(rep(0, nrow(price)), order.by = index(price)))
-    
-    feat_macd_hist <- tryCatch({
-      macd_out <- TTR::MACD(price, nFast = 12, nSlow = 26, nSig = 9)
-      macd_h <- macd_out[, "macd"] - macd_out[, "signal"]
-      macd_h / (price + 1e-6) * 100
-    }, error = function(e) xts(rep(0, nrow(price)), order.by = index(price)))
-    
-    feat_bbpct <- tryCatch({
-      bb <- TTR::BBands(price, n = 20, sd = 2)
-      (price - bb[, "dn"]) / (bb[, "up"] - bb[, "dn"] + 1e-6)
-    }, error = function(e) xts(rep(0.5, nrow(price)), order.by = index(price)))
-
-    all_feats <- merge(
-      SlopeFast = dual_lm$fast_lm$slope,
-      SlopeSlow = dual_lm$slow_lm$slope,
-      SlopeWeeklyPct = feat_slope_weekly,
-      TrendQuality = dual_lm$fast_lm$r.squared,
-      DistPct = dual_lm$dist_pct,
-      ZScore = zscore,
-      GARCH_Vol = garch_out$annualized_vol,
-      GARCH_Shock = garch_out$shocks,
-      GARCH_VolPct = garch_out$vol_percentile,
-      VolumeRatio = feat_vol_ratio,
-      OBV_Slope = feat_obv_slope,
-      RSI_14 = feat_rsi,
-      MACD_Hist = feat_macd_hist,
-      BB_PctB = feat_bbpct,
-      RS_20 = feat_rs_20
-    )
-    
-    latest_feats <- tail(na.omit(all_feats), 1)
-    latest_feat_matrix <- matrix(as.numeric(latest_feats), nrow = 1)
-    colnames(latest_feat_matrix) <- feat_names
-    
     # Model forward probability
     pred_prob <- as.numeric(predict(cv_fit, newx = latest_feat_matrix, s = "lambda.min", type = "response"))
-    
-    # Volatility & Bracket Levels (with NA fallback)
-    curr_ann_vol <- as.numeric(latest_feats$GARCH_Vol)
-    if (is.na(curr_ann_vol) || curr_ann_vol <= 0) curr_ann_vol <- 0.30
+
+    # Volatility & Bracket Levels (with sanity bounds enforced in pipeline)
     curr_daily_vol <- curr_ann_vol / sqrt(252)
     stop_loss_price <- round(latest_close * (1 - 2.0 * curr_daily_vol), 2)
     take_profit_price <- round(latest_close * (1 + 3.0 * curr_daily_vol), 2)
-    
+
     # Signal Assignment with Multi-Timeframe, RS Leader, & Earnings Gate
     signal_status <- "HOLD"
     gate_note <- "Normal"
-    
+
     if (pred_prob <= P_SHORT) {
       signal_status <- "CASH"
       gate_note <- "Bearish Model"
@@ -380,13 +319,16 @@ for (sym in SYMBOLS) {
       } else if (!is_rs_leader) {
         signal_status <- "RS_LAGGER"
         gate_note <- sprintf("RS Lagger (%+.1f%% vs SPY)", latest_rs_20 * 100)
+      } else if (is_intercept_only) {
+        signal_status <- "BUY"
+        gate_note <- sprintf("Leader [BaseRateOnly 0/%d coefs]", length(feat_names))
       } else {
         signal_status <- "BUY"
         gate_note <- sprintf("Leader (%+.1f%% vs SPY)", latest_rs_20 * 100)
       }
     } else {
       signal_status <- "HOLD"
-      gate_note <- sprintf("Below %.0f%% Cutoff", EFFECTIVE_P_LONG * 100)
+      gate_note <- if (is_intercept_only) sprintf("BaseRateOnly (0/%d coefs)", length(feat_names)) else sprintf("Below %.0f%% Cutoff", EFFECTIVE_P_LONG * 100)
     }
     
     data.frame(
@@ -472,6 +414,8 @@ sync_res <- sync_portfolio_with_market(
   model_scan_df = df_scan,
   macro_bullish = macro_info$is_bullish
 )
+port_state <- sync_res$updated_portfolio
+save_portfolio(port_state, PORTFOLIO_FILE)
 
 if (sync_res$active_count > 0) {
   cat(sprintf(" Active Open Positions (%d of %d active slots used):\n\n", sync_res$active_count, EFFECTIVE_MAX_POS))
@@ -512,7 +456,9 @@ if (isTRUE(sync_res$circuit_breaker_active)) {
 
 # Total Portfolio Heat (Max 5.0% Dollars at Risk across portfolio)
 existing_dollar_risk <- if (sync_res$active_count > 0) {
-  sum(sapply(port_state$positions, function(p) as.numeric(p$shares) * (as.numeric(p$entry_price) - as.numeric(p$stop_loss))))
+  sum(sapply(port_state$positions, function(p) {
+    pmax(0, as.numeric(p$shares) * (as.numeric(p$entry_price) - as.numeric(p$stop_loss)))
+  }))
 } else {
   0.0
 }

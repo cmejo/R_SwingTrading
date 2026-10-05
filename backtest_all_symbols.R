@@ -16,6 +16,7 @@ source("R/03_volatility_garch.R")
 source("R/04_feature_pipeline.R")
 source("R/05_logistic_model.R")
 source("R/06_swing_backtest.R")
+source("R/08_metrics.R")
 
 cat("\n========================================================================================\n")
 cat(" COMPREHENSIVE STRATEGY BACKTEST: ALL STOCKS IN SYMBOLS.TXT (PAST 2 MONTHS)\n")
@@ -40,7 +41,9 @@ for (s in symbols) {
   
   res <- tryCatch({
     ohlcv <- load_stock_data(s)
-    pipe <- build_feature_dataset(ohlcv, fast_n = 20, slow_n = 50, look_ahead = 5)
+    n_raw <- nrow(ohlcv)
+    train_end_idx <- max(1, n_raw - eval_n - 35)
+    pipe <- build_feature_dataset(ohlcv, fast_n = 20, slow_n = 50, look_ahead = 5, train_idx = 1:train_end_idx)
     df_m <- pipe$model_data
     
     if (nrow(df_m) < eval_n + 35) {
@@ -79,11 +82,10 @@ for (s in symbols) {
     cum_bh    <- prod(1 + bh_r) - 1
     cum_spy   <- prod(1 + spy_r) - 1
     
-    ann_vol <- sd(strat_r) * sqrt(252)
-    sharpe  <- if (!is.na(ann_vol) && ann_vol > 0) (mean(strat_r) / sd(strat_r)) * sqrt(252) else 0
-    cum_c   <- cumprod(1 + strat_r)
-    max_dd  <- max((cummax(cum_c) - cum_c) / cummax(cum_c))
-    win_r   <- if (sum(strat_r != 0) > 0) mean(strat_r[strat_r != 0] > 0) * 100 else 0
+    m_res <- calc_performance_metrics(strat_r)$raw
+    sharpe  <- if (!is.null(m_res$sharpe)) m_res$sharpe else 0
+    max_dd  <- if (!is.null(m_res$max_dd)) m_res$max_dd else 0
+    win_r   <- if (!is.null(m_res$win_rate)) m_res$win_rate * 100 else 0
     
     # Alpha vs S&P 500 and vs Buy & Hold
     alpha_spy <- cum_strat - cum_spy

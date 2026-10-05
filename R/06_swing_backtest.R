@@ -102,45 +102,15 @@ run_swing_backtest <- function(ohlcv,
   equity_xts <- merge(strat_equity, bh_equity, ma_equity)
   colnames(equity_xts) <- c("ML_Swing_Strategy", "Buy_and_Hold", "Classic_MA_Cross")
   
-  # Helper to compute annualized performance metrics
-  calc_metrics <- function(r_series, name = "Strategy") {
-    r_vec <- as.numeric(r_series)
-    cum_ret <- prod(1 + r_vec) - 1
-    n_days <- length(r_vec)
-    ann_ret <- (1 + cum_ret)^(252 / max(n_days, 1)) - 1
-    ann_vol <- sd(r_vec) * sqrt(252)
-    sharpe  <- if (ann_vol > 0) ann_ret / ann_vol else 0
-    
-    # Drawdowns
-    eq <- cumprod(1 + r_vec)
-    peaks <- cummax(eq)
-    dds <- (eq - peaks) / peaks
-    max_dd <- abs(min(dds))
-    calmar <- if (max_dd > 0) ann_ret / max_dd else NA
-    
-    # Trade statistics
-    pos_trades <- r_vec[r_vec > 0]
-    neg_trades <- r_vec[r_vec < 0]
-    win_rate <- if (length(r_vec[r_vec != 0]) > 0) length(pos_trades) / length(r_vec[r_vec != 0]) else 0
-    profit_factor <- if (sum(abs(neg_trades)) > 0) sum(pos_trades) / sum(abs(neg_trades)) else NA
-    
-    data.frame(
-      Strategy = name,
-      Cumulative_Return = sprintf("%.2f%%", cum_ret * 100),
-      Annualized_Return = sprintf("%.2f%%", ann_ret * 100),
-      Annualized_Vol    = sprintf("%.2f%%", ann_vol * 100),
-      Sharpe_Ratio      = sprintf("%.2f", sharpe),
-      Max_Drawdown      = sprintf("%.2f%%", max_dd * 100),
-      Calmar_Ratio      = sprintf("%.2f", calmar),
-      Win_Rate          = sprintf("%.1f%%", win_rate * 100),
-      Profit_Factor     = sprintf("%.2f", profit_factor)
-    )
+  # Source standardized performance metrics
+  if (!exists("calc_performance_metrics")) {
+    source("R/08_metrics.R")
   }
-  
+
   perf_table <- rbind(
-    calc_metrics(strat_net_ret, "ML Swing Strategy (GARCH Vol-Targeted)"),
-    calc_metrics(ma_ret, "Classic MA Trend Cross"),
-    calc_metrics(bh_ret, paste0("Buy & Hold (", gsub("\\.[A-Za-z]+$", "", colnames(Cl(ohlcv))[1]), ")"))
+    calc_performance_metrics(strat_net_ret, "ML Swing Strategy (GARCH Vol-Targeted)")$formatted,
+    calc_performance_metrics(ma_ret, "Classic MA Trend Cross")$formatted,
+    calc_performance_metrics(bh_ret, paste0("Buy & Hold (", gsub("\\.[A-Za-z]+$", "", colnames(Cl(ohlcv))[1]), ")"))$formatted
   )
   
   # Generate Trade Log using discrete directional position (pos_xts)
@@ -192,5 +162,237 @@ run_swing_backtest <- function(ohlcv,
     bh_ret = bh_ret,
     ma_ret = ma_ret,
     effective_positions = effective_pos[common_idx]
+  ))
+}
+
+#' Event-Driven Bracket Execution Backtest (F1)
+#'
+#' Simulates the strategy's exact live bracket execution rules:
+#'   1. Signal generated at t-1 triggers market entry at bar t Open.
+#'   2. Sizing: Uses available cash, initial 1R = 2 * sigma_daily * Entry.
+#'   3. Stop Loss: Entry - 1R (-2 * sigma_daily).
+#'   4. Tier 1: Target at +1.5R (+3 * sigma_daily) exits 50% of position.
+#'   5. Breakeven Ratchet: Upon Tier 1 fill, stop loss moves to Entry.
+#'   6. Chandelier Trailing Stop: Trailing stop anchored at highest_price - 2.5 * ATR14 protects runner.
+#'   7. Tier 2: Target at +3.0R (+6 * sigma_daily) exits remaining 50%.
+#'   8. Time Exit: Position held >= 5 trading days is liquidated at bar t Close.
+#'   9. Regime/Model Exit: Signal flip to cash/bearish liquidates remaining at bar t Close.
+#'
+#' @param ohlcv Full OHLCV xts object.
+#' @param model_res Output object from logistic/elastic net model.
+#' @param pipeline_out Output object from feature pipeline.
+#' @param initial_capital Starting portfolio cash (default: $10,000).
+#' @param cost_bps Slippage/transaction cost in basis points (default: 5 bps).
+#' @return List containing trades_df, equity_curve, daily_returns, metrics, and summary_table.
+#' @export
+simulate_bracket_backtest <- function(ohlcv,
+                                      model_res,
+                                      pipeline_out,
+                                      initial_capital = 10000,
+                                      cost_bps = 5) {
+  if (!exists("calc_performance_metrics")) {
+    source("R/08_metrics.R")
+  }
+  
+  test_dates <- model_res$test_dates
+  n_days <- length(test_dates)
+  if (n_days == 0) stop("test_dates is empty in model_res.")
+
+  op <- Op(ohlcv)[test_dates]
+  hi <- Hi(ohlcv)[test_dates]
+  lo <- Lo(ohlcv)[test_dates]
+  cl <- Cl(ohlcv)[test_dates]
+
+  atr_xts <- tryCatch({
+    TTR::ATR(HLC(ohlcv), n = 14)$atr[test_dates]
+  }, error = function(e) cl * 0.02)
+
+  garch_vol_vec <- pipeline_out$model_data$GARCH_Vol[model_res$test_idx]
+  garch_vol_xts <- xts(garch_vol_vec, order.by = test_dates)
+
+  raw_signals <- model_res$pred_class
+  sig_xts <- xts(raw_signals, order.by = test_dates)
+
+  cash <- initial_capital
+  pos <- NULL
+  trades <- list()
+  equity_vec <- numeric(n_days)
+
+  for (i in 1:n_days) {
+    cur_d   <- test_dates[i]
+    o_px    <- as.numeric(op[i])
+    h_px    <- as.numeric(hi[i])
+    l_px    <- as.numeric(lo[i])
+    c_px    <- as.numeric(cl[i])
+    cur_atr <- as.numeric(atr_xts[i])
+    if (is.na(cur_atr) || cur_atr <= 0) cur_atr <- c_px * 0.02
+
+    # Check entry if flat and yesterday's signal was BUY (i > 1)
+    if (is.null(pos) && i > 1) {
+      prev_sig <- as.numeric(sig_xts[i - 1])
+      if (!is.na(prev_sig) && prev_sig == 1 && cash > 100) {
+        ent_px <- if (!is.na(o_px) && o_px > 0) o_px else c_px
+        ann_vol <- as.numeric(garch_vol_xts[i - 1])
+        if (is.na(ann_vol) || ann_vol < 0.05) ann_vol <- 0.25
+        daily_vol <- ann_vol / sqrt(252)
+
+        risk_1r <- 2.0 * daily_vol * ent_px
+        stop_px <- round(ent_px - risk_1r, 2)
+        t1_px   <- round(ent_px + 1.5 * risk_1r, 2)
+        t2_px   <- round(ent_px + 3.0 * risk_1r, 2)
+
+        shs <- floor((cash * 0.99) / ent_px)
+        if (shs > 0) {
+          cost_entry <- shs * ent_px * (cost_bps / 10000)
+          cash <- cash - (shs * ent_px + cost_entry)
+          pos <- list(
+            symbol = colnames(cl)[1],
+            entry_date = cur_d,
+            entry_price = ent_px,
+            shares = shs,
+            initial_shares = shs,
+            stop_loss = stop_px,
+            tier1_target = t1_px,
+            tier2_target = t2_px,
+            tier1_filled = FALSE,
+            highest_price = ent_px,
+            risk_1r = risk_1r,
+            days_held = 0
+          )
+        }
+      }
+    }
+
+    # Evaluate active position on current bar
+    if (!is.null(pos)) {
+      pos$days_held <- pos$days_held + 1
+      pos$highest_price <- max(pos$highest_price, h_px)
+      chandelier_stop <- round(pos$highest_price - 2.5 * cur_atr, 2)
+
+      # 1. Stop-Loss Hit
+      if (l_px <= pos$stop_loss) {
+        exit_px <- min(o_px, pos$stop_loss)
+        shs_exit <- pos$shares
+        pnl <- (exit_px - pos$entry_price) * shs_exit - (shs_exit * exit_px * (cost_bps / 10000))
+        cash <- cash + (shs_exit * exit_px) - (shs_exit * exit_px * (cost_bps / 10000))
+        r_mult <- (exit_px - pos$entry_price) / pos$risk_1r
+        trades[[length(trades) + 1]] <- data.frame(
+          Symbol = pos$symbol, EntryDate = as.character(pos$entry_date),
+          ExitDate = as.character(cur_d), EntryPrice = pos$entry_price,
+          ExitPrice = exit_px, Shares = shs_exit, PnL = pnl,
+          ReturnPct = (exit_px / pos$entry_price - 1) * 100, R_Multiple = r_mult,
+          Reason = if (pos$tier1_filled) "BREAKEVEN_OR_TRAILING_STOP" else "STOP_LOSS",
+          DaysHeld = pos$days_held, stringsAsFactors = FALSE
+        )
+        pos <- NULL
+      } else {
+        # 2. Tier 1 Target Hit
+        if (!pos$tier1_filled && h_px >= pos$tier1_target) {
+          t1_shs <- max(1, floor(pos$shares / 2))
+          exit_px <- max(o_px, pos$tier1_target)
+          pnl <- (exit_px - pos$entry_price) * t1_shs - (t1_shs * exit_px * (cost_bps / 10000))
+          cash <- cash + (t1_shs * exit_px) - (t1_shs * exit_px * (cost_bps / 10000))
+          r_mult <- (exit_px - pos$entry_price) / pos$risk_1r
+          trades[[length(trades) + 1]] <- data.frame(
+            Symbol = pos$symbol, EntryDate = as.character(pos$entry_date),
+            ExitDate = as.character(cur_d), EntryPrice = pos$entry_price,
+            ExitPrice = exit_px, Shares = t1_shs, PnL = pnl,
+            ReturnPct = (exit_px / pos$entry_price - 1) * 100, R_Multiple = r_mult,
+            Reason = "TIER1_TARGET", DaysHeld = pos$days_held, stringsAsFactors = FALSE
+          )
+          pos$tier1_filled <- TRUE
+          pos$shares <- pos$shares - t1_shs
+          pos$stop_loss <- max(pos$entry_price, chandelier_stop)
+
+          # Check if Tier 2 target also reached on same bar
+          if (pos$shares > 0 && h_px >= pos$tier2_target) {
+            t2_shs <- pos$shares
+            exit_px2 <- max(o_px, pos$tier2_target)
+            pnl2 <- (exit_px2 - pos$entry_price) * t2_shs - (t2_shs * exit_px2 * (cost_bps / 10000))
+            cash <- cash + (t2_shs * exit_px2) - (t2_shs * exit_px2 * (cost_bps / 10000))
+            r_mult2 <- (exit_px2 - pos$entry_price) / pos$risk_1r
+            trades[[length(trades) + 1]] <- data.frame(
+              Symbol = pos$symbol, EntryDate = as.character(pos$entry_date),
+              ExitDate = as.character(cur_d), EntryPrice = pos$entry_price,
+              ExitPrice = exit_px2, Shares = t2_shs, PnL = pnl2,
+              ReturnPct = (exit_px2 / pos$entry_price - 1) * 100, R_Multiple = r_mult2,
+              Reason = "TIER2_TARGET", DaysHeld = pos$days_held, stringsAsFactors = FALSE
+            )
+            pos <- NULL
+          }
+        } else if (pos$tier1_filled) {
+          pos$stop_loss <- max(pos$stop_loss, chandelier_stop)
+
+          # 3. Tier 2 Target Hit on subsequent bar
+          if (h_px >= pos$tier2_target) {
+            t2_shs <- pos$shares
+            exit_px <- max(o_px, pos$tier2_target)
+            pnl <- (exit_px - pos$entry_price) * t2_shs - (t2_shs * exit_px * (cost_bps / 10000))
+            cash <- cash + (t2_shs * exit_px) - (t2_shs * exit_px * (cost_bps / 10000))
+            r_mult <- (exit_px - pos$entry_price) / pos$risk_1r
+            trades[[length(trades) + 1]] <- data.frame(
+              Symbol = pos$symbol, EntryDate = as.character(pos$entry_date),
+              ExitDate = as.character(cur_d), EntryPrice = pos$entry_price,
+              ExitPrice = exit_px, Shares = t2_shs, PnL = pnl,
+              ReturnPct = (exit_px / pos$entry_price - 1) * 100, R_Multiple = r_mult,
+              Reason = "TIER2_TARGET", DaysHeld = pos$days_held, stringsAsFactors = FALSE
+            )
+            pos <- NULL
+          }
+        }
+
+        # 4. Time Expiration (5 Trading Days)
+        if (!is.null(pos) && pos$days_held >= 5) {
+          shs_exit <- pos$shares
+          exit_px <- c_px
+          pnl <- (exit_px - pos$entry_price) * shs_exit - (shs_exit * exit_px * (cost_bps / 10000))
+          cash <- cash + (shs_exit * exit_px) - (shs_exit * exit_px * (cost_bps / 10000))
+          r_mult <- (exit_px - pos$entry_price) / pos$risk_1r
+          trades[[length(trades) + 1]] <- data.frame(
+            Symbol = pos$symbol, EntryDate = as.character(pos$entry_date),
+            ExitDate = as.character(cur_d), EntryPrice = pos$entry_price,
+            ExitPrice = exit_px, Shares = shs_exit, PnL = pnl,
+            ReturnPct = (exit_px / pos$entry_price - 1) * 100, R_Multiple = r_mult,
+            Reason = "TIME_EXPIRATION", DaysHeld = pos$days_held, stringsAsFactors = FALSE
+          )
+          pos <- NULL
+        }
+
+        # 5. Model Bearish Signal Flip Exit
+        if (!is.null(pos) && as.numeric(sig_xts[i]) <= 0) {
+          shs_exit <- pos$shares
+          exit_px <- c_px
+          pnl <- (exit_px - pos$entry_price) * shs_exit - (shs_exit * exit_px * (cost_bps / 10000))
+          cash <- cash + (shs_exit * exit_px) - (shs_exit * exit_px * (cost_bps / 10000))
+          r_mult <- (exit_px - pos$entry_price) / pos$risk_1r
+          trades[[length(trades) + 1]] <- data.frame(
+            Symbol = pos$symbol, EntryDate = as.character(pos$entry_date),
+            ExitDate = as.character(cur_d), EntryPrice = pos$entry_price,
+            ExitPrice = exit_px, Shares = shs_exit, PnL = pnl,
+            ReturnPct = (exit_px / pos$entry_price - 1) * 100, R_Multiple = r_mult,
+            Reason = "MODEL_SIGNAL_EXIT", DaysHeld = pos$days_held, stringsAsFactors = FALSE
+          )
+          pos <- NULL
+        }
+      }
+    }
+
+    # Record end-of-day equity
+    cur_equity <- cash + (if (!is.null(pos)) pos$shares * c_px else 0)
+    equity_vec[i] <- cur_equity
+  }
+
+  equity_xts <- xts(equity_vec, order.by = test_dates)
+  daily_returns <- na.omit(diff(equity_xts) / lag.xts(equity_xts, 1))
+
+  trades_df <- if (length(trades) > 0) do.call(rbind, trades) else data.frame()
+  perf <- calc_performance_metrics(daily_returns, name = "EventDriven_Bracket_Strategy")
+
+  return(list(
+    trades_df = trades_df,
+    equity_curve = equity_xts,
+    daily_returns = daily_returns,
+    metrics = perf$raw,
+    summary_table = perf$formatted
   ))
 }

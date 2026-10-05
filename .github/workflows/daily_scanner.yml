@@ -2,10 +2,10 @@ name: Daily Swing Trading Scanner & Email Alert
 
 on:
   schedule:
-    # 18:00 UTC = 2:00 PM (14:00) EDT (Monday through Thursday)
-    - cron: '0 18 * * 1-4'
-    # 19:30 UTC = 3:30 PM (15:30) EDT (Friday: Mandatory Weekend Exit Check)
-    - cron: '30 19 * * 5'
+    # 14:00 America/New_York (Mon-Thu): 18:00 UTC in EDT, 19:00 UTC in EST
+    - cron: '0 18,19 * * 1-4'
+    # 15:30 America/New_York (Friday): 19:30 UTC in EDT, 20:30 UTC in EST
+    - cron: '30 19,20 * * 5'
   workflow_dispatch: # Allows manual one-click execution from GitHub Actions tab
 
 permissions:
@@ -19,6 +19,25 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Guard Market Hours & Daylight Saving Time (America/New_York)
+        run: |
+          CURRENT_HOUR=$(TZ=America/New_York date +%H)
+          CURRENT_MIN=$(TZ=America/New_York date +%M)
+          DAY_OF_WEEK=$(date +%u)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual dispatch triggered. Proceeding with scan."
+          elif [ "$DAY_OF_WEEK" -ge 1 ] && [ "$DAY_OF_WEEK" -le 4 ]; then
+            if [ "$CURRENT_HOUR" -ne 14 ]; then
+              echo "Local New York time is $CURRENT_HOUR:$CURRENT_MIN (not 14:00 EDT/EST). Skipping duplicate UTC run."
+              exit 0
+            fi
+          elif [ "$DAY_OF_WEEK" -eq 5 ]; then
+            if [ "$CURRENT_HOUR" -ne 15 ] || [ "$CURRENT_MIN" -lt 25 ] || [ "$CURRENT_MIN" -gt 35 ]; then
+              echo "Local New York time is $CURRENT_HOUR:$CURRENT_MIN (not 15:30 EDT/EST). Skipping duplicate UTC run."
+              exit 0
+            fi
+          fi
 
       - name: Set up R
         uses: r-lib/actions/setup-r@v2
@@ -35,17 +54,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.R_LIBS_USER }}
-          key: ${{ runner.os }}-r-swing-${{ hashFiles('**/symbols.txt') }}
+          key: ${{ runner.os }}-r-swing-${{ hashFiles('**/symbols.txt', '**/setup.R') }}
           restore-keys: |
             ${{ runner.os }}-r-swing-
 
       - name: Install Required R Packages
         run: |
-          Rscript -e '
-            needed <- c("xts", "zoo", "quantmod", "TTR", "glmnet", "tseries", "jsonlite")
-            new_pkgs <- needed[!(needed %in% installed.packages()[, "Package"])]
-            if (length(new_pkgs) > 0) install.packages(new_pkgs, repos = "https://cloud.r-project.org")
-          '
+          Rscript setup.R
 
       - name: Run Daily Swing Scanner
         run: |

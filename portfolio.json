@@ -2,7 +2,8 @@
   "total_capital": 10000,
   "cash_balance": 10000,
   "max_positions": 5,
-  "last_updated": "2026-09-25 00:17:42.948535",
+  "last_updated": "2026-10-05 03:24:09.442223",
   "positions": [],
-  "closed_trades": []
+  "closed_trades": [],
+  "peak_equity": 10000
 }
