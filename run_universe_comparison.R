@@ -319,8 +319,8 @@ simulate_stock_walkforward <- function(sym) {
 cat("Running walk-forward model estimation across universe (using cache where available)...\n")
 t_start <- Sys.time()
 
-# Process in parallel
-sim_results <- parallel::mclapply(all_unique_syms, simulate_stock_walkforward, mc.cores = NUM_CORES)
+# Process across unique symbols (cached assets load in ~1.3 seconds)
+sim_results <- lapply(all_unique_syms, simulate_stock_walkforward)
 names(sim_results) <- all_unique_syms
 sim_results <- sim_results[!sapply(sim_results, is.null)]
 
@@ -439,8 +439,8 @@ evaluate_portfolio <- function(sym_list, horizon_bars, mode = c("BASELINE", "ENH
       
       k_slots <- length(top_idx)
       if (k_slots == 0) {
-        # 100% idle cash -> 100% Core-Satellite SPY allocation!
-        port_daily_ret[t] <- spy_sub[t]
+        # 100% idle cash -> 100% Core-Satellite QQQ allocation!
+        port_daily_ret[t] <- qqq_sub[t]
       } else {
         # Allocate to top stocks
         stock_alloc_total <- 0
@@ -455,9 +455,9 @@ evaluate_portfolio <- function(sym_list, horizon_bars, mode = c("BASELINE", "ENH
           stock_pnl_total   <- stock_pnl_total + (w_i * rets_b[idx])
         }
         
-        # Enhancement 3: Core-Satellite SPY Cash Yield on unallocated cash
+        # Enhancement 3: Core-Satellite QQQ Cash Yield on unallocated cash
         unalloc_cash <- max(0, 1.0 - stock_alloc_total)
-        cash_yield_pnl <- unalloc_cash * spy_sub[t]
+        cash_yield_pnl <- unalloc_cash * qqq_sub[t]
         
         port_daily_ret[t] <- stock_pnl_total + cash_yield_pnl
       }
@@ -539,6 +539,7 @@ results_df <- do.call(rbind, lapply(all_evals, function(e) {
     SP500_Sharpe   = sprintf("%5.2f",    e$spy_sharpe),
     Nasdaq_Ret     = sprintf("%+6.2f%%", e$qqq_ret * 100),
     Alpha_vs_SPY   = sprintf("%+6.2f%%", e$alpha_spy * 100),
+    Alpha_vs_QQQ   = sprintf("%+6.2f%%", e$alpha_qqq * 100),
     stringsAsFactors = FALSE
   )
 }))

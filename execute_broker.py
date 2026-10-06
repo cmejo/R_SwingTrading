@@ -73,6 +73,32 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
             "estimated_outlay": outlay
         })
 
+    # Match Core-Satellite QQQ Cash Yield ticket
+    qqq_match = re.search(
+        r"CORE-SATELLITE CASH YIELD DEPLOYMENT.*?Actionable Ticket:\s+BUY\s+([\d\.]+)\s+shares of QQQ @ ~\$([\d\.]+)\s+\(\$([\d\.]+)\s+outlay\)",
+        content,
+        re.DOTALL
+    )
+    if qqq_match:
+        qqq_shs = float(qqq_match.group(1))
+        qqq_px = float(qqq_match.group(2))
+        qqq_outlay = float(qqq_match.group(3))
+        if qqq_shs >= 1.0:
+            tickets.append({
+                "rank": 99,
+                "symbol": "QQQ",
+                "shares": qqq_shs,
+                "sector": "Index_ETF",
+                "p_up": 0.99,
+                "is_cash_park": True,
+                "stop_loss": 0.0,
+                "tier1_shares": 0.0,
+                "tier1_target": 0.0,
+                "tier2_shares": 0.0,
+                "tier2_target": 0.0,
+                "estimated_outlay": qqq_outlay
+            })
+
     return tickets
 
 # Alias for backwards compatibility across bridges
@@ -122,13 +148,24 @@ def _schwab_leg_order(symbol: str, qty: int, stop_px: float, target_px: float) -
 
 def build_schwab_payloads(ticket: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Generates Charles Schwab Trader API orders for one ticket.
+    For standard swing stocks, splits into two FIRST_TRIGGERS_OCO brackets (Tier 1 & Tier 2).
+    For Core-Satellite QQQ cash park, generates a single day MARKET buy order."""
+    if ticket.get("is_cash_park"):
+        total = int(ticket["shares"])
+        if total > 0:
+            return [{
+                "orderStrategyType": "SINGLE",
+                "orderType": "MARKET",
+                "session": "NORMAL",
+                "duration": "DAY",
+                "orderLegCollection": [{
+                    "instruction": "BUY",
+                    "quantity": total,
+                    "instrument": {"symbol": ticket["symbol"], "assetType": "EQUITY"}
+                }]
+            }]
+        return []
 
-    Schwab's API places whole-share orders, and one OCO can only pair one stop with
-    one target. To keep both profit tiers AND a stop on every share, the position is
-    split into two independent FIRST_TRIGGERS_OCO orders:
-      - Tier 1 leg (floor(shares/2)): stop + Tier 1 target
-      - Tier 2 leg (remainder):       stop + Tier 2 runner target
-    If the total is 1 share, only the Tier 2 leg is sent."""
     total = int(ticket["shares"])
     tier1 = total // 2
     tier2 = total - tier1

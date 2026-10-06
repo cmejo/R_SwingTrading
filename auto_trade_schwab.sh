@@ -80,8 +80,8 @@ Rscript daily_signal.R \
   --max_per_sector="$MAX_PER_SECTOR" \
   --portfolio_file="$PROJECT_DIR/portfolio.json" 2>&1 | tee "$LOG_FILE" "$LATEST_TICKET"
 
-# Step 2: Check for Actionable Buy Tickets
-N_ACTIONABLE=$(grep -c "Action: *BUY [0-9]" "$LATEST_TICKET" || true)
+# Step 2: Check for Actionable Buy Tickets (Swing Stocks + QQQ Cash Park)
+N_ACTIONABLE=$(grep -c -E "(Action: *BUY [0-9]|Actionable Ticket: *BUY [0-9].*QQQ)" "$LATEST_TICKET" || true)
 MACRO_GATE=$(grep -m 1 "Macro Gate:" "$LATEST_TICKET" | sed 's/.*Macro Gate: \([^ |]*\).*/\1/' || echo "Active")
 
 printf "\n[Step 2/3] Scanner Finished. Macro Gate: [%s] | Qualifying Orders: %s\n" "$MACRO_GATE" "$N_ACTIONABLE"
