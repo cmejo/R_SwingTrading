@@ -22,6 +22,7 @@ robinhood_positions.json
 
 # Keep sample data, ignore large transient downloads
 data/*.rds
+data/cache_wf/
 !data/data_sndk.rds
 
 # Python cache
