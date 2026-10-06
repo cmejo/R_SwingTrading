@@ -22,9 +22,10 @@ source("R/01_data_loader.R")
 #'
 #' @param symbols Character vector of ticker symbols.
 #' @param lookback_days Number of trailing trading bars to include (default: 120).
+#' @param as_of_date Optional cut-off date (Date or string YYYY-MM-DD) for point-in-time historical backtests.
 #' @return A clean numeric matrix of aligned daily returns (rows = dates, cols = symbols).
 #' @export
-build_joint_scenario_matrix <- function(symbols, lookback_days = 120) {
+build_joint_scenario_matrix <- function(symbols, lookback_days = 120, as_of_date = NULL) {
   symbols <- unique(toupper(trimws(symbols)))
   if (length(symbols) == 0) stop("No symbols provided")
   
@@ -46,6 +47,11 @@ build_joint_scenario_matrix <- function(symbols, lookback_days = 120) {
   
   # Merge by Date
   merged_rets <- do.call(merge, ret_list)
+  # Apply point-in-time historical cut-off to prevent future scenario leakage (L4)
+  if (!is.null(as_of_date)) {
+    merged_rets <- merged_rets[paste0("/", as.character(as_of_date))]
+  }
+  
   # Take complete observations over the lookback window
   clean_rets <- na.omit(merged_rets)
   

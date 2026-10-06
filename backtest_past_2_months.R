@@ -50,20 +50,17 @@ train_idx <- 1:(nrow(df_model) - eval_n - 5)
 test_idx  <- (nrow(df_model) - eval_n + 1):nrow(df_model)
 test_dates <- df_model$Date[test_idx]
 
-# 3. Train ElasticNet Out-of-Sample with Blocked Folds
-X_train <- as.matrix(df_model[train_idx, feat_names])
-y_train <- df_model$TargetBinary[train_idx]
-X_test  <- as.matrix(df_model[test_idx, feat_names])
-
-set.seed(42)
-n_tr <- length(train_idx)
-nfolds <- 5
-foldid <- rep(1:nfolds, each = ceiling(n_tr / nfolds))[1:n_tr]
-cv_fit <- cv.glmnet(X_train, y_train, foldid = foldid, alpha = 0.5, family = "binomial")
-pred_probs <- predict(cv_fit, newx = X_test, s = "lambda.min", type = "response")
-pred_class <- ifelse(pred_probs > 0.58, 1, ifelse(pred_probs < 0.42, -1, 0))
-
-model_res <- list(test_dates = test_dates, test_idx = test_idx, pred_class = as.numeric(pred_class))
+# 3. Train ElasticNet Out-of-Sample with Purged CV & Platt Calibration (L1, M1)
+model_fit <- fit_logistic_swing_model(
+  df_model      = df_model,
+  feature_names = feat_names,
+  train_idx     = train_idx,
+  test_idx      = test_idx,
+  p_long        = 0.58,
+  p_short       = 0.42,
+  calibrate     = TRUE
+)
+model_res <- list(test_dates = test_dates, test_idx = test_idx, pred_class = model_fit$pred_class)
 
 # 4. Run Backtest
 backtest_res <- run_swing_backtest(

@@ -180,6 +180,34 @@ class TestBrokerBridges(unittest.TestCase):
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
+    def test_robinhood_sync_entry_and_entry_date(self):
+        from execute_robinhood import sync_entry_to_portfolio_json
+        with tempfile.NamedTemporaryFile("w+", delete=False) as f:
+            temp_path = f.name
+
+        try:
+            # Sync an entry of 20 shares of NVDA @ $120.00
+            today_str = "2026-10-06"
+            sync_entry_to_portfolio_json("NVDA", 20.0, 120.0, 110.0, 135.0, today_str, portfolio_file=temp_path)
+
+            with open(temp_path, "r") as f:
+                port = json.load(f)
+
+            self.assertEqual(len(port["positions"]), 1)
+            pos = port["positions"][0]
+            self.assertEqual(pos["symbol"], "NVDA")
+            self.assertEqual(pos["shares"], 20.0)
+            self.assertEqual(pos["entry_price"], 120.0)
+            self.assertEqual(pos["entry_date"], today_str)
+            self.assertEqual(port["cash_balance"], 10000.0 - 2400.0)
+
+            # Test trading day count logic
+            days_held = count_trading_days(pos["entry_date"])
+            self.assertGreaterEqual(days_held, 0)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
 
 if __name__ == "__main__":
     unittest.main()

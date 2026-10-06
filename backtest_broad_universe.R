@@ -17,6 +17,7 @@ source("R/01_data_loader.R")
 source("R/02_trend_lmMA.R")
 source("R/03_volatility_garch.R")
 source("R/04_feature_pipeline.R")
+source("R/05_logistic_model.R")
 source("R/06_swing_backtest.R")
 source("R/08_metrics.R")
 
@@ -77,29 +78,43 @@ sim_single_stock <- function(sym) {
   
   train_window <- min(200, test_start_idx - 1)
   pred_class <- numeric(act_test_bars)
-  current_cv_fit <- NULL
+  current_model <- NULL
   
-  # Monthly walk-forward retraining
+  # Monthly walk-forward retraining with Purged CV & Platt Calibration (L1, M1)
   for (i in 1:act_test_bars) {
     cur_idx <- test_start_idx + i - 1
-    if (i %% 20 == 1 || is.null(current_cv_fit)) {
+    if (i %% 20 == 1 || is.null(current_model)) {
       tr_start <- max(1, cur_idx - train_window)
-      # Embargo training target by look_ahead window (5 days) to eliminate lookahead leakage
+      # Embargo training target by look_ahead window (5 days) to eliminate lookahead leakage (L1)
       tr_end   <- cur_idx - 5
       if (tr_end > (tr_start + 25)) {
         X_tr <- as.matrix(df_m[tr_start:tr_end, feat_names])
         y_tr <- df_m$TargetBinary[tr_start:tr_end]
         if (length(unique(y_tr)) >= 2) {
-          set.seed(42)
-          n_tr <- nrow(X_tr)
-          nfolds <- min(5, max(3, floor(n_tr / 20)))
-          foldid <- rep(1:nfolds, each = ceiling(n_tr / nfolds))[1:n_tr]
-          current_cv_fit <- glmnet::cv.glmnet(X_tr, y_tr, foldid = foldid, alpha = 0.5, family = "binomial", type.measure = "deviance")
+          current_model <- train_swing_model(
+            X_train       = X_tr,
+            y_train       = y_tr,
+            feature_names = feat_names,
+            alpha         = 0.5,
+            calibrate     = TRUE,
+            embargo_days  = 5
+          )
         }
       }
     }
+    if (is.null(current_model)) {
+      pred_class[i] <- 0
+      next
+    }
     x_cur <- matrix(as.numeric(df_m[cur_idx, feat_names]), nrow = 1)
-    p <- as.numeric(predict(current_cv_fit, newx = x_cur, s = "lambda.min", type = "response"))
+    raw_p <- as.numeric(predict(current_model$cv_fit, newx = x_cur, s = "lambda.min", type = "response"))
+    if (!is.null(current_model$calibrator)) {
+      raw_link <- as.numeric(predict(current_model$cv_fit, newx = x_cur, s = "lambda.min", type = "link"))
+      cal_p <- as.numeric(predict(current_model$calibrator, newdata = data.frame(Link = raw_link), type = "response"))
+      p <- if (!is.na(cal_p)) cal_p else raw_p
+    } else {
+      p <- raw_p
+    }
     pred_class[i] <- ifelse(p >= 0.58, 1, ifelse(p <= 0.42, -1, 0))
   }
   

@@ -15,9 +15,67 @@ import os
 import re
 import json
 import argparse
+from datetime import datetime, date
 from typing import List, Dict, Any
 
 POSITIONS_FILE = "robinhood_positions.json"
+PORTFOLIO_FILE = "portfolio.json"
+
+def sync_entry_to_portfolio_json(symbol: str, shares: float, entry_price: float, stop_loss: float, take_profit: float, entry_date: str, portfolio_file: str = "portfolio.json"):
+    """Synchronizes filled Robinhood buy order into portfolio.json."""
+    if not os.path.exists(portfolio_file) or os.path.getsize(portfolio_file) == 0:
+        port = {
+            "total_capital": 10000.0,
+            "cash_balance": 10000.0,
+            "max_positions": 5,
+            "peak_equity": 10000.0,
+            "last_updated": str(datetime.now()),
+            "positions": [],
+            "closed_trades": []
+        }
+    else:
+        try:
+            with open(portfolio_file, "r") as f:
+                port = json.load(f)
+        except Exception:
+            return
+
+    cost_basis = round(shares * entry_price, 2)
+    port["cash_balance"] = max(0.0, round(float(port.get("cash_balance", 10000.0)) - cost_basis, 2))
+    port["last_updated"] = str(datetime.now())
+
+    matched = [p for p in port.get("positions", []) if p.get("symbol") == symbol]
+    if matched:
+        p = matched[0]
+        comb_shares = round(float(p.get("shares", 0.0)) + shares, 4)
+        comb_cost = round(float(p.get("cost_basis", 0.0)) + cost_basis, 2)
+        avg_price = round(comb_cost / max(1e-6, comb_shares), 2)
+        p["shares"] = comb_shares
+        p["entry_price"] = avg_price
+        p["cost_basis"] = comb_cost
+        p["stop_loss"] = max(float(p.get("stop_loss", 0.0)), stop_loss)
+        p["take_profit"] = take_profit
+        p["highest_price"] = max(float(p.get("highest_price", 0.0)), avg_price)
+    else:
+        port.setdefault("positions", []).append({
+            "symbol": symbol,
+            "shares": shares,
+            "entry_price": round(entry_price, 2),
+            "entry_date": entry_date,
+            "stop_loss": round(stop_loss, 2),
+            "take_profit": round(take_profit, 2),
+            "cost_basis": cost_basis,
+            "highest_price": round(entry_price, 2),
+            "status": "OPEN"
+        })
+
+    try:
+        with open(portfolio_file, "w") as f:
+            json.dump(port, f, indent=2)
+        print(f"[RobinhoodBridge] Synced {symbol} fill to {portfolio_file} ({shares} shs @ ${entry_price:.2f}).")
+    except Exception as e:
+        print(f"[RobinhoodBridge] Warning: Failed to write to {portfolio_file}: {e}")
+
 
 def load_dot_env(env_file: str = ".env"):
     if os.path.exists(env_file):
@@ -222,10 +280,12 @@ def execute_buys(tickets: List[Dict[str, Any]], dry_run: bool = True):
         t1_shares = round(filled_shares / 2.0, 4)
         t2_shares = round(filled_shares - t1_shares, 4)
 
-        # Register position for local background stop/target monitoring
+        today_date_str = str(date.today())
+        # Register position for local background stop/target monitoring (Fix B2)
         active_positions[sym] = {
             "symbol": sym,
             "shares": filled_shares,
+            "entry_date": today_date_str,
             "entry_estimated_price": entry_px,
             "stop_loss": t["stop_loss"],
             "tier1_shares": t1_shares,
@@ -236,6 +296,16 @@ def execute_buys(tickets: List[Dict[str, Any]], dry_run: bool = True):
             "tier2_executed": False,
             "breakeven_stop_active": False
         }
+
+        if not dry_run:
+            sync_entry_to_portfolio_json(
+                symbol=sym,
+                shares=filled_shares,
+                entry_price=entry_px,
+                stop_loss=t["stop_loss"],
+                take_profit=t["tier2_target"],
+                entry_date=today_date_str
+            )
 
     if not dry_run:
         positions_data["active_positions"] = active_positions

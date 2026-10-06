@@ -56,13 +56,16 @@ ohlcv <- load_stock_data(symbol = SYMBOL, cache_file = CACHE_PATH)
 price <- Cl(ohlcv)
 
 # Step 2: Feature Engineering (lmMA + GARCH(1,1))
-cat("\n[Step 2/6] Building feature pipeline & GARCH(1,1) volatility...\n")
+cat("\n[Step 2/6] Building feature pipeline & in-sample GARCH(1,1) volatility...\n")
+n_raw <- nrow(ohlcv)
+train_end_raw <- max(50, floor(n_raw * TRAIN_SPLIT) - 5)
 pipeline_out <- build_feature_dataset(
   ohlcv = ohlcv,
   fast_n = FAST_N,
   slow_n = SLOW_N,
   look_ahead = LOOK_AHEAD,
-  use_garch = TRUE
+  use_garch = TRUE,
+  train_idx = 1:train_end_raw
 )
 
 df_model <- pipeline_out$model_data

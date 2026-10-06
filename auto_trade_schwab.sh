@@ -71,7 +71,7 @@ echo " Timestamp:    $(date)"
 echo "================================================================================"
 
 # Step 1: Run Multi-Asset Scanner & Risk Management Engine
-echo "\n[Step 1/3] Running Quantitative Scanner & Ralph Vince Leverage Sizing..."
+printf "\n[Step 1/3] Running Quantitative Scanner & Ralph Vince Leverage Sizing...\n"
 Rscript daily_signal.R \
   --capital="$CAPITAL" \
   --symbols_file="$SYMBOLS_FILE" \
@@ -84,7 +84,7 @@ Rscript daily_signal.R \
 N_ACTIONABLE=$(grep -c "Action: *BUY [0-9]" "$LATEST_TICKET" || true)
 MACRO_GATE=$(grep -m 1 "Macro Gate:" "$LATEST_TICKET" | sed 's/.*Macro Gate: \([^ |]*\).*/\1/' || echo "Active")
 
-echo "\n[Step 2/3] Scanner Finished. Macro Gate: [$MACRO_GATE] | Qualifying Orders: $N_ACTIONABLE"
+printf "\n[Step 2/3] Scanner Finished. Macro Gate: [%s] | Qualifying Orders: %s\n" "$MACRO_GATE" "$N_ACTIONABLE"
 
 if [ "$N_ACTIONABLE" -eq 0 ]; then
   echo " [Notice] No actionable buy orders generated today (Macro Gate risk-off, or no symbols met 58% threshold)."
@@ -94,12 +94,12 @@ if [ "$N_ACTIONABLE" -eq 0 ]; then
 fi
 
 # Step 3: Charles Schwab Execution Bridge
-echo "\n[Step 3/3] Initiating Charles Schwab Trader API Bridge..."
+printf "\n[Step 3/3] Initiating Charles Schwab Trader API Bridge...\n"
 if [ "$DRY_RUN" = "false" ]; then
   echo " Transmitting $N_ACTIONABLE LIVE bracket orders to Charles Schwab..."
   python3 execute_broker.py --broker=schwab --dry_run=false --yes --ticket_file="$LATEST_TICKET"
   
-  echo "\n[Reconciliation] Synchronizing active Schwab account positions into portfolio.json..."
+  printf "\n[Reconciliation] Synchronizing active Schwab account positions into portfolio.json...\n"
   python3 execute_broker.py --broker=schwab --sync --dry_run=false || true
   
   NOTIF_MSG="Successfully submitted $N_ACTIONABLE live bracket order(s) to Charles Schwab!"
@@ -112,6 +112,6 @@ else
   osascript -e "display notification \"${NOTIF_MSG}\" with title \"Schwab Bot: Dry Run Validated\"" || true
 fi
 
-echo "\n================================================================================"
+printf "\n================================================================================\n"
 echo " Pipeline execution completed successfully. Log: $LOG_FILE"
 echo "================================================================================"

@@ -55,20 +55,17 @@ for (s in symbols) {
       test_idx  <- (nrow(df_m) - eval_n + 1):nrow(df_m)
       test_dates <- df_m$Date[test_idx]
       
-      # Train ElasticNet model strictly on in-sample training split with blocked folds
-      X_train <- as.matrix(df_m[train_idx, pipe$feature_names])
-      y_train <- df_m$TargetBinary[train_idx]
-      X_test  <- as.matrix(df_m[test_idx, pipe$feature_names])
-      
-      set.seed(42)
-      n_tr <- length(train_idx)
-      nfolds <- 5
-      foldid <- rep(1:nfolds, each = ceiling(n_tr / nfolds))[1:n_tr]
-      cv_fit <- cv.glmnet(X_train, y_train, foldid = foldid, alpha = 0.5, family = "binomial")
-      probs <- predict(cv_fit, newx = X_test, s = "lambda.min", type = "response")
-      pred_class <- ifelse(probs > 0.58, 1, ifelse(probs < 0.42, -1, 0))
-    
-    model_res <- list(test_dates = test_dates, test_idx = test_idx, pred_class = as.numeric(pred_class))
+      # Train ElasticNet model with Purged CV & Platt Calibration (L1, M1)
+      m_fit <- fit_logistic_swing_model(
+        df_model      = df_m,
+        feature_names = pipe$feature_names,
+        train_idx     = train_idx,
+        test_idx      = test_idx,
+        p_long        = 0.58,
+        p_short       = 0.42,
+        calibrate     = TRUE
+      )
+      model_res <- list(test_dates = test_dates, test_idx = test_idx, pred_class = m_fit$pred_class)
     
     # Run swing backtest
     bt <- run_swing_backtest(ohlcv, model_res, pipe, allow_short = FALSE, target_vol = 1.0, max_leverage = 1.0)

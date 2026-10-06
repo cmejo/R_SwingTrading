@@ -23,6 +23,7 @@ source("R/03_volatility_garch.R")
 source("R/04_feature_pipeline.R")
 source("R/05_logistic_model.R")
 source("R/06_swing_backtest.R")
+source("R/08_metrics.R")
 
 SYMBOL <- "SNDK"
 DAYS   <- 30
@@ -41,33 +42,28 @@ cat("========================================================================\n\
 ohlcv <- load_stock_data(symbol = SYMBOL)
 price <- Cl(ohlcv)
 
-pipeline_out <- build_feature_dataset(ohlcv, fast_n = 20, slow_n = 50, look_ahead = 5)
+# Slicing in-sample training window for GARCH parameter estimation (L1)
+n_raw <- nrow(ohlcv)
+approx_train_end <- max(50, n_raw - DAYS - 50)
+pipeline_out <- build_feature_dataset(ohlcv, fast_n = 20, slow_n = 50, look_ahead = 5, train_idx = 1:approx_train_end)
 df_model <- pipeline_out$model_data
 feat_names <- pipeline_out$feature_names
 
 n_total <- nrow(df_model)
 eval_n <- min(DAYS, floor(n_total * 0.4))
-# Embargo training window by 5 days to eliminate target leakage
+# Embargo training window by 5 days to eliminate target leakage (L1)
 train_idx <- 1:(n_total - eval_n - 5)
 test_idx <- (n_total - eval_n + 1):n_total
 
-X_train <- as.matrix(df_model[train_idx, feat_names])
-y_train <- df_model$TargetBinary[train_idx]
-X_test  <- as.matrix(df_model[test_idx, feat_names])
-y_test  <- df_model$TargetBinary[test_idx]
-
-set.seed(42)
-n_tr <- length(train_idx)
-nfolds <- 5
-foldid <- rep(1:nfolds, each = ceiling(n_tr / nfolds))[1:n_tr]
-cv_fit <- cv.glmnet(X_train, y_train, foldid = foldid, alpha = 0.5, family = "binomial")
-pred_probs <- predict(cv_fit, newx = X_test, s = "lambda.min", type = "response")
-pred_class <- ifelse(pred_probs > 0.58, 1, ifelse(pred_probs < 0.42, -1, 0))
-
-model_res <- list(
-  test_dates = df_model$Date[test_idx],
-  test_idx = test_idx,
-  pred_class = as.numeric(pred_class)
+# Fit calibrated swing model using unified model trainer (M1, M2)
+model_res <- fit_logistic_swing_model(
+  df_model      = df_model,
+  feature_names = feat_names,
+  train_idx     = train_idx,
+  test_idx      = test_idx,
+  p_long        = 0.58,
+  p_short       = 0.42,
+  calibrate     = TRUE
 )
 
 backtest_res <- run_swing_backtest(

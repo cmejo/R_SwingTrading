@@ -272,21 +272,38 @@ for (sym in SYMBOLS) {
     if (length(unique(y_train)) < 2) {
       stop(sprintf("Training slice for %s contains only 1 target class.", sym))
     }
-    set.seed(42)
-    n_tr <- nrow(X_train)
-    nfolds <- min(5, max(3, floor(n_tr / 20)))
-    foldid <- rep(1:nfolds, each = ceiling(n_tr / nfolds))[1:n_tr]
-    cv_fit <- cv.glmnet(X_train, y_train, foldid = foldid, alpha = 0.5, family = "binomial", type.measure = "deviance")
     
-    coefs <- coef(cv_fit, s = "lambda.min")
-    active_coefs <- sum(as.numeric(coefs[-1]) != 0)
-    is_intercept_only <- (active_coefs == 0)
+    # Unified Model Trainer with Purged CV (L1), Platt Calibration (M1), and Feature Attribution (M2)
+    latest_feat_matrix <- pipeline_out$latest_feature_matrix
+    model_core <- train_swing_model(
+      X_train       = X_train,
+      y_train       = y_train,
+      X_test        = latest_feat_matrix,
+      feature_names = feat_names,
+      alpha         = 0.5,
+      p_long        = EFFECTIVE_P_LONG,
+      p_short       = P_SHORT,
+      calibrate     = TRUE,
+      embargo_days  = 5
+    )
+    
+    cv_fit            <- model_core$cv_fit
+    pred_prob         <- model_core$pred_probs[1]
+    is_intercept_only <- model_core$is_intercept_only
+    feat_imp          <- model_core$feature_importance
+    top_feature_str   <- if (!is_intercept_only) paste0(feat_imp$Feature[1], " (", feat_imp$Direction[1], ")") else "Base-Rate"
 
     # Use single source of truth for features and volatility from pipeline_out
-    latest_feat_matrix <- pipeline_out$latest_feature_matrix
     curr_ann_vol       <- pipeline_out$latest_ann_vol
     latest_rs_20       <- pipeline_out$latest_rs_20
     is_rs_leader       <- (!is.na(latest_rs_20) && latest_rs_20 >= 0)
+
+    # 20-day Average Daily Volume & Dollar Volume (L3 Market Impact Guard)
+    vol_series <- tryCatch(Vo(ohlcv), error = function(e) xts(rep(1e6, nrow(price)), order.by = index(price)))
+    adv_20 <- as.numeric(tail(na.omit(TTR::runMean(vol_series, n = 20)), 1))
+    if (is.na(adv_20) || adv_20 <= 0) adv_20 <- 1e6
+    addv_20 <- adv_20 * latest_close
+    is_illiquid <- (addv_20 < 5e6)  # Minimum $5M Average Daily Dollar Volume
 
     # 14-day ATR & Dynamic Chandelier Trailing Stop anchor
     atr_14 <- tryCatch({
@@ -294,21 +311,21 @@ for (sym in SYMBOLS) {
     }, error = function(e) 0.02 * latest_close)
     chandelier_stop <- round(latest_close - (2.5 * atr_14), 2)
 
-    # Model forward probability
-    pred_prob <- as.numeric(predict(cv_fit, newx = latest_feat_matrix, s = "lambda.min", type = "response"))
-
     # Volatility & Bracket Levels (with sanity bounds enforced in pipeline)
     curr_daily_vol <- curr_ann_vol / sqrt(252)
     stop_loss_price <- round(latest_close * (1 - 2.0 * curr_daily_vol), 2)
     take_profit_price <- round(latest_close * (1 + 3.0 * curr_daily_vol), 2)
 
-    # Signal Assignment with Multi-Timeframe, RS Leader, & Earnings Gate
+    # Signal Assignment with Multi-Timeframe, RS Leader, Liquidity & Earnings Gate
     signal_status <- "HOLD"
     gate_note <- "Normal"
 
     if (pred_prob <= P_SHORT) {
       signal_status <- "CASH"
       gate_note <- "Bearish Model"
+    } else if (is_illiquid) {
+      signal_status <- "ILLIQUID"
+      gate_note <- sprintf("Low ADDV ($%.1fM < $5M)", addv_20 / 1e6)
     } else if (pred_prob >= EFFECTIVE_P_LONG) {
       if (is_earnings_blackout) {
         signal_status <- "BLACKOUT"
@@ -324,7 +341,7 @@ for (sym in SYMBOLS) {
         gate_note <- sprintf("Leader [BaseRateOnly 0/%d coefs]", length(feat_names))
       } else {
         signal_status <- "BUY"
-        gate_note <- sprintf("Leader (%+.1f%% vs SPY)", latest_rs_20 * 100)
+        gate_note <- sprintf("Leader (%s)", top_feature_str)
       }
     } else {
       signal_status <- "HOLD"
@@ -342,6 +359,8 @@ for (sym in SYMBOLS) {
       RS_20 = latest_rs_20,
       ATR_14 = atr_14,
       Chandelier_Stop = chandelier_stop,
+      ADV_20 = adv_20,
+      Top_Feature = top_feature_str,
       Earnings_Date = ifelse(is.na(earn_date), "None/ETF", earn_date),
       Days_To_Earn = ifelse(is.na(days_to_earn), -999, days_to_earn),
       GARCH_AnnVol = curr_ann_vol,
@@ -588,7 +607,18 @@ if (isTRUE(IS_FRIDAY)) {
     XLK   = "Index_ETF"
   )
   }
-  get_sector <- function(s) if (s %in% names(SECTOR_MAP)) SECTOR_MAP[[s]] else "General_Tech"
+  sector_map_dirty <- FALSE
+  get_sector <- function(s) {
+    s <- toupper(trimws(s))
+    if (s %in% names(SECTOR_MAP)) {
+      return(SECTOR_MAP[[s]])
+    }
+    # Dynamic Sector Lookup fallback (R1)
+    auto_sec <- get_symbol_sector(s)
+    SECTOR_MAP[[s]] <<- auto_sec
+    sector_map_dirty <<- TRUE
+    return(auto_sec)
+  }
   
   # Count existing sector exposure from currently held positions
   held_sectors <- list()
@@ -700,6 +730,15 @@ if (isTRUE(IS_FRIDAY)) {
         c_sec <- get_sector(row$Symbol)
         
         shares <- raw_shares_list[i] * heat_scale
+        # Cap order size to 1.0% of 20-day ADV to eliminate market impact (L3)
+        if (!is.null(row$ADV_20) && !is.na(row$ADV_20) && row$ADV_20 > 0) {
+          max_adv_shs <- floor(row$ADV_20 * 0.01)
+          if (max_adv_shs > 0 && shares > max_adv_shs) {
+            cat(sprintf(" [Liquidity Defense] Capping %s shares from %.1f to %d (1.0%% of 20-day ADV %d shs).\n",
+                        row$Symbol, shares, max_adv_shs, as.integer(row$ADV_20)))
+            shares <- max_adv_shs
+          }
+        }
         if (isTRUE(ALLOW_FRACTIONAL)) {
           shares <- round(shares, 3)
         } else {
@@ -777,3 +816,11 @@ if (isTRUE(IS_FRIDAY)) {
   }
   cat("========================================================================================\n\n")
 }
+
+if (exists("sector_map_dirty") && isTRUE(sector_map_dirty)) {
+  tryCatch({
+    jsonlite::write_json(SECTOR_MAP, "sector_map.json", pretty = TRUE, auto_unbox = TRUE)
+    cat("[Sector Map] Automatically updated sector_map.json with newly resolved tickers.\n")
+  }, error = function(e) NULL)
+}
+

@@ -71,8 +71,15 @@ run_swing_backtest <- function(ohlcv,
   asset_rets <- na.omit((cl - lag.xts(cl, 1)) / lag.xts(cl, 1))
   common_idx <- index(asset_rets)
   
-  # Strategy Daily Return
-  strat_gross_ret <- effective_pos[common_idx] * asset_rets
+  # Realistic next-day execution: on entry bar, order fills at Open (eliminates unearned overnight gap)
+  is_entry_bar <- (pos_xts[common_idx] > 0 & lag.xts(pos_xts[common_idx], 1) == 0)
+  is_entry_bar[is.na(is_entry_bar)] <- FALSE
+  open_to_close_ret <- tryCatch({
+    (cl[common_idx] - op[common_idx]) / pmax(op[common_idx], 1e-4)
+  }, error = function(e) asset_rets)
+  
+  bar_rets <- ifelse(is_entry_bar, open_to_close_ret, asset_rets)
+  strat_gross_ret <- effective_pos[common_idx] * bar_rets
   
   # Transaction costs: applied whenever position changes
   pos_change <- abs(diff(effective_pos[common_idx]))
@@ -358,8 +365,8 @@ simulate_bracket_backtest <- function(ohlcv,
           pos <- NULL
         }
 
-        # 5. Model Bearish Signal Flip Exit
-        if (!is.null(pos) && as.numeric(sig_xts[i]) <= 0) {
+        # 5. Model Bearish Signal Flip Exit (only if model flips to distinctly bearish < 0 on subsequent bars)
+        if (!is.null(pos) && pos$entry_date != cur_d && as.numeric(sig_xts[i]) < 0) {
           shs_exit <- pos$shares
           exit_px <- c_px
           pnl <- (exit_px - pos$entry_price) * shs_exit - (shs_exit * exit_px * (cost_bps / 10000))
@@ -396,3 +403,7 @@ simulate_bracket_backtest <- function(ohlcv,
     summary_table = perf$formatted
   ))
 }
+
+#' Alias for simulate_bracket_backtest
+#' @export
+run_event_driven_backtest <- simulate_bracket_backtest

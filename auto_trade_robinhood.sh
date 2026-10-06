@@ -83,7 +83,7 @@ Rscript daily_signal.R \
 N_ACTIONABLE=$(grep -c "Action: *BUY [0-9]" "$LATEST_TICKET" || true)
 MACRO_GATE=$(grep -m 1 "Macro Gate:" "$LATEST_TICKET" | sed 's/.*Macro Gate: \([^ |]*\).*/\1/' || echo "Active")
 
-echo "\n[Step 2/3] Scanner Finished. Macro Gate: [$MACRO_GATE] | Qualifying Orders: $N_ACTIONABLE"
+printf "\n[Step 2/3] Scanner Finished. Macro Gate: [%s] | Qualifying Orders: %s\n" "$MACRO_GATE" "$N_ACTIONABLE"
 
 if [ "$N_ACTIONABLE" -eq 0 ]; then
   echo "[Notice] No qualifying BUY signals generated today. Exiting without placing orders."
@@ -91,10 +91,10 @@ if [ "$N_ACTIONABLE" -eq 0 ]; then
 fi
 
 # Step 3: Execute Buy Orders on Robinhood
-echo "\n[Step 3/3] Staging / Executing Orders via Robinhood API Bridge..."
+printf "\n[Step 3/3] Staging / Executing Orders via Robinhood API Bridge...\n"
 python3 execute_robinhood.py --dry_run="$DRY_RUN" --ticket_file="$LATEST_TICKET" 2>&1 | tee -a "$LOG_FILE"
 
-echo "\n================================================================================"
+printf "\n================================================================================\n"
 echo "           ROBINHOOD EXECUTION COMPLETED SUCCESSFULLY                           "
 echo "================================================================================"
 echo " Active Positions Tracked in: robinhood_positions.json"

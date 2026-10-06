@@ -145,6 +145,59 @@ assert_equal(nrow(pipe_res$latest_feature_matrix), 1, "I2: Feature matrix is 1-r
 assert_true(pipe_res$latest_ann_vol >= 0.05 && pipe_res$latest_ann_vol <= 3.0, "B1: Annualized vol strictly bounded [0.05, 3.0]")
 
 # ------------------------------------------------------------------------------
+# TEST GROUP 4: Model Estimation, Purged CV & Platt Calibration (B1, L1, M1, M2)
+# ------------------------------------------------------------------------------
+cat("\n[Group 4] Testing Model Estimation, Purged CV & Platt Calibration...\n")
+source("R/05_logistic_model.R")
+
+# Test L1: Purged fold generator
+folds <- build_purged_folds(100, nfolds = 5, embargo = 5)
+assert_equal(length(folds), 100, "L1: Purged folds generated for 100 observations")
+assert_equal(length(unique(folds)), 5, "L1: Exactly 5 unique folds created")
+
+# Test B1 & M1 & M2: fit_logistic_swing_model and train_swing_model
+m_fit <- fit_logistic_swing_model(
+  df_model      = pipe_res$model_data,
+  feature_names = pipe_res$feature_names,
+  train_split   = 0.70,
+  p_long        = 0.58,
+  p_short       = 0.42,
+  calibrate     = TRUE
+)
+assert_true(!is.null(m_fit), "B1: fit_logistic_swing_model succeeds without active_acc error")
+assert_true("Active Signal Accuracy" %in% m_fit$metrics$Metric, "B1: Active Signal Accuracy metric present")
+assert_true(!is.null(m_fit$feature_importance), "M2: Feature importance data frame generated")
+assert_equal(nrow(m_fit$feature_importance), length(pipe_res$feature_names), "M2: All features ranked in importance")
+
+# ------------------------------------------------------------------------------
+# TEST GROUP 5: Backtest Engine & Realistic Execution (B3, L2)
+# ------------------------------------------------------------------------------
+cat("\n[Group 5] Testing Backtest Engines & Realistic Execution...\n")
+source("R/06_swing_backtest.R")
+
+bt_vec <- run_swing_backtest(
+  ohlcv        = synth_ohlcv,
+  model_res    = m_fit,
+  pipeline_out = pipe_res,
+  allow_short  = FALSE,
+  target_vol   = 0.30,
+  max_leverage = 1.0,
+  cost_bps     = 10
+)
+assert_true(!is.null(bt_vec$strat_net_ret), "L2: Vector backtest produces strat_net_ret")
+assert_true(!is.null(bt_vec$performance_table), "L2: Vector backtest produces performance table")
+
+bt_event <- run_event_driven_backtest(
+  ohlcv           = synth_ohlcv,
+  model_res       = m_fit,
+  pipeline_out    = pipe_res,
+  initial_capital = 10000,
+  cost_bps        = 10
+)
+assert_true(!is.null(bt_event$equity_curve), "B3/L2: Event-driven backtest produces equity curve")
+assert_true(!is.null(bt_event$summary_table), "B3/L2: Event-driven backtest produces summary table")
+
+# ------------------------------------------------------------------------------
 # TEST SUMMARY
 # ------------------------------------------------------------------------------
 cat("\n================================================================================\n")
@@ -156,3 +209,4 @@ if (test_fail_count > 0) {
 } else {
   quit(save = "no", status = 0)
 }
+

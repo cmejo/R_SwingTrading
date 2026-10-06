@@ -75,7 +75,7 @@ echo " Timestamp:    $(date)"
 echo "================================================================================"
 
 # Step 1: Run Multi-Asset Scanner & Risk Management Engine
-echo "\n[Step 1/3] Running Quantitative Scanner & Ralph Vince Optimal-f Sizing..."
+printf "\n[Step 1/3] Running Quantitative Scanner & Ralph Vince Optimal-f Sizing...\n"
 Rscript daily_signal.R \
   --capital="$CAPITAL" \
   --symbols_file="$SYMBOLS_FILE" \
@@ -88,7 +88,7 @@ Rscript daily_signal.R \
 N_ACTIONABLE=$(grep -c "Action: *BUY [0-9]" "$LATEST_TICKET" || true)
 MACRO_GATE=$(grep -m 1 "Macro Gate:" "$LATEST_TICKET" | sed 's/.*Macro Gate: \([^ |]*\).*/\1/' || echo "Active")
 
-echo "\n[Step 2/3] Scanner Finished. Macro Gate: [$MACRO_GATE] | Qualifying Orders: $N_ACTIONABLE"
+printf "\n[Step 2/3] Scanner Finished. Macro Gate: [%s] | Qualifying Orders: %s\n" "$MACRO_GATE" "$N_ACTIONABLE"
 
 if [ "$N_ACTIONABLE" -eq 0 ]; then
   echo "[Notice] No qualifying BUY signals generated today. Exiting without placing orders."
@@ -96,10 +96,16 @@ if [ "$N_ACTIONABLE" -eq 0 ]; then
 fi
 
 # Step 3: Transmit Bracket Orders to Interactive Brokers
-echo "\n[Step 3/3] Staging / Transmitting Bracket Orders to IBKR Gateway/TWS..."
+printf "\n[Step 3/3] Staging / Transmitting Bracket Orders to IBKR Gateway/TWS...\n"
 python3 execute_ibkr.py --dry_run="$DRY_RUN" --port="$IB_PORT" --ticket_file="$LATEST_TICKET" 2>&1 | tee -a "$LOG_FILE"
 
-echo "\n================================================================================"
+# Post-Execution Portfolio Reconciliation (R2)
+if [ "$DRY_RUN" = "false" ]; then
+  printf "\n[Reconciliation] Synchronizing active IBKR account positions into portfolio.json...\n"
+  python3 execute_broker.py --broker=ibkr --sync --port="$IB_PORT" --dry_run=false 2>&1 | tee -a "$LOG_FILE" || true
+fi
+
+printf "\n================================================================================\n"
 echo "        INTERACTIVE BROKERS EXECUTION PIPELINE COMPLETED                        "
 echo "================================================================================"
 echo " Review full execution details in: $LOG_FILE"

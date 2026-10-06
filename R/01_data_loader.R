@@ -148,7 +148,11 @@ get_upcoming_earnings_date <- function(symbol, cache_file = "data/earnings_cache
       
       dates_df <- parsed$quoteSummary$result$calendarEvents$earnings$earningsDate[[1]]
       if (!is.null(dates_df) && "fmt" %in% names(dates_df) && length(dates_df$fmt) > 0) {
-        earn_date <- as.character(dates_df$fmt[1])
+        raw_date <- as.character(dates_df$fmt[1])
+        # Validate that date is upcoming (>= today), not historical/expired (Fix B4)
+        if (!is.na(raw_date) && as.Date(raw_date) >= Sys.Date()) {
+          earn_date <- raw_date
+        }
       }
     }
   }, error = function(e) {
@@ -162,3 +166,25 @@ get_upcoming_earnings_date <- function(symbol, cache_file = "data/earnings_cache
   
   return(earn_date)
 }
+
+#' Query Stock Sector from Yahoo Finance Metadata (R1)
+#'
+#' @param symbol Stock ticker symbol.
+#' @return Character string representing sector classification.
+#' @export
+get_symbol_sector <- function(symbol) {
+  symbol <- toupper(trimws(symbol))
+  tryCatch({
+    url <- sprintf("https://query2.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=assetProfile", symbol)
+    cmd <- sprintf("curl -s -A %s %s", shQuote("Mozilla/5.0"), shQuote(url))
+    res <- system(cmd, intern = TRUE)
+    parsed <- jsonlite::fromJSON(paste(res, collapse = ""))
+    sec <- parsed$quoteSummary$result$assetProfile$sector
+    if (!is.null(sec) && nchar(sec) > 0) {
+      sec_clean <- gsub("[^A-Za-z0-9]", "_", trimws(sec))
+      return(sec_clean)
+    }
+  }, error = function(e) NULL)
+  return("General_Tech")
+}
+
