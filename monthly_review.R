@@ -25,7 +25,7 @@ source("R/05_logistic_model.R")
 source("R/06_swing_backtest.R")
 source("R/08_metrics.R")
 
-SYMBOL <- "SNDK"
+SYMBOL <- "SPY"
 DAYS   <- 30
 CAPITAL<- 10000
 

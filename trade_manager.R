@@ -234,6 +234,7 @@ for (arg in args) {
       total_capital = 10000,
       cash_balance = 10000,
       max_positions = 5,
+      peak_equity = 10000,
       last_updated = as.character(Sys.time()),
       positions = list(),
       closed_trades = list()
