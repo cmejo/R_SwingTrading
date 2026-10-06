@@ -123,10 +123,14 @@ if (!is.null(RECORD_SELL)) {
   cat(sprintf("[PortfolioManager] Recorded SELL / EXIT for %s at $%.2f (Reason: %s)\n", sell_sym, sell_px, sell_rsn))
 }
 
-# Resolve symbols.txt path if not explicitly provided as a vector
+# Resolve universe file path if not explicitly provided as a vector
 if (is.null(SYMBOLS)) {
   target_file <- if (!is.null(SYMBOLS_FILE) && file.exists(SYMBOLS_FILE)) {
     SYMBOLS_FILE
+  } else if (file.exists("symbols_broad.txt")) {
+    "symbols_broad.txt"
+  } else if (file.exists("/Volumes/2TB.ssd/_a Development/swingtrading/symbols_broad.txt")) {
+    "/Volumes/2TB.ssd/_a Development/swingtrading/symbols_broad.txt"
   } else if (file.exists("symbols.txt")) {
     "symbols.txt"
   } else if (file.exists("/Volumes/2TB.ssd/_a Development/swingtrading/symbols.txt")) {
@@ -146,7 +150,7 @@ if (is.null(SYMBOLS)) {
                 length(SYMBOLS), target_file, paste(SYMBOLS, collapse = ", ")))
   } else {
     SYMBOLS <- c("SNDK", "NVDA", "AAPL", "AMD", "MSFT")
-    cat("[Config] No symbols.txt found. Using fallback universe: SNDK, NVDA, AAPL, AMD, MSFT\n")
+    cat("[Config] No symbols file found. Using fallback universe: SNDK, NVDA, AAPL, AMD, MSFT\n")
   }
 } else {
   SYMBOLS <- unique(toupper(trimws(SYMBOLS)))

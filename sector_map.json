@@ -312,5 +312,7 @@
   "XLC": "Index_ETF",
   "XLY": "Index_ETF",
   "XBI": "Index_ETF",
-  "ARKK": "Index_ETF"
+  "ARKK": "Index_ETF",
+  "AMUU": "General_Tech",
+  "CEVA": "General_Tech"
 }

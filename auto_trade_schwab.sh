@@ -22,7 +22,7 @@ cd "$PROJECT_DIR" || exit 1
 
 # Default Parameters
 DRY_RUN="true"
-SYMBOLS_FILE="$PROJECT_DIR/symbols.txt"
+SYMBOLS_FILE="$PROJECT_DIR/symbols_broad.txt"
 LEVERAGE="1.0"
 MAX_POS="5"
 MAX_PER_SECTOR="2"
