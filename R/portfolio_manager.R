@@ -69,14 +69,24 @@ save_portfolio <- function(state, path = "portfolio.json") {
 #' @param stop_loss GTC stop-loss price.
 #' @param take_profit GTC take-profit price.
 #' @param entry_date Entry date string (YYYY-MM-DD). Defaults to Sys.Date().
+#' @param tier1_target Price target for Tier 1 (+1.5R, exit 50%).
+#' @param tier2_target Price target for Tier 2 (+3.0R, exit 25%, retain 25% runner).
+#' @param atr 14-day ATR for Chandelier trailing stop.
 #' @return Updated portfolio state list.
 #' @export
-record_fill <- function(portfolio, symbol, shares, entry_price, stop_loss, take_profit, entry_date = as.character(Sys.Date())) {
+record_fill <- function(portfolio, symbol, shares, entry_price, stop_loss, take_profit, 
+                        entry_date = as.character(Sys.Date()),
+                        tier1_target = NULL, tier2_target = NULL, atr = NULL) {
   shares      <- as.numeric(shares)
   entry_price <- as.numeric(entry_price)
   stop_loss   <- as.numeric(stop_loss)
   take_profit <- as.numeric(take_profit)
   cost_basis  <- round(shares * entry_price, 2)
+  
+  risk_1r <- max(1e-4, entry_price - stop_loss)
+  t1_target <- if (!is.null(tier1_target)) as.numeric(tier1_target) else round(entry_price + 1.5 * risk_1r, 2)
+  t2_target <- if (!is.null(tier2_target)) as.numeric(tier2_target) else round(entry_price + 3.0 * risk_1r, 2)
+  atr_val   <- if (!is.null(atr)) as.numeric(atr) else round(entry_price * 0.025, 2)
   
   if (cost_basis > (portfolio$cash_balance + 0.01)) {
     warning(sprintf("[PortfolioManager] Insufficient cash for %s: requires $%.2f, available $%.2f",
@@ -87,14 +97,22 @@ record_fill <- function(portfolio, symbol, shares, entry_price, stop_loss, take_
   portfolio$cash_balance <- max(0, round(portfolio$cash_balance - cost_basis, 2))
   
   new_pos <- list(
-    symbol = toupper(symbol),
-    shares = shares,
-    entry_price = entry_price,
-    entry_date = entry_date,
-    stop_loss = stop_loss,
-    take_profit = take_profit,
-    cost_basis = cost_basis,
-    status = "OPEN"
+    symbol          = toupper(symbol),
+    shares          = shares,
+    initial_shares  = shares,
+    entry_price     = entry_price,
+    entry_date      = entry_date,
+    stop_loss       = stop_loss,
+    take_profit     = take_profit,
+    tier1_target    = t1_target,
+    tier2_target    = t2_target,
+    tier1_hit       = FALSE,
+    tier2_hit       = FALSE,
+    is_runner       = FALSE,
+    atr             = atr_val,
+    highest_price   = entry_price,
+    cost_basis      = cost_basis,
+    status          = "OPEN"
   )
   
   # Accumulate into existing position for same symbol or append new position
@@ -112,16 +130,22 @@ record_fill <- function(portfolio, symbol, shares, entry_price, stop_loss, take_
     portfolio$positions[[existing_idx[1]]] <- list(
       symbol         = toupper(symbol),
       shares         = comb_shares,
+      initial_shares = round(if (!is.null(old_pos$initial_shares)) as.numeric(old_pos$initial_shares) + shares else comb_shares, 4),
       entry_price    = avg_price,
       entry_date     = old_pos$entry_date,
       stop_loss      = max(as.numeric(old_pos$stop_loss), stop_loss),
       take_profit    = take_profit,
+      tier1_target   = t1_target,
+      tier2_target   = t2_target,
+      tier1_hit      = if (!is.null(old_pos$tier1_hit)) old_pos$tier1_hit else FALSE,
+      tier2_hit      = if (!is.null(old_pos$tier2_hit)) old_pos$tier2_hit else FALSE,
+      is_runner      = if (!is.null(old_pos$is_runner)) old_pos$is_runner else FALSE,
+      atr            = atr_val,
       cost_basis     = comb_cost,
       highest_price  = max(if (!is.null(old_pos$highest_price)) as.numeric(old_pos$highest_price) else 0, avg_price),
       status         = "OPEN"
     )
   } else {
-    new_pos$highest_price <- entry_price
     portfolio$positions[[length(portfolio$positions) + 1]] <- new_pos
   }
   
@@ -194,6 +218,16 @@ record_exit <- function(portfolio, symbol, exit_price, exit_date = as.character(
     rem_cost   <- round(as.numeric(pos$cost_basis) - portion_cost, 2)
     portfolio$positions[[idx[1]]]$shares <- rem_shares
     portfolio$positions[[idx[1]]]$cost_basis <- rem_cost
+    
+    # Update tier status based on exit reason
+    if (grepl("TIER1", reason, ignore.case = TRUE)) {
+      portfolio$positions[[idx[1]]]$tier1_hit <- TRUE
+      portfolio$positions[[idx[1]]]$stop_loss <- max(as.numeric(pos$stop_loss), as.numeric(pos$entry_price))
+    }
+    if (grepl("TIER2", reason, ignore.case = TRUE)) {
+      portfolio$positions[[idx[1]]]$tier2_hit <- TRUE
+      portfolio$positions[[idx[1]]]$is_runner <- TRUE
+    }
   }
   
   return(portfolio)
@@ -255,42 +289,64 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
       }
       
       suggested_stop <- p$stop_loss
+      risk_1r <- max(1e-4, p$entry_price - p$stop_loss)
+      
       # Breakeven escalation rule: If position is up by >= 1R, raise stop to Entry Price
-      risk_1r <- p$entry_price - p$stop_loss
       if (risk_1r > 0 && cp >= (p$entry_price + risk_1r)) {
         suggested_stop <- round(max(suggested_stop, p$entry_price), 2)
       }
       
       # ATR Chandelier Trailing Stop for Tier 2 runners
-      # Persist highest_price so the trailing stop only ratchets upward
       prev_highest <- if (!is.null(p$highest_price)) as.numeric(p$highest_price) else as.numeric(p$entry_price)
       highest_seen <- max(prev_highest, cp)
       portfolio$positions[[i]]$highest_price <- highest_seen
       
-      atr_val <- if (!is.null(p$atr)) p$atr else (p$entry_price * 0.025)
+      atr_val <- if (!is.null(p$atr)) as.numeric(p$atr) else (p$entry_price * 0.025)
       chandelier_stop <- round(highest_seen - (2.5 * atr_val), 2)
-      if (cp >= (p$entry_price + risk_1r) && chandelier_stop > suggested_stop) {
+      
+      # If Tier 1 was hit, ratchet stop to breakeven or Chandelier
+      if (isTRUE(p$tier1_hit)) {
+        suggested_stop <- max(suggested_stop, p$entry_price, chandelier_stop)
+      }
+      
+      # If Tier 2 was hit (Runner Lot active), stop is governed strictly by Chandelier stop
+      if (isTRUE(p$is_runner) || isTRUE(p$tier2_hit)) {
+        suggested_stop <- max(suggested_stop, chandelier_stop)
+      } else if (cp >= (p$entry_price + risk_1r) && chandelier_stop > suggested_stop) {
         suggested_stop <- chandelier_stop
       }
+      
+      t1_tgt <- if (!is.null(p$tier1_target)) as.numeric(p$tier1_target) else round(p$entry_price + 1.5 * risk_1r, 2)
+      t2_tgt <- if (!is.null(p$tier2_target)) as.numeric(p$tier2_target) else round(p$entry_price + 3.0 * risk_1r, 2)
       
       # Determine action trigger
       action <- "HOLD"
       status <- "ACTIVE"
       
-      # 1. Stop-Loss & Take-Profit Triggers (Immediate Execution)
-      # Use suggested_stop (which includes breakeven escalation and chandelier ratchet)
+      # 1. Stop-Loss & Target Triggers
       if (cp <= suggested_stop) {
         action <- sprintf("SELL (STOP BREACHED at $%.2f)", suggested_stop)
         status <- "STOP_TRIGGERED"
         alerts <- c(alerts, sprintf("[STOP-LOSS HIT] %s breached stop at $%.2f (Current: $%.2f). Exit immediately.", sym, suggested_stop, cp))
-      } else if (cp >= p$take_profit) {
-        action <- "SELL (TAKE-PROFIT REACHED)"
-        status <- "TARGET_TRIGGERED"
-        alerts <- c(alerts, sprintf("[TARGET REACHED] %s hit take-profit target at $%.2f. Lock in gains!", sym, p$take_profit))
-      } else if (days_held >= 5) {
+      } else if (!isTRUE(p$tier1_hit) && cp >= t1_tgt) {
+        shs_to_exit <- round(as.numeric(p$shares) * 0.50, 3)
+        action <- sprintf("SCALE OUT 50%% @ TIER 1 (+1.5R: $%.2f reached | Breakeven Stop $%.2f)", t1_tgt, p$entry_price)
+        status <- "TIER1_TARGET_TRIGGERED"
+        alerts <- c(alerts, sprintf("[TIER 1 HIT] %s hit +1.5R target ($%.2f). Sell 50%% (%.3f shares) and raise stop to Breakeven $%.2f!",
+                                    sym, t1_tgt, shs_to_exit, p$entry_price))
+      } else if (isTRUE(p$tier1_hit) && !isTRUE(p$tier2_hit) && cp >= t2_tgt) {
+        shs_to_exit <- round(as.numeric(p$shares) * 0.50, 3) # 50% of the remaining 50% = 25% of initial
+        action <- sprintf("SCALE OUT 25%% @ TIER 2 (+3.0R: $%.2f reached | 25%% RUNNER REMAINS)", t2_tgt)
+        status <- "TIER2_TARGET_TRIGGERED"
+        alerts <- c(alerts, sprintf("[TIER 2 HIT] %s hit +3.0R target ($%.2f). Sell %.3f shares. Retain 25%% RUNNER trailing on Chandelier Stop ($%.2f)!",
+                                    sym, t2_tgt, shs_to_exit, chandelier_stop))
+      } else if (isTRUE(p$is_runner) || isTRUE(p$tier2_hit)) {
+        action <- sprintf("HOLD RUNNER (Chandelier Trailing Stop: $%.2f | P&L: %+.2f%%)", chandelier_stop, pnl_pct)
+        status <- "RUNNER_ACTIVE"
+      } else if (days_held >= 5 && !isTRUE(p$tier2_hit)) {
         action <- "SELL (MAX 5-DAY TIME HORIZON)"
         status <- "TIME_EXIT_TRIGGERED"
-        alerts <- c(alerts, sprintf("[TIME EXIT] %s held for %d trading days. Recycle capital into fresh setups.", sym, days_held))
+        alerts <- c(alerts, sprintf("[TIME EXIT] %s held for %d trading days without reaching Tier 2 runner. Recycle capital.", sym, days_held))
       } else if (isTRUE(is_friday)) {
         # 2. Conditional Weekend Holding Engine
         sym_row <- if (!is.null(model_scan_df) && sym %in% model_scan_df$Symbol) {

@@ -35,14 +35,23 @@ if (length(args) == 0 || "--status" %in% args) {
     cat(" No open positions. Portfolio is 100% in CASH.\n")
   } else {
     pos_df <- do.call(rbind, lapply(portfolio$positions, function(p) {
+      t1_str <- if (!is.null(p$tier1_target)) sprintf("$%.2f [%s]", as.numeric(p$tier1_target), ifelse(isTRUE(p$tier1_hit), "HIT", "PENDING")) else "N/A"
+      t2_str <- if (!is.null(p$tier2_target)) sprintf("$%.2f [%s]", as.numeric(p$tier2_target), ifelse(isTRUE(p$tier2_hit), "HIT", "PENDING")) else "N/A"
+      runner_str <- if (isTRUE(p$is_runner)) {
+        sprintf("RUNNER (Chandelier Stop $%.2f)", round(as.numeric(p$highest_price) - 2.5 * as.numeric(p$atr), 2))
+      } else {
+        "STANDARD"
+      }
       data.frame(
-        Symbol = p$symbol,
-        Shares = p$shares,
-        Entry_Price = sprintf("$%.2f", p$entry_price),
-        Cost_Basis = sprintf("$%.2f", p$cost_basis),
-        Stop_Loss = sprintf("$%.2f", p$stop_loss),
-        Take_Profit = sprintf("$%.2f", p$take_profit),
-        Entry_Date = p$entry_date,
+        Symbol      = p$symbol,
+        Shares      = p$shares,
+        Entry_Price = sprintf("$%.2f", as.numeric(p$entry_price)),
+        Cost_Basis  = sprintf("$%.2f", as.numeric(p$cost_basis)),
+        Stop_Loss   = sprintf("$%.2f", as.numeric(p$stop_loss)),
+        Tier_1_Tgt  = t1_str,
+        Tier_2_Tgt  = t2_str,
+        Lot_Status  = runner_str,
+        Entry_Date  = p$entry_date,
         stringsAsFactors = FALSE
       )
     }))
@@ -158,6 +167,41 @@ for (arg in args) {
                 toupper(sym), px, reason, if (!is.null(shares_exit)) sprintf("%.3f", shares_exit) else "ALL"))
     cat(sprintf("[TradeManager] New Cash Balance: $%.2f | Total Capital: $%.2f\n",
                 portfolio$cash_balance, portfolio$total_capital))
+  }
+
+  if (startsWith(arg, "--scale_out_t1=")) {
+    val <- sub("^--scale_out_t1=", "", arg)
+    parts <- strsplit(val, "[,:]")[[1]]
+    sym <- toupper(parts[1])
+    px  <- as.numeric(parts[2])
+    idx <- which(sapply(portfolio$positions, function(p) p$symbol == sym))
+    if (length(idx) == 0) stop(sprintf("No open position for %s to scale out.", sym))
+    pos <- portfolio$positions[[idx[1]]]
+    # Sell 50% of position
+    shs_t1 <- round(as.numeric(pos$shares) * 0.50, 4)
+    portfolio <- record_exit(portfolio, sym, px, reason = "SCALE_OUT_TIER1", shares_to_exit = shs_t1)
+    save_portfolio(portfolio, state_file)
+    cat(sprintf("[TradeManager] Recorded TIER 1 SCALE-OUT: Sold %.3f shares of %s @ $%.2f (+1.5R)\n", shs_t1, sym, px))
+    cat(sprintf(" -> Stop Loss ratcheted to Breakeven: $%.2f. Remaining shares: %.3f\n", pos$entry_price, as.numeric(pos$shares) - shs_t1))
+    cat(sprintf(" -> New Cash Balance: $%.2f | Total Capital: $%.2f\n", portfolio$cash_balance, portfolio$total_capital))
+  }
+
+  if (startsWith(arg, "--scale_out_t2=")) {
+    val <- sub("^--scale_out_t2=", "", arg)
+    parts <- strsplit(val, "[,:]")[[1]]
+    sym <- toupper(parts[1])
+    px  <- as.numeric(parts[2])
+    idx <- which(sapply(portfolio$positions, function(p) p$symbol == sym))
+    if (length(idx) == 0) stop(sprintf("No open position for %s to scale out.", sym))
+    pos <- portfolio$positions[[idx[1]]]
+    # Sell 50% of remaining position (25% of initial), leaving 25% as runner
+    shs_t2 <- round(as.numeric(pos$shares) * 0.50, 4)
+    portfolio <- record_exit(portfolio, sym, px, reason = "SCALE_OUT_TIER2", shares_to_exit = shs_t2)
+    save_portfolio(portfolio, state_file)
+    cat(sprintf("[TradeManager] Recorded TIER 2 SCALE-OUT: Sold %.3f shares of %s @ $%.2f (+3.0R)\n", shs_t2, sym, px))
+    cat(sprintf(" -> 25%% RUNNER LOT ESTABLISHED: %.3f shares trailing on Chandelier Stop ($2.5 x ATR)!\n", as.numeric(pos$shares) - shs_t2))
+    cat(" -> Position is now EXEMPT from 5-day expiration window.\n")
+    cat(sprintf(" -> New Cash Balance: $%.2f | Total Capital: $%.2f\n", portfolio$cash_balance, portfolio$total_capital))
   }
   
   if (startsWith(arg, "--deposit=")) {

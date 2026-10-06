@@ -30,7 +30,7 @@ source("R/send_alert.R")
 # Default Parameters
 CAPITAL          <- 10000
 MAX_POSITIONS    <- 5     # Max concurrent swing positions to hold (e.g., 5 positions @ $2,000 each)
-TARGET_VOL       <- 1.00  # High Growth Sizing (100% allocation of per-position capital)
+TARGET_VOL       <- 0.45  # Target Volatility Budget (0.45 = 45% annual vol, matches QQQ/tech growth)
 FAST_N           <- 20
 SLOW_N           <- 50
 LOOK_AHEAD       <- 5
@@ -385,8 +385,11 @@ if (length(scan_results) == 0) {
 
 df_scan <- do.call(rbind, scan_results)
 
-# Rank by Model Probability Descending
-df_scan <- df_scan[order(-df_scan$Prob_Up), ]
+# Cross-Sectional Quality Score: P(Up) * (1 + RS) when P(Up) >= EFFECTIVE_P_LONG and RS > 0
+df_scan$Quality_Score <- ifelse(df_scan$Prob_Up >= EFFECTIVE_P_LONG & df_scan$RS_20 > 0,
+                                df_scan$Prob_Up * (1 + df_scan$RS_20),
+                                0.0)
+df_scan <- df_scan[order(-df_scan$Quality_Score, -df_scan$Prob_Up), ]
 rownames(df_scan) <- 1:nrow(df_scan)
 
 # Formatted Leaderboard
@@ -401,6 +404,7 @@ summary_table <- data.frame(
   Symbol     = df_scan$Symbol,
   Price      = sprintf("$%.2f", df_scan$Close),
   P_Up       = sprintf("%.1f%%", df_scan$Prob_Up * 100),
+  Score      = sprintf("%.3f", df_scan$Quality_Score),
   Signal     = df_scan$Signal,
   RS_SPY     = sprintf("%s%.1f%%", ifelse(df_scan$RS_20 >= 0, "+", ""), df_scan$RS_20 * 100),
   Weekly     = sprintf("%s%.1f%% [%s]", 
@@ -760,18 +764,19 @@ if (isTRUE(IS_FRIDAY)) {
         
         shares_display <- if (isTRUE(ALLOW_FRACTIONAL) && (shares %% 1 != 0)) sprintf("%.3f", shares) else sprintf("%d", as.integer(shares))
         
-        # Multi-Tier Bracket Pricing
-        tier1_shares <- if (isTRUE(ALLOW_FRACTIONAL)) round(shares * 0.5, 3) else floor(shares * 0.5)
-        tier2_shares <- round(shares - tier1_shares, 3)
-        tier1_target <- round(row$Close * (1 + 3.0 * row$Daily_Vol), 2)  # +1.5R target
-        tier2_target <- round(row$Close * (1 + 6.0 * row$Daily_Vol), 2)  # +3.0R runner target
-        total_risk   <- round(shares * (row$Close - row$Stop_Loss), 2)
-        tier1_gain   <- round(tier1_shares * (tier1_target - row$Close), 2)
-        tier2_gain   <- round(tier2_shares * (tier2_target - row$Close), 2)
+        # Multi-Tier Bracket Pricing (50% @ +1.5R, 25% @ +3.0R, 25% Chandelier Runner)
+        tier1_shares  <- if (isTRUE(ALLOW_FRACTIONAL)) round(shares * 0.50, 3) else floor(shares * 0.50)
+        tier2_shares  <- if (isTRUE(ALLOW_FRACTIONAL)) round(shares * 0.25, 3) else floor(shares * 0.25)
+        runner_shares <- round(shares - tier1_shares - tier2_shares, 3)
+        tier1_target  <- round(row$Close * (1 + 3.0 * row$Daily_Vol), 2)  # +1.5R target
+        tier2_target  <- round(row$Close * (1 + 6.0 * row$Daily_Vol), 2)  # +3.0R target
+        total_risk    <- round(shares * (row$Close - row$Stop_Loss), 2)
+        tier1_gain    <- round(tier1_shares * (tier1_target - row$Close), 2)
+        tier2_gain    <- round(tier2_shares * (tier2_target - row$Close), 2)
         
-        cat(sprintf("--- ORDER TICKET #%d: %s (P(Up): %.1f%% | Sector: %s) ---\n", 
-                    i, row$Symbol, row$Prob_Up * 100, c_sec))
-        cat(sprintf("  Action:              BUY %s SHARES at Market (Monday Afternoon Execution)\n", shares_display))
+        cat(sprintf("--- ORDER TICKET #%d: %s (P(Up): %.1f%% | Quality Score: %.3f | Sector: %s) ---\n", 
+                    i, row$Symbol, row$Prob_Up * 100, row$Quality_Score, c_sec))
+        cat(sprintf("  Action:              BUY %s SHARES at Market (Order Execution)\n", shares_display))
         cat(sprintf("  Position Sizing:     %s\n", sizing_note))
         cat(sprintf("  Capital Allocation:  %s\n", alloc_note))
         cat(sprintf("  Relative Strength:   %+.2f%% vs SPY Benchmark [MARKET LEADER]\n", row$RS_20 * 100))
@@ -779,20 +784,49 @@ if (isTRUE(IS_FRIDAY)) {
         cat(sprintf("  Earnings Safe:       Next report %s (%d days out)\n", row$Earnings_Date, as.integer(row$Days_To_Earn)))
         cat(sprintf("  GTC Stop-Loss:       $%.2f (-%.2f%%) [Total Downside Risk: $%.2f]\n", 
                     row$Stop_Loss, 2.0 * row$Daily_Vol * 100, total_risk))
-        cat("  Multi-Tier Bracket Exits:\n")
-        cat(sprintf("    -> Tier 1 (50%% = %s shs): Target $%.2f (+%.2f%%, +1.5R) [Gain: $%.2f] -> Lock in profits & move stop to Breakeven $%.2f\n",
-                    tier1_shares, tier1_target, 3.0 * row$Daily_Vol * 100, tier1_gain, row$Close))
-        cat(sprintf("    -> Tier 2 (50%% = %s shs): Target $%.2f (+%.2f%%, +3.0R) [Gain: $%.2f] -> Momentum runner\n",
-                    tier2_shares, tier2_target, 6.0 * row$Daily_Vol * 100, tier2_gain))
-        cat(sprintf("    -> Chandelier Trailing Stop: Initial trigger at $%.2f (Trails Highest High - 2.5 x ATR(14) $%.2f)\n",
-                    row$Chandelier_Stop, row$ATR_14))
-        cat(sprintf("  Reward / Risk Ratio: Tier 1: 1.50R | Tier 2: 3.00R (Combined Potential: +$%.2f vs -$%.2f Risk)\n\n",
-                    tier1_gain + tier2_gain, total_risk))
+        cat("  3-Tier Execution & Trend-Trailing Runner Plan:\n")
+        cat(sprintf("    -> Tier 1 (50%% = %s shs): Target $%.2f (+1.5R) [Gain: $%.2f] -> Close 50%% & move stop to Breakeven $%.2f\n",
+                    tier1_shares, tier1_target, tier1_gain, row$Close))
+        cat(sprintf("    -> Tier 2 (25%% = %s shs): Target $%.2f (+3.0R) [Gain: $%.2f] -> Close 25%%\n",
+                    tier2_shares, tier2_target, tier2_gain))
+        cat(sprintf("    -> Runner Lot (25%% = %s shs): Chandelier Trailing Stop (Initial: $%.2f, Trails Highest High - 2.5 x ATR(14) $%.2f)\n",
+                    runner_shares, row$Chandelier_Stop, row$ATR_14))
+        cat("       * EXEMPT from 5-day expiration window to capture multi-month momentum blowoffs!\n\n")
         
         alert_tickets <- c(alert_tickets, sprintf(
-          "• *%s* (%s): BUY %s shs @ ~$%.2f\n  - Stop: $%.2f | T1: $%.2f (+1.5R) | T2: $%.2f (+3.0R)\n  - Chandelier Stop: $%.2f | RS vs SPY: %+.1f%%",
+          "• *%s* (%s): BUY %s shs @ ~$%.2f\n  - Stop: $%.2f | T1 (50%%): $%.2f (+1.5R) | T2 (25%%): $%.2f (+3.0R)\n  - Runner (25%%): Chandelier Stop $%.2f | RS vs SPY: %+.1f%%",
           row$Symbol, c_sec, shares_display, row$Close, row$Stop_Loss, tier1_target, tier2_target, row$Chandelier_Stop, row$RS_20 * 100
         ))
+      }
+      
+      # Calculate total capital deployed into swing setups
+      total_swing_outlay <- sum(sapply(1:n_actionable, function(idx) {
+        shs <- raw_shares_list[idx] * heat_scale
+        if (isTRUE(ALLOW_FRACTIONAL)) shs <- round(shs, 3) else shs <- floor(shs)
+        shs * actionable_df$Close[actionable_df$Symbol == candidate_syms[idx]]
+      }))
+      
+      # Core-Satellite Cash Yield Allocation (Park surplus unallocated cash in QQQ)
+      unalloc_cash <- max(0, cash_available - total_swing_outlay)
+      if (unalloc_cash >= 100) {
+        qqq_px <- macro_info$close
+        qqq_shs <- if (isTRUE(ALLOW_FRACTIONAL)) round(unalloc_cash / qqq_px, 3) else floor(unalloc_cash / qqq_px)
+        
+        cat("----------------------------------------------------------------------------------------\n")
+        cat("          CORE-SATELLITE CASH YIELD DEPLOYMENT (PARK UNALLOCATED CASH IN QQQ)\n")
+        cat("----------------------------------------------------------------------------------------\n")
+        cat(sprintf(" Unallocated Cash:       $%.2f (%.1f%% of available capital)\n", unalloc_cash, unalloc_cash / max(1, sync_res$total_account_value) * 100))
+        cat(sprintf(" Macro Gate Status:      %s (QQQ 50-day Trend is %s)\n", macro_info$regime, ifelse(macro_info$is_bullish, "BULLISH", "BEARISH")))
+        if (isTRUE(macro_info$is_bullish)) {
+          cat(sprintf(" Actionable Ticket:      BUY %s shares of QQQ @ ~$%.2f ($%.2f outlay)\n", 
+                      ifelse(isTRUE(ALLOW_FRACTIONAL), sprintf("%.3f", qqq_shs), sprintf("%d", as.integer(qqq_shs))),
+                      qqq_px, round(qqq_shs * qqq_px, 2)))
+          cat(" Strategy Purpose:       Eliminates 0% cash drag. Surplus cash is held in QQQ to capture market yield,\n")
+          cat("                         and will be automatically liquidated to fund fresh high-probability swing setups.\n")
+        } else {
+          cat(" Strategy Purpose:       Macro regime is defensive. Keep $%.2f in 0% Cash or SGOV short-term yield.\n", unalloc_cash)
+        }
+        cat("----------------------------------------------------------------------------------------\n\n")
       }
       
       # Dispatch Mobile Webhook Alert
@@ -808,7 +842,26 @@ if (isTRUE(IS_FRIDAY)) {
     } else {
       cat(sprintf(" No unowned symbols currently meet all BUY criteria (P(Up) >= %.1f%%, Weekly Bullish, RS Leader, Sector Cap).\n",
                   EFFECTIVE_P_LONG * 100))
-      cat(" RECOMMENDATION: Retain available cash buffer in money market / cash.\n")
+      
+      # When 0 swing setups qualify, park 100% idle cash into QQQ if Macro Gate is Bullish
+      if (cash_available >= 100) {
+        qqq_px <- macro_info$close
+        qqq_shs <- if (isTRUE(ALLOW_FRACTIONAL)) round(cash_available / qqq_px, 3) else floor(cash_available / qqq_px)
+        cat("\n----------------------------------------------------------------------------------------\n")
+        cat("          CORE-SATELLITE CASH YIELD DEPLOYMENT (PARK UNALLOCATED CASH IN QQQ)\n")
+        cat("----------------------------------------------------------------------------------------\n")
+        cat(sprintf(" Unallocated Cash:       $%.2f (100%% of available capital)\n", cash_available))
+        cat(sprintf(" Macro Gate Status:      %s (QQQ 50-day Trend is %s)\n", macro_info$regime, ifelse(macro_info$is_bullish, "BULLISH", "BEARISH")))
+        if (isTRUE(macro_info$is_bullish)) {
+          cat(sprintf(" Actionable Ticket:      BUY %s shares of QQQ @ ~$%.2f ($%.2f outlay)\n", 
+                      ifelse(isTRUE(ALLOW_FRACTIONAL), sprintf("%.3f", qqq_shs), sprintf("%d", as.integer(qqq_shs))),
+                      qqq_px, round(qqq_shs * qqq_px, 2)))
+          cat(" Strategy Purpose:       Zero swing setups today. Park cash in QQQ to capture market momentum.\n")
+        } else {
+          cat(sprintf(" Strategy Purpose:       Market risk-off. Retain $%.2f in 0%% Cash / SGOV.\n", cash_available))
+        }
+        cat("----------------------------------------------------------------------------------------\n\n")
+      }
     }
   } else {
     cat(sprintf(" All %d active portfolio slots are currently filled or constrained by Macro Regime.\n", EFFECTIVE_MAX_POS))
