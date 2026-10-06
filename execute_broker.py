@@ -429,13 +429,22 @@ def sync_schwab(portfolio_file: str, dry_run: bool):
                     t_match = ticket_lookup.get(sym)
                     stop_px = round(float(t_match["stop_loss"]), 2) if t_match else round(avg_px * 0.95, 2)
                     tgt_px = round(float(t_match["tier2_target"]), 2) if t_match else round(avg_px * 1.10, 2)
+                    t1_px = round(float(t_match["tier1_target"]), 2) if t_match else round(avg_px * 1.05, 2)
                     port_data["positions"].append({
                         "symbol": sym,
                         "shares": long_qty,
+                        "initial_shares": long_qty,
                         "entry_price": avg_px,
                         "entry_date": str(datetime.date.today()),
                         "stop_loss": stop_px,
                         "take_profit": tgt_px,
+                        "tier1_target": t1_px,
+                        "tier2_target": tgt_px,
+                        "tier1_hit": False,
+                        "tier2_hit": False,
+                        "is_runner": False,
+                        "highest_price": avg_px,
+                        "atr": round(avg_px * 0.025, 2),
                         "cost_basis": round(long_qty * avg_px, 2),
                         "status": "OPEN"
                     })
@@ -552,13 +561,22 @@ def sync_ibkr(portfolio_file: str, host: str, port: int, client_id: int, dry_run
                     t_match = ticket_lookup.get(sym)
                     stop_px = round(float(t_match["stop_loss"]), 2) if t_match else round(float(p.avgCost) * 0.95, 2)
                     tgt_px = round(float(t_match["tier2_target"]), 2) if t_match else round(float(p.avgCost) * 1.10, 2)
+                    t1_px = round(float(t_match["tier1_target"]), 2) if t_match else round(float(p.avgCost) * 1.05, 2)
                     port_data["positions"].append({
                         "symbol": sym,
                         "shares": float(p.position),
+                        "initial_shares": float(p.position),
                         "entry_price": round(float(p.avgCost), 2),
                         "entry_date": str(datetime.date.today()),
                         "stop_loss": stop_px,
                         "take_profit": tgt_px,
+                        "tier1_target": t1_px,
+                        "tier2_target": tgt_px,
+                        "tier1_hit": False,
+                        "tier2_hit": False,
+                        "is_runner": False,
+                        "highest_price": round(float(p.avgCost), 2),
+                        "atr": round(float(p.avgCost) * 0.025, 2),
                         "cost_basis": round(float(p.position) * float(p.avgCost), 2),
                         "status": "OPEN"
                     })

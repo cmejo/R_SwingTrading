@@ -298,24 +298,49 @@ def evaluate_exits(rh, dry_run: bool = True):
             print(f"[{timestamp}] {msg}")
             send_alert(msg)
 
-        # 2. Tier 2 Target Hit (Full exit of remainder)
-        elif t2_target > 0 and curr_px >= t2_target:
-            exit_triggered = True
-            exit_reason = "TIER2_TARGET"
-            msg = f"🎯 [ROBINHOOD TARGET 2 REACHED] {sym} price ${curr_px:.2f} >= Target ${t2_target:.2f}! Selling {shares} shares."
+        # 2. Tier 2 Target Hit (Exit 25% of initial position, retain 25% as Chandelier Runner)
+        elif t2_target > 0 and curr_px >= t2_target and not pos.get("tier2_executed", False):
+            t2_shares = float(pos.get("tier2_shares", shares / 2.0))
+            msg = f"🎯 [ROBINHOOD TARGET 2 REACHED] {sym} price ${curr_px:.2f} >= Target ${t2_target:.2f}! Selling {t2_shares} shares. Retaining runner on Chandelier Stop (${chandelier_lvl:.2f})!"
             print(f"[{timestamp}] {msg}")
             send_alert(msg)
 
-        # 3. 5-Trading-Day Time Expiration Exit
-        elif days_held >= 5:
+            order_ok = False
+            if not dry_run and rh is not None:
+                try:
+                    PENDING_ORDERS[sym] = "TIER2_SELL"
+                    res = rh.orders.order_sell_market_by_quantity(sym, quantity=t2_shares, timeInForce="gfd")
+                    if res and "id" in res and res.get("state") not in ["rejected", "failed", "cancelled"]:
+                        print(f"[{timestamp}] -> Tier 2 Sell Submitted: {res.get('id')}")
+                        order_ok = True
+                    else:
+                        print(f"[{timestamp}] -> Tier 2 Sell rejected: {res}")
+                except Exception as e:
+                    print(f"[{timestamp}] -> Error placing Tier 2 sell: {e}")
+                finally:
+                    PENDING_ORDERS.pop(sym, None)
+            else:
+                print(f"[{timestamp}] -> [DRY RUN] Would submit market sell for {t2_shares} shares of {sym} at ${curr_px:.2f} (25% Runner remains).")
+                order_ok = True
+
+            if order_ok:
+                pos["tier2_executed"] = True
+                pos["is_runner"] = True
+                pos["shares"] = round(shares - t2_shares, 4)
+                pos["stop_loss"] = chandelier_lvl
+                sync_exit_to_portfolio_json(sym, curr_px, t2_shares, "TIER2_TARGET", is_partial=True)
+            continue
+
+        # 3. 5-Trading-Day Time Expiration Exit (Exempt for active runners!)
+        elif days_held >= 5 and not pos.get("is_runner", False) and not pos.get("tier2_executed", False):
             exit_triggered = True
             exit_reason = "TIME_EXPIRATION"
             msg = f"⏳ [ROBINHOOD 5-DAY TIME EXPIRATION] {sym} held for {days_held} trading days! Liquidating {shares} shares."
             print(f"[{timestamp}] {msg}")
             send_alert(msg)
 
-        # 4. Friday 15:30 Weekend Defensive Exit (if not approved for weekend carry)
-        elif is_friday_late and not pos.get("weekend_hold_approved", False):
+        # 4. Friday 15:30 Weekend Defensive Exit (if not approved for weekend carry and not a runner)
+        elif is_friday_late and not pos.get("weekend_hold_approved", False) and not pos.get("is_runner", False):
             exit_triggered = True
             exit_reason = "WEEKEND_DEFENSIVE_EXIT"
             msg = f"⚠️ [ROBINHOOD WEEKEND EXIT] {sym} unapproved for weekend hold! Liquidating {shares} shares before 16:00 close."

@@ -88,6 +88,32 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
             "estimated_outlay": outlay
         })
 
+    # Match Core-Satellite QQQ Cash Yield ticket
+    qqq_match = re.search(
+        r"CORE-SATELLITE CASH YIELD DEPLOYMENT.*?Actionable Ticket:\s+BUY\s+([\d\.]+)\s+shares of QQQ @ ~\$([\d\.]+)\s+\(\$([\d\.]+)\s+outlay\)",
+        content,
+        re.DOTALL
+    )
+    if qqq_match:
+        qqq_shs = float(qqq_match.group(1))
+        qqq_px = float(qqq_match.group(2))
+        qqq_outlay = float(qqq_match.group(3))
+        if qqq_shs >= 1.0:
+            tickets.append({
+                "rank": 99,
+                "symbol": "QQQ",
+                "shares": qqq_shs,
+                "sector": "Index_ETF",
+                "p_up": 0.99,
+                "is_cash_park": True,
+                "stop_loss": 0.0,
+                "tier1_shares": 0.0,
+                "tier1_target": 0.0,
+                "tier2_shares": 0.0,
+                "tier2_target": 0.0,
+                "estimated_outlay": qqq_outlay
+            })
+
     return tickets
 
 def split_whole_share_legs(t: Dict[str, Any]) -> Dict[str, int]:
@@ -100,6 +126,22 @@ def split_whole_share_legs(t: Dict[str, Any]) -> Dict[str, int]:
 
 
 def build_ibkr_bracket_spec(t: Dict[str, Any]) -> Dict[str, Any]:
+    if t.get("is_cash_park"):
+        total = int(t["shares"])
+        return {
+            "broker": "Interactive Brokers (IBKR Pro)",
+            "symbol": t["symbol"],
+            "exchange": "SMART",
+            "currency": "USD",
+            "parent_order": {
+                "action": "BUY",
+                "orderType": "MKT",
+                "totalQuantity": total,
+                "transmit": True
+            },
+            "note": "Core-Satellite QQQ Cash Yield Deployment (Market Buy)"
+        }
+
     legs = split_whole_share_legs(t)
     spec = {
         "broker": "Interactive Brokers (IBKR Pro)",
@@ -181,6 +223,13 @@ def execute_ibkr(tickets: List[Dict[str, Any]], host: str, port: int, client_id:
             qualified = ib.qualifyContracts(contract)
             if not qualified or not contract.conId:
                 print(f"[IBKRBridge] Contract qualification failed for {sym}. Skipping.")
+                continue
+
+            if t.get("is_cash_park"):
+                print(f"\n[IBKRBridge] Transmitting Core-Satellite QQQ Cash Yield Market Order ({legs['total']} shs)...")
+                parent = MarketOrder("BUY", legs["total"], transmit=True)
+                parent_trade = ib.placeOrder(contract, parent)
+                print(f"[IBKRBridge] -> QQQ Market Buy Submitted: Order ID {parent_trade.order.orderId}")
                 continue
 
             print(f"\n[IBKRBridge] Transmitting Bracket Order for {sym} ({legs['total']} shs)...")
