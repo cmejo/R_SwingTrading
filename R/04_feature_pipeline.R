@@ -39,6 +39,7 @@ source("R/03_volatility_garch.R")
 #' @export
 build_feature_dataset <- function(ohlcv, 
                                   benchmark_ohlcv = NULL,
+                                  sector_ohlcv = NULL,
                                   fast_n = 20, 
                                   slow_n = 50, 
                                   look_ahead = 5,
@@ -187,13 +188,62 @@ build_feature_dataset <- function(ohlcv,
     }, error = function(e) NULL)
   }
 
+  # 6e. ATR-Normalized Distance to Trend (Mean-Reversion & Overextension Guard)
+  feat_atr_ext <- tryCatch({
+    atr_14 <- TTR::ATR(HLC(ohlcv), n = 14)$atr
+    ext <- (price - dual_lm$fast_lm$fit) / (atr_14 + 1e-6)
+    colnames(ext) <- "ATRExt"
+    ext
+  }, error = function(e) {
+    sd_p <- TTR::runSD(price, n = fast_n)
+    ext <- (price - dual_lm$fast_lm$fit) / (sd_p + 1e-6)
+    colnames(ext) <- "ATRExt"
+    ext
+  })
+
+  # 6f. Sector Relative Strength Momentum Spread (Sector ETF vs SPY Benchmark)
+  feat_sector_spread <- xts(rep(0, nrow(price)), order.by = index(price))
+  colnames(feat_sector_spread) <- "SectorSpread"
+  if (!is.null(sector_ohlcv) && !is.null(benchmark_ohlcv)) {
+    tryCatch({
+      sec_p <- Cl(sector_ohlcv)
+      bmk_p <- Cl(benchmark_ohlcv)
+      merged_sec <- merge(price, sec_p, bmk_p)
+      merged_sec <- na.locf(merged_sec, na.rm = FALSE)
+      s_ret20 <- (merged_sec[, 2] / lag.xts(merged_sec[, 2], k = fast_n)) - 1
+      b_ret20 <- (merged_sec[, 3] / lag.xts(merged_sec[, 3], k = fast_n)) - 1
+      spread <- s_ret20 - b_ret20
+      feat_sector_spread <- spread[index(price)]
+      colnames(feat_sector_spread) <- "SectorSpread"
+    }, error = function(e) NULL)
+  }
+
+  # 6g. Asymmetric Downside Volatility Ratio (Upside Semi-variance vs Downside Semi-variance)
+  feat_asym_vol <- tryCatch({
+    log_rets <- diff(log(price))
+    log_rets[1] <- 0
+    pos_rets2 <- pmax(log_rets, 0)^2
+    neg_rets2 <- pmin(log_rets, 0)^2
+    pos_var <- TTR::runMean(pos_rets2, n = fast_n)
+    neg_var <- TTR::runMean(neg_rets2, n = fast_n)
+    ratio <- sqrt(pos_var) / (sqrt(neg_var) + 1e-5)
+    log_ratio <- log(pmax(ratio, 1e-3))
+    clamped_ratio <- pmin(pmax(log_ratio, -3.0), 3.0)
+    colnames(clamped_ratio) <- "AsymVolRatio"
+    clamped_ratio
+  }, error = function(e) {
+    r <- xts(rep(0, nrow(price)), order.by = index(price))
+    colnames(r) <- "AsymVolRatio"
+    r
+  })
+
   # 7. Forward Target: Return k periods into future
   # (Price_{t+k} / Price_t - 1)
   fwd_price <- lag.xts(price, k = -look_ahead)
   target_ret <- (fwd_price - price) / price
   colnames(target_ret) <- "TargetRet"
   
-  # 8. Merge all 15 predictor features
+  # 8. Merge all 18 predictor features
   features_xts <- merge(
     SlopeFast      = feat_slope_fast,
     SlopeSlow      = feat_slope_slow,
@@ -209,12 +259,15 @@ build_feature_dataset <- function(ohlcv,
     RSI_14         = feat_rsi,
     MACD_Hist      = feat_macd_hist,
     BB_PctB        = feat_bbpct,
-    RS_20          = feat_rs_20
+    RS_20          = feat_rs_20,
+    ATRExt         = feat_atr_ext,
+    SectorSpread   = feat_sector_spread,
+    AsymVolRatio   = feat_asym_vol
   )
   
   feature_names <- c("SlopeFast", "SlopeSlow", "SlopeWeeklyPct", "TrendQuality", "DistPct", 
                      "ZScore", "GARCH_Vol", "GARCH_Shock", "GARCH_VolPct", "VolumeRatio", "OBV_Slope",
-                     "RSI_14", "MACD_Hist", "BB_PctB", "RS_20")
+                     "RSI_14", "MACD_Hist", "BB_PctB", "RS_20", "ATRExt", "SectorSpread", "AsymVolRatio")
   
   # Clean warm-up NAs across features
   clean_feats_xts <- na.omit(features_xts)
@@ -258,7 +311,10 @@ build_feature_dataset <- function(ohlcv,
     RSI_14         = as.numeric(clean_model_xts[, "RSI_14"]),
     MACD_Hist      = as.numeric(clean_model_xts[, "MACD_Hist"]),
     BB_PctB        = as.numeric(clean_model_xts[, "BB_PctB"]),
-    RS_20          = as.numeric(clean_model_xts[, "RS_20"])
+    RS_20          = as.numeric(clean_model_xts[, "RS_20"]),
+    ATRExt         = as.numeric(clean_model_xts[, "ATRExt"]),
+    SectorSpread   = as.numeric(clean_model_xts[, "SectorSpread"]),
+    AsymVolRatio   = as.numeric(clean_model_xts[, "AsymVolRatio"])
   )
   
   cat(sprintf("[Pipeline] Complete. Result: %d valid observation rows across %d features.\n",
@@ -274,6 +330,9 @@ build_feature_dataset <- function(ohlcv,
     latest_vol_pct          = latest_vol_pct,
     latest_weekly_slope_pct = as.numeric(tail(feat_slope_weekly, 1)),
     latest_rs_20            = as.numeric(tail(feat_rs_20, 1)),
+    latest_atr_ext          = as.numeric(tail(feat_atr_ext, 1)),
+    latest_sector_spread    = as.numeric(tail(feat_sector_spread, 1)),
+    latest_asym_vol         = as.numeric(tail(feat_asym_vol, 1)),
     feature_names           = feature_names,
     features_xts            = clean_feats_xts,
     garch_out               = if (use_garch) garch_out else NULL

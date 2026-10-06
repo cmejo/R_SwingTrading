@@ -319,6 +319,17 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
       t1_tgt <- if (!is.null(p$tier1_target)) as.numeric(p$tier1_target) else round(p$entry_price + 1.5 * risk_1r, 2)
       t2_tgt <- if (!is.null(p$tier2_target)) as.numeric(p$tier2_target) else round(p$entry_price + 3.0 * risk_1r, 2)
       
+      # Time-Decay Target Ratchet (Feature 4):
+      # If days_held >= 4, Tier 1 not yet hit, but position has reached >= +1.0R profit,
+      # ratchet Tier 1 target down to +1.1R to lock in gains before the 5-day expiration window!
+      if (!isTRUE(p$tier1_hit) && days_held >= 4 && cp >= (p$entry_price + 1.0 * risk_1r)) {
+        ratcheted_t1 <- round(p$entry_price + 1.1 * risk_1r, 2)
+        if (ratcheted_t1 < t1_tgt) {
+          t1_tgt <- ratcheted_t1
+          portfolio$positions[[i]]$tier1_target <- t1_tgt
+        }
+      }
+      
       # Determine action trigger
       action <- "HOLD"
       status <- "ACTIVE"

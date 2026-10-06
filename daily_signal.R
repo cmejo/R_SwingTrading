@@ -233,6 +233,51 @@ cat(sprintf("   CBOE VIX:  %.2f   | Volatility Regime: %s\n", vix_info$close, vi
 cat(sprintf("   -> Dynamic Policy: Max Positions = %d | Safe f = %.2f | Min P(Up) >= %.1f%%\n\n", 
             EFFECTIVE_MAX_POS, EFFECTIVE_SAFETY_FACTOR, EFFECTIVE_P_LONG * 100))
 
+# Sector Taxonomy Mapping & Cluster Risk Defense
+SECTOR_MAP <- if (file.exists("sector_map.json")) {
+  tryCatch(jsonlite::fromJSON("sector_map.json", simplifyDataFrame = FALSE), error = function(e) list())
+} else if (file.exists("/Volumes/2TB.ssd/_a Development/swingtrading/sector_map.json")) {
+  tryCatch(jsonlite::fromJSON("/Volumes/2TB.ssd/_a Development/swingtrading/sector_map.json", simplifyDataFrame = FALSE), error = function(e) list())
+} else {
+  list()
+}
+
+sector_etf_map <- list(
+  Semiconductors      = "SMH",
+  MegaCap_Tech        = "QQQ",
+  Enterprise_Software = "XLK",
+  Software_Cloud      = "XLK",
+  Cybersecurity       = "XLK",
+  Hardware_Tech       = "XLK",
+  Fintech_Financials  = "XLF",
+  Fintech_Crypto      = "XLF",
+  Financials          = "XLF",
+  Power_Industrial    = "XLI",
+  Industrials         = "XLI",
+  Energy_Power        = "XLE",
+  Energy              = "XLE",
+  HealthCare          = "XLV",
+  Biotech             = "XLV",
+  Materials           = "XLB",
+  Communication       = "XLC",
+  Consumer            = "XLY",
+  Index_ETF           = "SPY"
+)
+
+sector_map_dirty <- FALSE
+get_sector <- function(s) {
+  s <- toupper(trimws(s))
+  if (s %in% names(SECTOR_MAP)) {
+    return(SECTOR_MAP[[s]])
+  }
+  auto_sec <- get_symbol_sector(s)
+  SECTOR_MAP[[s]] <<- auto_sec
+  sector_map_dirty <<- TRUE
+  return(auto_sec)
+}
+
+loaded_sector_etfs <- list()
+
 cat("========================================================================================\n")
 cat(sprintf(" 2. SCANNING WATCHLIST (%d ASSETS) WITH WALK-FORWARD RETRAINING\n", length(SYMBOLS)))
 cat("========================================================================================\n")
@@ -248,15 +293,24 @@ for (sym in SYMBOLS) {
     days_to_earn <- if (!is.na(earn_date)) as.numeric(as.Date(earn_date) - Sys.Date()) else NA_real_
     is_earnings_blackout <- (!is.na(days_to_earn) && days_to_earn >= 0 && days_to_earn <= (EARNINGS_DAYS + 3))
 
+    # Sector ETF lookup for sector relative strength momentum spread (Feature 2)
+    cand_sec <- get_sector(sym)
+    sec_etf_sym <- if (!is.null(cand_sec) && !is.null(sector_etf_map[[cand_sec]])) sector_etf_map[[cand_sec]] else "XLK"
+    if (is.null(loaded_sector_etfs[[sec_etf_sym]])) {
+      loaded_sector_etfs[[sec_etf_sym]] <- tryCatch(load_stock_data(sec_etf_sym), error = function(e) NULL)
+    }
+    sec_ohlcv <- loaded_sector_etfs[[sec_etf_sym]]
+
     ohlcv <- load_stock_data(symbol = sym)
     price <- Cl(ohlcv)
     latest_date <- as.character(index(last(price)))
     latest_close <- as.numeric(last(price))
     
-    # Feature engineering with weekly trend synergy & benchmark relative strength
+    # Feature engineering with weekly trend synergy, sector spread & ATR extension
     pipeline_out <- build_feature_dataset(
       ohlcv = ohlcv,
       benchmark_ohlcv = spy_ohlcv,
+      sector_ohlcv = sec_ohlcv,
       fast_n = FAST_N,
       slow_n = SLOW_N,
       look_ahead = LOOK_AHEAD,
@@ -297,10 +351,14 @@ for (sym in SYMBOLS) {
     feat_imp          <- model_core$feature_importance
     top_feature_str   <- if (!is_intercept_only) paste0(feat_imp$Feature[1], " (", feat_imp$Direction[1], ")") else "Base-Rate"
 
-    # Use single source of truth for features and volatility from pipeline_out
+    # Single source of truth for features and volatility from pipeline_out
     curr_ann_vol       <- pipeline_out$latest_ann_vol
     latest_rs_20       <- pipeline_out$latest_rs_20
+    latest_atr_ext     <- pipeline_out$latest_atr_ext
+    latest_sec_spread  <- pipeline_out$latest_sector_spread
+    latest_asym_vol    <- pipeline_out$latest_asym_vol
     is_rs_leader       <- (!is.na(latest_rs_20) && latest_rs_20 >= 0)
+    is_overextended    <- (!is.na(latest_atr_ext) && latest_atr_ext > 3.0) # Feature 1: Mean-Reversion Guard
 
     # 20-day Average Daily Volume & Dollar Volume (L3 Market Impact Guard)
     vol_series <- tryCatch(Vo(ohlcv), error = function(e) xts(rep(1e6, nrow(price)), order.by = index(price)))
@@ -320,7 +378,7 @@ for (sym in SYMBOLS) {
     stop_loss_price <- round(latest_close * (1 - 2.0 * curr_daily_vol), 2)
     take_profit_price <- round(latest_close * (1 + 3.0 * curr_daily_vol), 2)
 
-    # Signal Assignment with Multi-Timeframe, RS Leader, Liquidity & Earnings Gate
+    # Signal Assignment with Multi-Timeframe, RS Leader, Extension Filter, Liquidity & Earnings Gate
     signal_status <- "HOLD"
     gate_note <- "Normal"
 
@@ -340,6 +398,9 @@ for (sym in SYMBOLS) {
       } else if (!is_rs_leader) {
         signal_status <- "RS_LAGGER"
         gate_note <- sprintf("RS Lagger (%+.1f%% vs SPY)", latest_rs_20 * 100)
+      } else if (is_overextended) {
+        signal_status <- "OVEREXTENDED"
+        gate_note <- sprintf("Overextended (%.1fx ATR above trend)", latest_atr_ext)
       } else if (is_intercept_only) {
         signal_status <- "BUY"
         gate_note <- sprintf("Leader [BaseRateOnly 0/%d coefs]", length(feat_names))
@@ -361,6 +422,10 @@ for (sym in SYMBOLS) {
       Gate_Note = gate_note,
       Weekly_Slope = weekly_slope_pct,
       RS_20 = latest_rs_20,
+      ATRExt = latest_atr_ext,
+      Sector_Spread = latest_sec_spread,
+      Asym_Vol = latest_asym_vol,
+      Sector = cand_sec,
       ATR_14 = atr_14,
       Chandelier_Stop = chandelier_stop,
       ADV_20 = adv_20,
@@ -387,11 +452,18 @@ if (length(scan_results) == 0) {
   stop("No symbols successfully scanned.")
 }
 
+if (sector_map_dirty) {
+  tryCatch(jsonlite::write_json(SECTOR_MAP, "sector_map.json", pretty = TRUE, auto_unbox = TRUE), error = function(e) NULL)
+}
+
 df_scan <- do.call(rbind, scan_results)
 
-# Cross-Sectional Quality Score: P(Up) * (1 + RS) when P(Up) >= EFFECTIVE_P_LONG and RS > 0
-df_scan$Quality_Score <- ifelse(df_scan$Prob_Up >= EFFECTIVE_P_LONG & df_scan$RS_20 > 0,
-                                df_scan$Prob_Up * (1 + df_scan$RS_20),
+# Cross-Sectional Quality Score incorporating Sector Momentum Tailwind and Asymmetric Volatility:
+# Candidates with positive Sector Spread (sector ETF outperforming SPY) and positive Asymmetric Vol Ratio receive boost
+sector_boost <- pmax(0, df_scan$Sector_Spread)
+asym_boost   <- pmax(0, df_scan$Asym_Vol * 0.1)
+df_scan$Quality_Score <- ifelse(df_scan$Signal == "BUY" & df_scan$Prob_Up >= EFFECTIVE_P_LONG & df_scan$RS_20 > 0,
+                                df_scan$Prob_Up * (1 + df_scan$RS_20 + 0.5 * sector_boost + asym_boost),
                                 0.0)
 df_scan <- df_scan[order(-df_scan$Quality_Score, -df_scan$Prob_Up), ]
 rownames(df_scan) <- 1:nrow(df_scan)
@@ -406,11 +478,13 @@ cat("===========================================================================
 summary_table <- data.frame(
   Rank       = 1:nrow(df_scan),
   Symbol     = df_scan$Symbol,
+  Sector     = df_scan$Sector,
   Price      = sprintf("$%.2f", df_scan$Close),
   P_Up       = sprintf("%.1f%%", df_scan$Prob_Up * 100),
   Score      = sprintf("%.3f", df_scan$Quality_Score),
   Signal     = df_scan$Signal,
   RS_SPY     = sprintf("%s%.1f%%", ifelse(df_scan$RS_20 >= 0, "+", ""), df_scan$RS_20 * 100),
+  ATR_Ext    = sprintf("%+.1fx", df_scan$ATRExt),
   Weekly     = sprintf("%s%.1f%% [%s]", 
                        ifelse(df_scan$Weekly_Slope >= 0, "+", ""),
                        df_scan$Weekly_Slope, 
@@ -535,98 +609,6 @@ if (isTRUE(IS_FRIDAY)) {
   cat("========================================================================================\n")
   
   held_syms <- if (sync_res$active_count > 0) sync_res$holdings_df$Symbol else character(0)
-  
-  # Sector Taxonomy Mapping & Cluster Risk Defense
-  SECTOR_MAP <- if (file.exists("sector_map.json")) {
-    tryCatch(jsonlite::fromJSON("sector_map.json", simplifyDataFrame = FALSE), error = function(e) list())
-  } else if (file.exists("/Volumes/2TB.ssd/_a Development/swingtrading/sector_map.json")) {
-    tryCatch(jsonlite::fromJSON("/Volumes/2TB.ssd/_a Development/swingtrading/sector_map.json", simplifyDataFrame = FALSE), error = function(e) list())
-  } else {
-    list()
-  }
-  if (length(SECTOR_MAP) == 0) {
-    SECTOR_MAP <- list(
-      # Semiconductors & Semiconductor Equipment
-      AMD   = "Semiconductors",
-    NVDA  = "Semiconductors",
-    TSM   = "Semiconductors",
-    AVGO  = "Semiconductors",
-    QCOM  = "Semiconductors",
-    MU    = "Semiconductors",
-    AMAT  = "Semiconductors",
-    LRCX  = "Semiconductors",
-    ARM   = "Semiconductors",
-    SNDK  = "Semiconductors",
-    SOXL  = "Semiconductors",
-    SMH   = "Semiconductors",
-
-    # Mega-Cap Tech & AI Platforms
-    MSFT  = "MegaCap_Tech",
-    AAPL  = "MegaCap_Tech",
-    AMZN  = "MegaCap_Tech",
-    GOOGL = "MegaCap_Tech",
-    META  = "MegaCap_Tech",
-    TSLA  = "MegaCap_Tech",
-
-    # Enterprise Software, Cloud & SaaS
-    CRM   = "Enterprise_Software",
-    NOW   = "Enterprise_Software",
-    ADBE  = "Enterprise_Software",
-    INTU  = "Enterprise_Software",
-    ORCL  = "Enterprise_Software",
-    SNOW  = "Enterprise_Software",
-    WDAY  = "Enterprise_Software",
-    SHOP  = "Enterprise_Software",
-    PLTR  = "Enterprise_Software",
-
-    # Cybersecurity & Infrastructure
-    PANW  = "Cybersecurity",
-    CRWD  = "Cybersecurity",
-    FTNT  = "Cybersecurity",
-    NET   = "Cybersecurity",
-    ANET  = "Cybersecurity",
-    CSCO  = "Cybersecurity",
-
-    # Hardware, Photonics & Quantum / Emerging Tech
-    LITE  = "Hardware_Tech",
-    IONQ  = "Hardware_Tech",
-    SMHC  = "Hardware_Tech",
-    KXIAY = "Hardware_Tech",
-    DELL  = "Hardware_Tech",
-    SMCI  = "Hardware_Tech",
-
-    # Fintech, Payments & Digital Assets
-    V     = "Fintech_Financials",
-    MA    = "Fintech_Financials",
-    PYPL  = "Fintech_Financials",
-    SQ    = "Fintech_Financials",
-    COIN  = "Fintech_Financials",
-    MSTR  = "Fintech_Financials",
-
-    # Energy Transition & High-Power Industrials
-    CEG   = "Power_Industrial",
-    VST   = "Power_Industrial",
-    GE    = "Power_Industrial",
-
-    # Benchmark & Leveraged Index ETFs
-    QQQ   = "Index_ETF",
-    QLD   = "Index_ETF",
-    SPY   = "Index_ETF",
-    XLK   = "Index_ETF"
-  )
-  }
-  sector_map_dirty <- FALSE
-  get_sector <- function(s) {
-    s <- toupper(trimws(s))
-    if (s %in% names(SECTOR_MAP)) {
-      return(SECTOR_MAP[[s]])
-    }
-    # Dynamic Sector Lookup fallback (R1)
-    auto_sec <- get_symbol_sector(s)
-    SECTOR_MAP[[s]] <<- auto_sec
-    sector_map_dirty <<- TRUE
-    return(auto_sec)
-  }
   
   # Count existing sector exposure from currently held positions
   held_sectors <- list()

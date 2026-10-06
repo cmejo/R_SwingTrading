@@ -286,6 +286,16 @@ def evaluate_exits(rh, dry_run: bool = True):
             stop_loss = max(entry_px, chandelier_lvl)
             pos["stop_loss"] = stop_loss
 
+        # Feature 4: Time-Decay Target Ratchet for Non-Runners
+        # If held for >= 4 days and position has reached >= +1.0R profit, ratchet Tier 1 target
+        # down to +1.1R to guarantee capturing gains before the 5-day expiration window!
+        risk_1r = max(0.01, entry_px - stop_loss)
+        if not pos.get("tier1_executed", False) and days_held >= 4 and curr_px >= (entry_px + 1.0 * risk_1r):
+            ratchet_t1 = round(entry_px + 1.1 * risk_1r, 2)
+            if t1_target <= 0 or ratchet_t1 < t1_target:
+                t1_target = ratchet_t1
+                pos["tier1_target"] = t1_target
+
         exit_triggered = False
         exit_reason = ""
         exit_shares = shares
