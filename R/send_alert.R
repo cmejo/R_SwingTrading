@@ -141,8 +141,11 @@ send_email_alert <- function(title, body,
     "--upload-file", tmp_mail,
     "--ssl-reqd"
   )
-  if (smtp_user != "" && smtp_pass != "") {
-    curl_args <- c(curl_args, "--user", sprintf("%s:%s", smtp_user, smtp_pass))
+  # Strip spaces from App Password (e.g., Google formats app passwords as 'xxxx yyyy zzzz wwww')
+  clean_pass <- gsub("\\s+", "", smtp_pass)
+  
+  if (smtp_user != "" && clean_pass != "") {
+    curl_args <- c(curl_args, "--user", sprintf("%s:%s", smtp_user, clean_pass))
   }
   
   res <- tryCatch({
