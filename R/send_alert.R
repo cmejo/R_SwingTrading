@@ -114,6 +114,84 @@ send_telegram_alert <- function(text,
   return(!is.na(code) && code >= 200 && code < 300)
 }
 
+send_email_alert <- function(title, body,
+                             smtp_server = Sys.getenv("SMTP_SERVER"),
+                             smtp_port = Sys.getenv("SMTP_PORT", "587"),
+                             smtp_user = Sys.getenv("SMTP_USER"),
+                             smtp_pass = Sys.getenv("SMTP_PASS"),
+                             to_email = Sys.getenv("ALERT_EMAIL_TO")) {
+  if (is.null(smtp_server) || smtp_server == "" || is.null(to_email) || to_email == "") {
+    return(FALSE)
+  }
+  
+  from_email <- if (Sys.getenv("ALERT_EMAIL_FROM") != "") Sys.getenv("ALERT_EMAIL_FROM") else smtp_user
+  mail_content <- sprintf(
+    "From: <%s>\nTo: <%s>\nSubject: %s\nContent-Type: text/plain; charset=utf-8\n\n%s\n\n--\nQuantitative Swing Trading System\nTimestamp: %s ET",
+    from_email, to_email, title, body, format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+  )
+  
+  tmp_mail <- tempfile(fileext = ".eml")
+  writeLines(mail_content, tmp_mail)
+  on.exit(unlink(tmp_mail), add = TRUE)
+  
+  curl_args <- c(
+    "--url", sprintf("smtp://%s:%s", smtp_server, smtp_port),
+    "--mail-from", from_email,
+    "--mail-rcpt", to_email,
+    "--upload-file", tmp_mail,
+    "--ssl-reqd"
+  )
+  if (smtp_user != "" && smtp_pass != "") {
+    curl_args <- c(curl_args, "--user", sprintf("%s:%s", smtp_user, smtp_pass))
+  }
+  
+  res <- tryCatch({
+    system2("curl", args = c("-s", curl_args), stdout = TRUE, stderr = FALSE)
+    TRUE
+  }, error = function(e) FALSE)
+  return(isTRUE(res))
+}
+
+send_signal_alert <- function(message,
+                              signal_api_url = Sys.getenv("SIGNAL_API_URL"),
+                              signal_sender = Sys.getenv("SIGNAL_SENDER"),
+                              signal_recipient = Sys.getenv("SIGNAL_RECIPIENT")) {
+  if (is.null(signal_recipient) || signal_recipient == "") {
+    return(FALSE)
+  }
+  
+  # Option A: signal-cli REST API (e.g., bbernhard/signal-cli-rest-api container)
+  if (!is.null(signal_api_url) && signal_api_url != "") {
+    payload <- list(
+      message = message,
+      number = signal_sender,
+      recipients = list(signal_recipient)
+    )
+    json_body <- jsonlite::toJSON(payload, auto_unbox = TRUE)
+    tmp_file <- tempfile(fileext = ".json")
+    writeLines(json_body, tmp_file)
+    on.exit(unlink(tmp_file), add = TRUE)
+    
+    res <- system2("curl", args = c(
+      "-s", "-o", "/dev/null", "-w", "%{http_code}",
+      "-X", "POST",
+      "-H", "Content-Type: application/json",
+      "-d", paste0("@", tmp_file),
+      paste0(sub("/$", "", signal_api_url), "/v2/send")
+    ), stdout = TRUE, stderr = FALSE)
+    code <- as.integer(res[1])
+    return(!is.na(code) && code >= 200 && code < 300)
+  }
+  
+  # Option B: Local signal-cli command line
+  res <- tryCatch({
+    sender_arg <- if (signal_sender != "") c("-u", signal_sender) else character(0)
+    system2("signal-cli", args = c(sender_arg, "send", "-m", message, signal_recipient), stdout = FALSE, stderr = FALSE)
+    TRUE
+  }, error = function(e) FALSE)
+  return(isTRUE(res))
+}
+
 #' High-level Alert Dispatcher
 #'
 #' @param title Subject of alert
@@ -128,16 +206,25 @@ broadcast_alert <- function(title, body, level = "INFO") {
     3447003                # Blue default
   )
   
-  discord_sent <- send_discord_alert(title, body, color)
-  tg_text <- sprintf("<b>%s</b>\n\n%s", title, body)
+  discord_sent  <- send_discord_alert(title, body, color)
+  tg_text       <- sprintf("<b>%s</b>\n\n%s", title, body)
   telegram_sent <- send_telegram_alert(tg_text)
+  email_sent    <- send_email_alert(title, body)
+  signal_sent   <- send_signal_alert(sprintf("[%s]\n%s", title, body))
   
-  if (discord_sent || telegram_sent) {
-    cat(sprintf("[AlertSystem] Notification sent: '%s' (Discord: %s, Telegram: %s)\n",
-                title, ifelse(discord_sent, "YES", "NO"), ifelse(telegram_sent, "YES", "NO")))
+  sent_channels <- c(
+    if (discord_sent) "Discord",
+    if (telegram_sent) "Telegram",
+    if (email_sent) "Email",
+    if (signal_sent) "Signal"
+  )
+  
+  if (length(sent_channels) > 0) {
+    cat(sprintf("[AlertSystem] Notification sent: '%s' via [%s]\n",
+                title, paste(sent_channels, collapse = ", ")))
   } else {
-    cat(sprintf("[AlertSystem] Notice: Webhooks not configured. Skipping push alert for '%s'.\n", title))
-    cat("  (To enable mobile alerts, set DISCORD_WEBHOOK_URL or TELEGRAM_BOT_TOKEN & TELEGRAM_CHAT_ID in .env)\n")
+    cat(sprintf("[AlertSystem] Notice: Notification channels not configured for '%s'.\n", title))
+    cat("  (To enable alerts, set EMAIL (SMTP_SERVER, ALERT_EMAIL_TO), SIGNAL, DISCORD, or TELEGRAM in .env)\n")
   }
 }
 
