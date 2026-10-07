@@ -146,9 +146,18 @@ send_email_alert <- function(title, body,
   }
   
   res <- tryCatch({
-    system2("curl", args = c("-s", curl_args), stdout = TRUE, stderr = FALSE)
-    TRUE
-  }, error = function(e) FALSE)
+    out <- system2("curl", args = curl_args, stdout = TRUE, stderr = TRUE)
+    status <- attr(out, "status")
+    if (!is.null(status) && status != 0) {
+      cat(sprintf("[AlertSystem] Email dispatch error (curl code %s):\n%s\n", status, paste(out, collapse = "\n")))
+      FALSE
+    } else {
+      TRUE
+    }
+  }, error = function(e) {
+    cat(sprintf("[AlertSystem] Email dispatch exception: %s\n", e$message))
+    FALSE
+  })
   return(isTRUE(res))
 }
 
