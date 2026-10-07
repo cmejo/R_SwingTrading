@@ -27,7 +27,8 @@ LEVERAGE="1.0"
 MAX_POS="5"
 MAX_PER_SECTOR="2"
 
-CAPITAL="10000"
+CAPITAL=""
+AUTO_CAPITAL="true"
 
 # Parse CLI arguments
 for arg in "$@"; do
@@ -49,9 +50,32 @@ for arg in "$@"; do
       ;;
     --capital=*)
       CAPITAL="${arg#*=}"
+      AUTO_CAPITAL="false"
       ;;
   esac
 done
+
+# If no explicit capital passed, dynamically sync/extract full account equity
+if [ "$AUTO_CAPITAL" = "true" ] || [ -z "$CAPITAL" ]; then
+  # If Schwab credentials exist and live mode or token present, sync live account balance first
+  if [ -f "$PROJECT_DIR/schwab_token.json" ]; then
+    printf "[Auto-Capital] Syncing live account equity from Charles Schwab...\n"
+    python3 execute_broker.py --broker=schwab --sync --dry_run=false >/dev/null 2>&1 || true
+  fi
+
+  # Extract total liquidation value from portfolio.json if available
+  if [ -f "$PROJECT_DIR/portfolio.json" ]; then
+    EXTRACTED_CAP=$(python3 -c "import json; d=json.load(open('$PROJECT_DIR/portfolio.json')); print(int(round(float(d.get('total_capital', 10000)))))" 2>/dev/null || echo "10000")
+    if [ -n "$EXTRACTED_CAP" ] && [ "$EXTRACTED_CAP" -gt 0 ] 2>/dev/null; then
+      CAPITAL="$EXTRACTED_CAP"
+      echo "[Auto-Capital] Dynamically scaled trading capital to full account balance: \$$CAPITAL"
+    else
+      CAPITAL="10000"
+    fi
+  else
+    CAPITAL="10000"
+  fi
+fi
 
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 LOG_FILE="$PROJECT_DIR/logs/auto_trade_${TIMESTAMP}.log"
