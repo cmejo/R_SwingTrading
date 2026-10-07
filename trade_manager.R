@@ -200,7 +200,7 @@ for (arg in args) {
     save_portfolio(portfolio, state_file)
     cat(sprintf("[TradeManager] Recorded TIER 2 SCALE-OUT: Sold %.3f shares of %s @ $%.2f (+3.0R)\n", shs_t2, sym, px))
     cat(sprintf(" -> 25%% RUNNER LOT ESTABLISHED: %.3f shares trailing on Chandelier Stop ($2.5 x ATR)!\n", as.numeric(pos$shares) - shs_t2))
-    cat(" -> Position is now EXEMPT from 5-day expiration window.\n")
+    cat(" -> Position is now EXEMPT from 7-day expiration window.\n")
     cat(sprintf(" -> New Cash Balance: $%.2f | Total Capital: $%.2f\n", portfolio$cash_balance, portfolio$total_capital))
   }
   

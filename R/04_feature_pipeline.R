@@ -28,7 +28,7 @@ source("R/03_volatility_garch.R")
 #' @param benchmark_ohlcv Optional xts object of benchmark OHLCV (e.g. SPY) for Relative Strength.
 #' @param fast_n Window length for fast lmMA trend (default: 20 for swing trading, or 50).
 #' @param slow_n Window length for slow lmMA trend (default: 50 for swing trading, or 200).
-#' @param look_ahead Forward prediction horizon in days (default: 5 days for swing trading).
+#' @param look_ahead Forward prediction horizon in days (default: 7 days for swing trading).
 #' @param use_garch Logical; whether to include GARCH(1,1) volatility features (default: TRUE).
 #' @param train_idx Optional training indices for GARCH parameter estimation without lookahead.
 #' @return A list containing:
@@ -42,7 +42,7 @@ build_feature_dataset <- function(ohlcv,
                                   sector_ohlcv = NULL,
                                   fast_n = 20, 
                                   slow_n = 50, 
-                                  look_ahead = 5,
+                                  look_ahead = 7,
                                   use_garch = TRUE,
                                   train_idx = NULL) {
   

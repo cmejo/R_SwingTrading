@@ -182,13 +182,14 @@ run_swing_backtest <- function(ohlcv,
 #'   5. Breakeven Ratchet: Upon Tier 1 fill, stop loss moves to Entry.
 #'   6. Chandelier Trailing Stop: Trailing stop anchored at highest_price - 2.5 * ATR14 protects runner.
 #'   7. Tier 2: Target at +3.0R (+6 * sigma_daily) exits remaining 50%.
-#'   8. Time Exit: Position held >= 5 trading days is liquidated at bar t Close.
+#'   8. Time Exit: Position held >= max_hold_days (default 7) trading days is liquidated at bar t Close.
 #'   9. Regime/Model Exit: Signal flip to cash/bearish liquidates remaining at bar t Close.
 #'
 #' @param ohlcv Full OHLCV xts object.
 #' @param model_res Output object from logistic/elastic net model.
 #' @param pipeline_out Output object from feature pipeline.
 #' @param initial_capital Starting portfolio cash (default: $10,000).
+#' @param max_hold_days Max trading days to hold before liquidation (default: 7).
 #' @param cost_bps Slippage/transaction cost in basis points (default: 5 bps).
 #' @return List containing trades_df, equity_curve, daily_returns, metrics, and summary_table.
 #' @export
@@ -196,6 +197,7 @@ simulate_bracket_backtest <- function(ohlcv,
                                       model_res,
                                       pipeline_out,
                                       initial_capital = 10000,
+                                      max_hold_days = 7,
                                       cost_bps = 5) {
   if (!exists("calc_performance_metrics")) {
     source("R/08_metrics.R")
@@ -348,8 +350,8 @@ simulate_bracket_backtest <- function(ohlcv,
           }
         }
 
-        # 4. Time Expiration (5 Trading Days)
-        if (!is.null(pos) && pos$days_held >= 5) {
+        # 4. Time Expiration (max_hold_days Trading Days, default 7)
+        if (!is.null(pos) && pos$days_held >= max_hold_days) {
           shs_exit <- pos$shares
           exit_px <- c_px
           pnl <- (exit_px - pos$entry_price) * shs_exit - (shs_exit * exit_px * (cost_bps / 10000))

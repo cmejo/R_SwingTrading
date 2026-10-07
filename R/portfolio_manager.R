@@ -320,9 +320,9 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
       t2_tgt <- if (!is.null(p$tier2_target)) as.numeric(p$tier2_target) else round(p$entry_price + 3.0 * risk_1r, 2)
       
       # Time-Decay Target Ratchet (Feature 4):
-      # If days_held >= 4, Tier 1 not yet hit, but position has reached >= +1.0R profit,
-      # ratchet Tier 1 target down to +1.1R to lock in gains before the 5-day expiration window!
-      if (!isTRUE(p$tier1_hit) && days_held >= 4 && cp >= (p$entry_price + 1.0 * risk_1r)) {
+      # If days_held >= 6, Tier 1 not yet hit, but position has reached >= +1.0R profit,
+      # ratchet Tier 1 target down to +1.1R to lock in gains before the 7-day expiration window!
+      if (!isTRUE(p$tier1_hit) && days_held >= 6 && cp >= (p$entry_price + 1.0 * risk_1r)) {
         ratcheted_t1 <- round(p$entry_price + 1.1 * risk_1r, 2)
         if (ratcheted_t1 < t1_tgt) {
           t1_tgt <- ratcheted_t1
@@ -354,8 +354,8 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
       } else if (isTRUE(p$is_runner) || isTRUE(p$tier2_hit)) {
         action <- sprintf("HOLD RUNNER (Chandelier Trailing Stop: $%.2f | P&L: %+.2f%%)", chandelier_stop, pnl_pct)
         status <- "RUNNER_ACTIVE"
-      } else if (days_held >= 5 && !isTRUE(p$tier2_hit)) {
-        action <- "SELL (MAX 5-DAY TIME HORIZON)"
+      } else if (days_held >= 7 && !isTRUE(p$tier2_hit)) {
+        action <- "SELL (MAX 7-DAY TIME HORIZON)"
         status <- "TIME_EXIT_TRIGGERED"
         alerts <- c(alerts, sprintf("[TIME EXIT] %s held for %d trading days without reaching Tier 2 runner. Recycle capital.", sym, days_held))
       } else if (isTRUE(is_friday)) {

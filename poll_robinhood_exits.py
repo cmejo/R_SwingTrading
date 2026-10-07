@@ -287,10 +287,10 @@ def evaluate_exits(rh, dry_run: bool = True):
             pos["stop_loss"] = stop_loss
 
         # Feature 4: Time-Decay Target Ratchet for Non-Runners
-        # If held for >= 4 days and position has reached >= +1.0R profit, ratchet Tier 1 target
-        # down to +1.1R to guarantee capturing gains before the 5-day expiration window!
+        # If held for >= 6 days and position has reached >= +1.0R profit, ratchet Tier 1 target
+        # down to +1.1R to guarantee capturing gains before the 7-day expiration window!
         risk_1r = max(0.01, entry_px - stop_loss)
-        if not pos.get("tier1_executed", False) and days_held >= 4 and curr_px >= (entry_px + 1.0 * risk_1r):
+        if not pos.get("tier1_executed", False) and days_held >= 6 and curr_px >= (entry_px + 1.0 * risk_1r):
             ratchet_t1 = round(entry_px + 1.1 * risk_1r, 2)
             if t1_target <= 0 or ratchet_t1 < t1_target:
                 t1_target = ratchet_t1
@@ -341,11 +341,11 @@ def evaluate_exits(rh, dry_run: bool = True):
                 sync_exit_to_portfolio_json(sym, curr_px, t2_shares, "TIER2_TARGET", is_partial=True)
             continue
 
-        # 3. 5-Trading-Day Time Expiration Exit (Exempt for active runners!)
-        elif days_held >= 5 and not pos.get("is_runner", False) and not pos.get("tier2_executed", False):
+        # 3. 7-Trading-Day Time Expiration Exit (Exempt for active runners!)
+        elif days_held >= 7 and not pos.get("is_runner", False) and not pos.get("tier2_executed", False):
             exit_triggered = True
             exit_reason = "TIME_EXPIRATION"
-            msg = f"⏳ [ROBINHOOD 5-DAY TIME EXPIRATION] {sym} held for {days_held} trading days! Liquidating {shares} shares."
+            msg = f"⏳ [ROBINHOOD 7-DAY TIME EXPIRATION] {sym} held for {days_held} trading days! Liquidating {shares} shares."
             print(f"[{timestamp}] {msg}")
             send_alert(msg)
 

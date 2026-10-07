@@ -39,7 +39,7 @@ cat("========================================================================\n\
 SYMBOL       <- "SNDK"
 FAST_N       <- 20     # Fast lmMA trend window
 SLOW_N       <- 50     # Slow lmMA trend window
-LOOK_AHEAD   <- 5      # Swing trading target horizon (5 days)
+LOOK_AHEAD   <- 7      # Swing trading target horizon (7 days)
 TRAIN_SPLIT  <- 0.70   # In-sample training ratio
 P_LONG       <- 0.58   # Probability threshold for Long signal
 P_SHORT      <- 0.42   # Probability threshold for Short signal

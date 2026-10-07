@@ -33,7 +33,7 @@ MAX_POSITIONS    <- 5     # Max concurrent swing positions to hold (e.g., 5 posi
 TARGET_VOL       <- 0.45  # Target Volatility Budget (0.45 = 45% annual vol, matches QQQ/tech growth)
 FAST_N           <- 20
 SLOW_N           <- 50
-LOOK_AHEAD       <- 5
+LOOK_AHEAD       <- 7
 P_LONG           <- 0.58
 P_SHORT          <- 0.42
 TRAIN_WINDOW     <- 500   # Rolling historical training window (bars) to prevent regime decay
@@ -348,7 +348,7 @@ for (sym in SYMBOLS) {
       p_long        = EFFECTIVE_P_LONG,
       p_short       = P_SHORT,
       calibrate     = TRUE,
-      embargo_days  = 5
+      embargo_days  = 7
     )
     
     cv_fit            <- model_core$cv_fit
@@ -783,7 +783,7 @@ if (isTRUE(IS_FRIDAY)) {
                     tier2_shares, tier2_target, tier2_gain))
         cat(sprintf("    -> Runner Lot (25%% = %s shs): Chandelier Trailing Stop (Initial: $%.2f, Trails Highest High - 2.5 x ATR(14) $%.2f)\n",
                     runner_shares, row$Chandelier_Stop, row$ATR_14))
-        cat("       * EXEMPT from 5-day expiration window to capture multi-month momentum blowoffs!\n\n")
+        cat("       * EXEMPT from 7-day expiration window to capture multi-month momentum blowoffs!\n\n")
         
         alert_tickets <- c(alert_tickets, sprintf(
           "• *%s* (%s): BUY %s shs @ ~$%.2f\n  - Stop: $%.2f | T1 (50%%): $%.2f (+1.5R) | T2 (25%%): $%.2f (+3.0R)\n  - Runner (25%%): Chandelier Stop $%.2f | RS vs SPY: %+.1f%%",
