@@ -15,9 +15,10 @@ suppressMessages({
 load_stock_data <- function(symbol = "SNDK", 
                             from = "2020-01-01", 
                             to = Sys.Date(), 
-                            cache_file = NULL,
+                            cache_file = NULL, 
                             csv_file = NULL,
-                            force_refresh = FALSE) {
+                            force_refresh = FALSE,
+                            offline_only = FALSE) {
   
   symbol_clean <- toupper(trimws(symbol))
   sess_key <- sprintf("%s_%s_%s", symbol_clean, from, as.character(to))
@@ -48,22 +49,26 @@ load_stock_data <- function(symbol = "SNDK",
     tryCatch({
       cached <- readRDS(cache_file)
       if (!is.null(cached) && nrow(cached) > 0) {
-        last_cached_date <- as.Date(index(last(cached)))
-        today_date <- Sys.Date()
-        # If cache covers up to today or yesterday (or last Friday if today is weekend)
-        days_diff <- as.numeric(today_date - last_cached_date)
-        is_fresh <- (days_diff <= 0) || 
-                    (weekdays(today_date) %in% c("Saturday", "Sunday") && days_diff <= 2) ||
-                    (weekdays(today_date) == "Monday" && days_diff <= 3)
-        if (is_fresh) {
+        if (offline_only) {
           data_xts <- cached
+        } else {
+          last_cached_date <- as.Date(index(last(cached)))
+          today_date <- Sys.Date()
+          # If cache covers up to today or yesterday (or last Friday if today is weekend)
+          days_diff <- as.numeric(today_date - last_cached_date)
+          is_fresh <- (days_diff <= 1) || 
+                      (weekdays(today_date) %in% c("Saturday", "Sunday") && days_diff <= 2) ||
+                      (weekdays(today_date) == "Monday" && days_diff <= 3)
+          if (is_fresh) {
+            data_xts <- cached
+          }
         }
       }
     }, error = function(e) NULL)
   }
   
   # Option 3: Fetch live via quantmod getSymbols (using to + 1 for inclusive end-date)
-  if (is.null(data_xts)) {
+  if (is.null(data_xts) && !offline_only) {
     req_to <- as.Date(to) + 1
     cat(sprintf("[DataLoader] Attempting to fetch '%s' from Yahoo Finance (%s to %s)...\n", 
                 symbol, from, as.character(to)))

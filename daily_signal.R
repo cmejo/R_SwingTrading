@@ -161,34 +161,40 @@ cat("\n=========================================================================
 cat(" 1. MACRO MARKET & VOLATILITY REGIME GATE (QQQ + VIX DUAL FILTER)\n")
 cat("========================================================================================\n")
 
-macro_info <- tryCatch({
-  qqq_ohlcv <- load_stock_data("QQQ")
-  qqq_price <- Cl(qqq_ohlcv)
-  qqq_lm <- lmMA(qqq_price, n = 50)
-  latest_qqq_close <- as.numeric(last(qqq_price))
-  latest_qqq_fit   <- as.numeric(last(qqq_lm$fit))
-  latest_qqq_slope <- as.numeric(last(qqq_lm$slope))
-  
-  is_bullish <- (latest_qqq_close >= latest_qqq_fit) && (latest_qqq_slope >= 0)
-  list(
-    close = latest_qqq_close,
-    fit = latest_qqq_fit,
-    slope = latest_qqq_slope,
-    is_bullish = is_bullish,
-    regime = if (is_bullish) "BULLISH (Risk-On)" else "DEFENSIVE (Risk-Off)"
-  )
-}, error = function(e) {
-  cat(sprintf("  -> Warning: Macro fetch failed (%s). Defaulting to Bullish.\n", e$message))
+qqq_ohlcv <- tryCatch(load_stock_data("QQQ"), error = function(e) NULL)
+macro_info <- if (!is.null(qqq_ohlcv)) {
+  tryCatch({
+    qqq_price <- Cl(qqq_ohlcv)
+    qqq_lm <- lmMA(qqq_price, n = 50)
+    latest_qqq_close <- as.numeric(last(qqq_price))
+    latest_qqq_fit   <- as.numeric(last(qqq_lm$fit))
+    latest_qqq_slope <- as.numeric(last(qqq_lm$slope))
+    
+    is_bullish <- (latest_qqq_close >= latest_qqq_fit) && (latest_qqq_slope >= 0)
+    list(
+      close = latest_qqq_close,
+      fit = latest_qqq_fit,
+      slope = latest_qqq_slope,
+      is_bullish = is_bullish,
+      regime = if (is_bullish) "BULLISH (Risk-On)" else "DEFENSIVE (Risk-Off)"
+    )
+  }, error = function(e) {
+    cat(sprintf("  -> Warning: Macro calculation failed (%s). Defaulting to Bullish.\n", e$message))
+    list(close = 0, fit = 0, slope = 0, is_bullish = TRUE, regime = "BULLISH (Default)")
+  })
+} else {
+  cat("  -> Warning: Macro fetch failed. Defaulting to Bullish.\n")
   list(close = 0, fit = 0, slope = 0, is_bullish = TRUE, regime = "BULLISH (Default)")
-})
+}
 
 # Benchmark (SPY) for Relative Strength
 spy_ohlcv <- tryCatch({
   load_stock_data("SPY")
 }, error = function(e) {
-  qqq_ohlcv
+  if (!is.null(qqq_ohlcv)) qqq_ohlcv else NULL
 })
-spy_px <- as.numeric(last(Cl(spy_ohlcv)))
+if (is.null(spy_ohlcv) && !is.null(qqq_ohlcv)) spy_ohlcv <- qqq_ohlcv
+spy_px <- if (!is.null(spy_ohlcv)) as.numeric(last(Cl(spy_ohlcv))) else 0
 
 # Dynamic CBOE VIX Volatility Regime
 vix_info <- tryCatch({
