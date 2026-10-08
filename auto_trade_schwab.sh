@@ -26,6 +26,7 @@ SYMBOLS_FILE="$PROJECT_DIR/symbols_broad.txt"
 LEVERAGE="1.5"
 MAX_POS="3"
 MAX_PER_SECTOR="3"
+MAX_HEAT="0.08"
 
 CAPITAL=""
 AUTO_CAPITAL="true"
@@ -47,6 +48,9 @@ for arg in "$@"; do
       ;;
     --max_per_sector=*)
       MAX_PER_SECTOR="${arg#*=}"
+      ;;
+    --max_heat=*|--heat_budget=*)
+      MAX_HEAT="${arg#*=}"
       ;;
     --capital=*)
       CAPITAL="${arg#*=}"
@@ -90,7 +94,7 @@ echo " Mode:         $([ "$DRY_RUN" = "false" ] && echo '🔴 LIVE EXECUTION' ||
 echo " Watchlist:    $SYMBOLS_FILE"
 echo " Capital:      \$$CAPITAL"
 echo " Leverage:     ${LEVERAGE}x"
-echo " Max Holdings: $MAX_POS (Max $MAX_PER_SECTOR per sector)"
+echo " Max Holdings: $MAX_POS (Max $MAX_PER_SECTOR per sector | Heat Cap: $(awk "BEGIN {print $MAX_HEAT * 100}")%)"
 echo " Timestamp:    $(date)"
 echo "================================================================================"
 
@@ -102,6 +106,7 @@ Rscript daily_signal.R \
   --leverage="$LEVERAGE" \
   --max_pos="$MAX_POS" \
   --max_per_sector="$MAX_PER_SECTOR" \
+  --max_heat="$MAX_HEAT" \
   --sizing_mode="vince" \
   --portfolio_file="$PROJECT_DIR/portfolio.json" 2>&1 | tee "$LOG_FILE" "$LATEST_TICKET"
 

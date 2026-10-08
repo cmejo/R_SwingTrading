@@ -45,6 +45,7 @@ VINCE_LOOKBACK   <- 120     # Lookback days for joint scenario return matrix
 ALLOW_FRACTIONAL <- TRUE    # Allow fractional shares for exact risk budget allocation
 LEVERAGE         <- 1.5     # Default leverage multiplier: 1.5x (margin). Set 1.0 for cash only.
 MAX_PER_SECTOR   <- 3       # Maximum concurrent positions allowed in any single sector
+MAX_HEAT         <- 0.08    # Max portfolio heat budget (0.08 = 8.0% total dollars at risk across stops)
 PORTFOLIO_FILE   <- "portfolio.json"
 IS_FRIDAY        <- (format(Sys.Date(), "%u") == "5") # Friday weekend exit check
 
@@ -62,6 +63,8 @@ for (arg in args) {
   if (grepl("^--margin_leverage=", arg)) LEVERAGE <- as.numeric(sub("^--margin_leverage=", "", arg))
   if (grepl("^--max_pos=", arg)) MAX_POSITIONS <- as.numeric(sub("^--max_pos=", "", arg))
   if (grepl("^--max_per_sector=", arg)) MAX_PER_SECTOR <- as.numeric(sub("^--max_per_sector=", "", arg))
+  if (grepl("^--max_heat=", arg)) MAX_HEAT <- as.numeric(sub("^--max_heat=", "", arg))
+  if (grepl("^--heat_budget=", arg)) MAX_HEAT <- as.numeric(sub("^--heat_budget=", "", arg))
   if (grepl("^--target_vol=", arg)) TARGET_VOL <- as.numeric(sub("^--target_vol=", "", arg))
   if (grepl("^--train_window=", arg)) TRAIN_WINDOW <- as.numeric(sub("^--train_window=", "", arg))
   if (grepl("^--macro_gate=", arg)) MACRO_GATE <- as.logical(sub("^--macro_gate=", "", arg))
@@ -561,7 +564,7 @@ if (isTRUE(sync_res$circuit_breaker_active)) {
               sync_res$drawdown_pct, EFFECTIVE_SAFETY_FACTOR))
 }
 
-# Total Portfolio Heat (Max 5.0% Dollars at Risk across portfolio)
+# Total Portfolio Heat (Max Dollars at Risk across portfolio)
 existing_dollar_risk <- if (sync_res$active_count > 0) {
   sum(sapply(port_state$positions, function(p) {
     pmax(0, as.numeric(p$shares) * (as.numeric(p$entry_price) - as.numeric(p$stop_loss)))
@@ -569,10 +572,10 @@ existing_dollar_risk <- if (sync_res$active_count > 0) {
 } else {
   0.0
 }
-max_portfolio_heat <- 0.05 * sync_res$total_account_value
+max_portfolio_heat <- MAX_HEAT * sync_res$total_account_value
 avail_heat_budget  <- max(0, max_portfolio_heat - existing_dollar_risk)
-cat(sprintf(" PORTFOLIO HEAT (RISK):  $%.2f of $%.2f max allowed (%.2f%% of equity)\n",
-            existing_dollar_risk, max_portfolio_heat, (existing_dollar_risk / max(1, sync_res$total_account_value)) * 100))
+cat(sprintf(" PORTFOLIO HEAT (RISK):  $%.2f of $%.2f max allowed (%.2f%% of equity, Cap: %.1f%%)\n",
+            existing_dollar_risk, max_portfolio_heat, (existing_dollar_risk / max(1, sync_res$total_account_value)) * 100, MAX_HEAT * 100))
 
 # ========================================================================================
 # ACTIONABLE CAPITAL DEPLOYMENT (ORDERS TO FILL EMPTY CASH SLOTS)
