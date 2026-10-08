@@ -22,8 +22,8 @@ mkdir -p "$PROJECT_DIR/logs" "$PROJECT_DIR/output"
 
 echo "[$(date)] Reading watchlist from $PROJECT_DIR/symbols_broad.txt..." >> "$LOG_FILE"
 
-# 1. Execute Daily Multi-Asset Scanner (Max Positions: 5 | Vince Safe f: 0.50 | Fractional: TRUE)
-"$RSCRIPT_BIN" daily_signal.R --symbols_file="$PROJECT_DIR/symbols_broad.txt" --capital=10000 --max_pos=5 --sizing_mode=vince --safety_factor=0.50 --fractional=TRUE --portfolio_file="$PROJECT_DIR/portfolio.json" 2>&1 | tee -a "$LOG_FILE" > "$LATEST_TICKET"
+# 1. Execute Daily Multi-Asset Scanner (Max Positions: 3 | Sector Cap: 3 | Vince Safe f: 0.50 | Fractional: TRUE)
+"$RSCRIPT_BIN" daily_signal.R --symbols_file="$PROJECT_DIR/symbols_broad.txt" --capital=10000 --max_pos=3 --max_per_sector=3 --sizing_mode=vince --safety_factor=0.50 --fractional=TRUE --portfolio_file="$PROJECT_DIR/portfolio.json" 2>&1 | tee -a "$LOG_FILE" > "$LATEST_TICKET"
 
 # 2. Automated Monthly Strategy Evaluation (Runs every Friday or if evaluation file is missing)
 DAY_OF_WEEK=$(date +%u) # 5 = Friday

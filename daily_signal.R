@@ -29,7 +29,7 @@ source("R/send_alert.R")
 
 # Default Parameters
 CAPITAL          <- 10000
-MAX_POSITIONS    <- 5     # Max concurrent swing positions to hold (e.g., 5 positions @ $2,000 each)
+MAX_POSITIONS    <- 3     # Max concurrent swing positions to hold (e.g., 3 positions @ $3,333 each)
 TARGET_VOL       <- 0.45  # Target Volatility Budget (0.45 = 45% annual vol, matches QQQ/tech growth)
 FAST_N           <- 20
 SLOW_N           <- 50
@@ -44,7 +44,7 @@ SAFETY_FACTOR    <- 0.50    # Aggressive Safe f scaling factor for Ralph Vince L
 VINCE_LOOKBACK   <- 120     # Lookback days for joint scenario return matrix
 ALLOW_FRACTIONAL <- TRUE    # Allow fractional shares for exact risk budget allocation
 LEVERAGE         <- 1.0     # Default leverage multiplier: 1.0 (cash only). Set >1.0 for margin.
-MAX_PER_SECTOR   <- 2       # Maximum concurrent positions allowed in any single sector
+MAX_PER_SECTOR   <- 3       # Maximum concurrent positions allowed in any single sector
 PORTFOLIO_FILE   <- "portfolio.json"
 IS_FRIDAY        <- (format(Sys.Date(), "%u") == "5") # Friday weekend exit check
 

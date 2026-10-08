@@ -24,8 +24,8 @@ cd "$PROJECT_DIR" || exit 1
 DRY_RUN="true"
 SYMBOLS_FILE="$PROJECT_DIR/symbols_broad.txt"
 LEVERAGE="1.0"
-MAX_POS="5"
-MAX_PER_SECTOR="2"
+MAX_POS="3"
+MAX_PER_SECTOR="3"
 
 CAPITAL=""
 AUTO_CAPITAL="true"
