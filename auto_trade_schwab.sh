@@ -98,6 +98,11 @@ echo " Max Holdings: $MAX_POS (Max $MAX_PER_SECTOR per sector | Heat Cap: $(awk 
 echo " Timestamp:    $(date)"
 echo "================================================================================"
 
+# Step 0: Check Schwab OAuth Token Health (Warns 24-48h before 7-day expiration)
+if [ -f "$PROJECT_DIR/check_schwab_token.py" ]; then
+  python3 "$PROJECT_DIR/check_schwab_token.py" --warn_hours=48 || true
+fi
+
 # Step 1: Run Multi-Asset Scanner & Risk Management Engine
 printf "\n[Step 1/3] Running Quantitative Scanner & Ralph Vince Leverage Sizing...\n"
 Rscript daily_signal.R \
