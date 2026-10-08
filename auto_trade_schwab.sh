@@ -23,7 +23,7 @@ cd "$PROJECT_DIR" || exit 1
 # Default Parameters
 DRY_RUN="true"
 SYMBOLS_FILE="$PROJECT_DIR/symbols_broad.txt"
-LEVERAGE="1.0"
+LEVERAGE="1.5"
 MAX_POS="3"
 MAX_PER_SECTOR="3"
 
@@ -102,6 +102,7 @@ Rscript daily_signal.R \
   --leverage="$LEVERAGE" \
   --max_pos="$MAX_POS" \
   --max_per_sector="$MAX_PER_SECTOR" \
+  --sizing_mode="vince" \
   --portfolio_file="$PROJECT_DIR/portfolio.json" 2>&1 | tee "$LOG_FILE" "$LATEST_TICKET"
 
 # Step 2: Check for Actionable Buy Tickets (Swing Stocks + QQQ Cash Park)

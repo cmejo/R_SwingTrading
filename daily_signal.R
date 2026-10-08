@@ -43,7 +43,7 @@ SIZING_MODE      <- "vince" # Position sizing engine: "vince" (Leverage Space) o
 SAFETY_FACTOR    <- 0.50    # Aggressive Safe f scaling factor for Ralph Vince Leverage Space model
 VINCE_LOOKBACK   <- 120     # Lookback days for joint scenario return matrix
 ALLOW_FRACTIONAL <- TRUE    # Allow fractional shares for exact risk budget allocation
-LEVERAGE         <- 1.0     # Default leverage multiplier: 1.0 (cash only). Set >1.0 for margin.
+LEVERAGE         <- 1.5     # Default leverage multiplier: 1.5x (margin). Set 1.0 for cash only.
 MAX_PER_SECTOR   <- 3       # Maximum concurrent positions allowed in any single sector
 PORTFOLIO_FILE   <- "portfolio.json"
 IS_FRIDAY        <- (format(Sys.Date(), "%u") == "5") # Friday weekend exit check
