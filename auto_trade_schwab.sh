@@ -114,7 +114,9 @@ printf "\n[Step 2/3] Scanner Finished. Macro Gate: [%s] | Qualifying Orders: %s\
 if [ "$N_ACTIONABLE" -eq 0 ]; then
   echo " [Notice] No actionable buy orders generated today (Macro Gate risk-off, or no symbols met 58% threshold)."
   echo " Maintaining 100% Cash / Existing Portfolio buffer."
-  osascript -e "display notification \"No BUY criteria met today. Cash buffer preserved.\" with title \"Schwab Bot: 100% Cash Buffer\"" || true
+  if command -v osascript &>/dev/null; then
+    osascript -e "display notification \"No BUY criteria met today. Cash buffer preserved.\" with title \"Schwab Bot: 100% Cash Buffer\"" || true
+  fi
   exit 0
 fi
 
@@ -128,13 +130,17 @@ if [ "$DRY_RUN" = "false" ]; then
   python3 execute_broker.py --broker=schwab --sync --dry_run=false || true
   
   NOTIF_MSG="Successfully submitted $N_ACTIONABLE live bracket order(s) to Charles Schwab!"
-  osascript -e "display notification \"${NOTIF_MSG}\" with title \"Schwab Bot: LIVE ORDERS SENT\" sound name \"Glass\"" || true
+  if command -v osascript &>/dev/null; then
+    osascript -e "display notification \"${NOTIF_MSG}\" with title \"Schwab Bot: LIVE ORDERS SENT\" sound name \"Glass\"" || true
+  fi
 else
   echo " Staging and validating Schwab REST bracket payloads (Dry Run Simulation)..."
   python3 execute_broker.py --broker=schwab --dry_run=true --ticket_file="$LATEST_TICKET"
   
   NOTIF_MSG="Validated $N_ACTIONABLE Schwab bracket payload(s) in simulation."
-  osascript -e "display notification \"${NOTIF_MSG}\" with title \"Schwab Bot: Dry Run Validated\"" || true
+  if command -v osascript &>/dev/null; then
+    osascript -e "display notification \"${NOTIF_MSG}\" with title \"Schwab Bot: Dry Run Validated\"" || true
+  fi
 fi
 
 printf "\n================================================================================\n"
