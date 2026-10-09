@@ -3,31 +3,35 @@
  MONTHLY STRATEGY HEALTH EVALUATION | SNDK (PAST 30 DAYS)
 ========================================================================
 
-[DataLoader] Attempting to fetch 'SNDK' from Yahoo Finance (2020-01-01 to 2026-10-02)...
-[DataLoader] Successfully fetched 410 bars from Yahoo Finance.
-[DataLoader] Cached data saved to data/data_sndk.rds
-[DataLoader] Loaded 410 bars for SNDK [2025-02-13 to 2026-10-01]
+[DataLoader] Loaded 415 bars for SNDK [2025-02-13 to 2026-10-08]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.001566, a1=0.2497, b1=0.4232 (persistence=0.6729)
-[Pipeline] Complete. Result: 356 valid observation rows across 12 features.
+[GARCH] Fitted: a0=0.000076, a1=0.0570, b1=0.9240 (persistence=0.9810)
+[Pipeline] Complete. Result: 361 valid observation rows across 18 features.
+[LogisticModel] Training set: 326 bars (2025-04-25 to 2026-08-12 | 5-day embargo applied)
+[LogisticModel] Testing set:  30 bars (2026-08-20 to 2026-10-01)
+[LogisticModel] Fitting cv.glmnet with alpha=0.50 (ElasticNet + Purged CV)...
 ------------------------------------------------------------------------
- EVALUATION PERIOD: 2026-08-13 to 2026-09-24 (30 Trading Days)
+ EVALUATION PERIOD: 2026-08-20 to 2026-10-01 (30 Trading Days)
 ------------------------------------------------------------------------
                                Strategy Cumulative_Return Annualized_Return
- ML Swing Strategy (GARCH Vol-Targeted)            13.20%           193.68%
-                 Classic MA Trend Cross            14.76%           230.73%
-                        Buy & Hold SNDK            14.76%           230.73%
- Annualized_Vol Sharpe_Ratio Max_Drawdown Calmar_Ratio Win_Rate Profit_Factor
-         76.53%         2.53       15.47%        12.52    44.8%          1.36
-         81.29%         2.84       17.13%        13.47    44.8%          1.38
-         81.29%         2.84       17.13%        13.47    44.8%          1.38
+ ML Swing Strategy (GARCH Vol-Targeted)           +12.89%          +186.75%
+                 Classic MA Trend Cross            +8.70%          +106.47%
+                     Buy & Hold (Close)           +11.69%          +161.30%
+ Annualized_Vol Sharpe_Ratio Sortino_Ratio Max_Drawdown Calmar_Ratio Win_Rate
+         67.64%         1.88          3.80      -13.84%        13.49    44.8%
+         68.80%         1.38          2.68      -13.84%         7.69    46.4%
+         69.14%         1.72          3.35      -13.84%        11.65    48.3%
+ Profit_Factor
+          1.41
+          1.29
+          1.36
 
 ========================================================================
  STRATEGY HEALTH VERDICT: [ACCEPTABLE (CHOPPY / TRANSITIONAL REGIME)]
 ========================================================================
  ! Strategy is profitable but experiencing lower edge due to sideways market action.
- ! Drawdown (15.47%) exceeded 15%. Consider lowering position sizing to 70%.
+ ✓ Maximum Drawdown (-13.84%) remained strictly within normal boundaries.
 ========================================================================
 
 null device 
