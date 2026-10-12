@@ -147,12 +147,14 @@ else
   echo " Staging and validating Schwab REST bracket payloads (Dry Run Simulation)..."
   python3 execute_broker.py --broker=schwab --dry_run=true --ticket_file="$LATEST_TICKET"
   
-  NOTIF_MSG="Validated $N_ACTIONABLE Schwab bracket payload(s) in simulation."
-  if command -v osascript &>/dev/null; then
-    osascript -e "display notification \"${NOTIF_MSG}\" with title \"Schwab Bot: Dry Run Validated\"" || true
-  fi
+fi
+
+# Step 4: Refresh Performance Tracking & Equity Charts
+if [ -f "$PROJECT_DIR/track_performance.py" ]; then
+  python3 "$PROJECT_DIR/track_performance.py" >/dev/null 2>&1 || true
 fi
 
 printf "\n================================================================================\n"
 echo " Pipeline execution completed successfully. Log: $LOG_FILE"
+echo " Performance Dashboard updated: $PROJECT_DIR/output/performance_dashboard.html"
 echo "================================================================================"
