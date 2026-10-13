@@ -86,6 +86,7 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
         if qqq_shs >= 1.0:
             tickets.append({
                 "rank": 99,
+                "action": "BUY",
                 "symbol": "QQQ",
                 "shares": qqq_shs,
                 "sector": "Index_ETF",
@@ -97,6 +98,109 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
                 "tier2_shares": 0.0,
                 "tier2_target": 0.0,
                 "estimated_outlay": qqq_outlay
+            })
+
+    # =========================================================================
+    # Parse Automated SELL Exit Alerts from PORTFOLIO ACTION ALERTS
+    # =========================================================================
+    port_positions = {}
+    if os.path.exists("portfolio.json"):
+        try:
+            with open("portfolio.json", "r") as pf:
+                pj = json.load(pf)
+                port_positions = {p["symbol"]: p for p in pj.get("positions", [])}
+        except Exception:
+            pass
+
+    # 1. Stop-Loss Hit
+    # e.g.: [STOP-LOSS HIT] QQQ breached stop at $754.01 (Current: $742.19). Exit immediately.
+    stop_alerts = re.findall(
+        r"\[STOP-LOSS HIT\]\s*([A-Za-z0-9\.\-]+)",
+        content
+    )
+    for sym in stop_alerts:
+        pos = port_positions.get(sym, {})
+        shs = float(pos.get("shares", 0.0))
+        if shs > 0:
+            tickets.append({
+                "rank": 0,
+                "action": "SELL",
+                "symbol": sym,
+                "shares": shs,
+                "reason": "STOP_LOSS_HIT",
+                "price": float(pos.get("current_price", pos.get("entry_price", 0.0)))
+            })
+
+    # 2. Tier 1 Target Hit (+1.5R Scale-Out 50%)
+    # e.g.: [TIER 1 HIT] PENG hit +1.5R target ($76.85). Sell 50% (13.500 shares) and raise stop to Breakeven $72.50!
+    t1_alerts = re.findall(
+        r"\[TIER 1 HIT\]\s*([A-Za-z0-9\.\-]+).*?Sell 50%\s*\(([\d\.]+)\s*shares\)",
+        content
+    )
+    for sym, shs in t1_alerts:
+        pos = port_positions.get(sym, {})
+        tickets.append({
+            "rank": 0,
+            "action": "SELL",
+            "symbol": sym,
+            "shares": float(shs),
+            "reason": "SCALE_OUT_TIER1",
+            "price": float(pos.get("current_price", pos.get("entry_price", 0.0)))
+        })
+
+    # 3. Tier 2 Target Hit (+3.0R Scale-Out 25%)
+    # e.g.: [TIER 2 HIT] SYMBOL hit +3.0R target ($XX). Sell YY shares.
+    t2_alerts = re.findall(
+        r"\[TIER 2 HIT\]\s*([A-Za-z0-9\.\-]+).*?Sell\s+([\d\.]+)\s*shares",
+        content
+    )
+    for sym, shs in t2_alerts:
+        pos = port_positions.get(sym, {})
+        tickets.append({
+            "rank": 0,
+            "action": "SELL",
+            "symbol": sym,
+            "shares": float(shs),
+            "reason": "SCALE_OUT_TIER2",
+            "price": float(pos.get("current_price", pos.get("entry_price", 0.0)))
+        })
+
+    # 4. 7-Day Time Horizon Expiration Exit
+    # e.g.: [TIME EXIT] SYMBOL held for 7 trading days without reaching Tier 2 runner.
+    time_alerts = re.findall(
+        r"\[TIME EXIT\]\s*([A-Za-z0-9\.\-]+)",
+        content
+    )
+    for sym in time_alerts:
+        pos = port_positions.get(sym, {})
+        shs = float(pos.get("shares", 0.0))
+        if shs > 0:
+            tickets.append({
+                "rank": 0,
+                "action": "SELL",
+                "symbol": sym,
+                "shares": shs,
+                "reason": "MAX_7DAY_TIME_EXIT",
+                "price": float(pos.get("current_price", pos.get("entry_price", 0.0)))
+            })
+
+    # 5. Defensive Friday Weekend Exit
+    # e.g.: [DEFENSIVE WEEKEND EXIT] SYMBOL must be closed before 16:00 Friday
+    wknd_alerts = re.findall(
+        r"\[DEFENSIVE WEEKEND EXIT\]\s*([A-Za-z0-9\.\-]+)",
+        content
+    )
+    for sym in wknd_alerts:
+        pos = port_positions.get(sym, {})
+        shs = float(pos.get("shares", 0.0))
+        if shs > 0:
+            tickets.append({
+                "rank": 0,
+                "action": "SELL",
+                "symbol": sym,
+                "shares": shs,
+                "reason": "DEFENSIVE_WEEKEND_EXIT",
+                "price": float(pos.get("current_price", pos.get("entry_price", 0.0)))
             })
 
     return tickets
@@ -148,8 +252,25 @@ def _schwab_leg_order(symbol: str, qty: int, stop_px: float, target_px: float) -
 
 def build_schwab_payloads(ticket: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Generates Charles Schwab Trader API orders for one ticket.
+    For exit tickets (action == 'SELL'), generates a single day MARKET sell order.
     For standard swing stocks, splits into two FIRST_TRIGGERS_OCO brackets (Tier 1 & Tier 2).
     For Core-Satellite QQQ cash park, generates a single day MARKET buy order."""
+    if ticket.get("action") == "SELL":
+        qty = int(ticket["shares"])
+        if qty > 0:
+            return [{
+                "orderStrategyType": "SINGLE",
+                "orderType": "MARKET",
+                "session": "NORMAL",
+                "duration": "DAY",
+                "orderLegCollection": [{
+                    "instruction": "SELL",
+                    "quantity": qty,
+                    "instrument": {"symbol": ticket["symbol"], "assetType": "EQUITY"}
+                }]
+            }]
+        return []
+
     if ticket.get("is_cash_park"):
         total = int(ticket["shares"])
         if total > 0:
@@ -317,12 +438,19 @@ def execute_schwab(tickets: List[Dict[str, Any]], dry_run: bool):
     app_key = os.environ.get("SCHWAB_APP_KEY", "")
     secret = os.environ.get("SCHWAB_SECRET", "")
 
+    # Sort tickets: SELL orders first (to unlock cash and eliminate risk), then BUY orders
+    tickets.sort(key=lambda t: 0 if t.get("action") == "SELL" else 1)
+
     if dry_run:
         print("[Schwab Bridge] MODE: DRY RUN (Simulation only. No orders transmitted).")
         for t in tickets:
-            payload = build_schwab_payload(t)
-            print(f"\n--- Staging Schwab REST Bracket: {t['symbol']} ({int(t['shares'])} whole shares, {len(payload['orders'])} leg orders) ---")
-            print(json.dumps(payload, indent=2))
+            legs = build_schwab_payloads(t)
+            is_sell = (t.get("action") == "SELL")
+            if is_sell:
+                print(f"\n--- Staging Schwab MARKET SELL: {t['symbol']} ({int(t['shares'])} whole shares | Reason: {t.get('reason', 'EXIT')}) ---")
+            else:
+                print(f"\n--- Staging Schwab REST Bracket BUY: {t['symbol']} ({int(t['shares'])} whole shares, {len(legs)} leg orders) ---")
+            print(json.dumps({"broker": "Charles Schwab Trader API", "orders": legs}, indent=2))
         print("\n[Schwab Bridge] Dry-run validation SUCCESS: All Schwab order payloads valid.")
         return
 
@@ -348,14 +476,18 @@ def execute_schwab(tickets: List[Dict[str, Any]], dry_run: bool):
             if not legs:
                 print(f"[Schwab Bridge] Skipping {t['symbol']}: {t['shares']} shares rounds to 0 whole shares.")
                 continue
+            is_sell = (t.get("action") == "SELL")
             for leg_i, leg in enumerate(legs, 1):
                 qty = leg["orderLegCollection"][0]["quantity"]
-                print(f"[Schwab Bridge] Submitting bracket leg {leg_i}/{len(legs)} for {t['symbol']} ({qty} shares)...")
+                if is_sell:
+                    print(f"[Schwab Bridge] Submitting MARKET SELL for {t['symbol']} ({qty} shares | Reason: {t.get('reason', 'EXIT')})...")
+                else:
+                    print(f"[Schwab Bridge] Submitting bracket leg {leg_i}/{len(legs)} for {t['symbol']} ({qty} shares)...")
                 try:
                     res = schwab.place_order(acct_hash, leg)
                     print(f"[Schwab Bridge] Order Submitted Successfully: {res}")
                 except Exception as leg_err:
-                    print(f"[Schwab Bridge] Leg {leg_i} for {t['symbol']} failed: {leg_err}")
+                    print(f"[Schwab Bridge] Order for {t['symbol']} failed: {leg_err}")
     except Exception as e:
         print(f"[Schwab Bridge] Execution error: {e}")
         sys.exit(1)

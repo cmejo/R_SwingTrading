@@ -115,17 +115,19 @@ Rscript daily_signal.R \
   --sizing_mode="vince" \
   --portfolio_file="$PROJECT_DIR/portfolio.json" 2>&1 | tee "$LOG_FILE" "$LATEST_TICKET"
 
-# Step 2: Check for Actionable Buy Tickets (Swing Stocks + QQQ Cash Park)
-N_ACTIONABLE=$(grep -c -E "(Action: *BUY [0-9]|Actionable Ticket: *BUY [0-9].*QQQ)" "$LATEST_TICKET" || true)
+# Step 2: Check for Actionable Buy & Sell Tickets
+N_BUYS=$(grep -c -E "(Action: *BUY [0-9]|Actionable Ticket: *BUY [0-9].*QQQ)" "$LATEST_TICKET" || true)
+N_SELLS=$(grep -c -E "(\[STOP-LOSS HIT\]|\[TIER 1 HIT\]|\[TIER 2 HIT\]|\[TIME EXIT\]|\[DEFENSIVE WEEKEND EXIT\])" "$LATEST_TICKET" || true)
+N_ACTIONABLE=$((N_BUYS + N_SELLS))
 MACRO_GATE=$(grep -m 1 "Macro Gate:" "$LATEST_TICKET" | sed 's/.*Macro Gate: \([^ |]*\).*/\1/' || echo "Active")
 
-printf "\n[Step 2/3] Scanner Finished. Macro Gate: [%s] | Qualifying Orders: %s\n" "$MACRO_GATE" "$N_ACTIONABLE"
+printf "\n[Step 2/3] Scanner Finished. Macro Gate: [%s] | Actionable Orders: %s (%s Sells, %s Buys)\n" "$MACRO_GATE" "$N_ACTIONABLE" "$N_SELLS" "$N_BUYS"
 
 if [ "$N_ACTIONABLE" -eq 0 ]; then
-  echo " [Notice] No actionable buy orders generated today (Macro Gate risk-off, or no symbols met 58% threshold)."
-  echo " Maintaining 100% Cash / Existing Portfolio buffer."
+  echo " [Notice] No actionable buy or sell orders generated today."
+  echo " Maintaining current portfolio holdings and cash buffer."
   if command -v osascript &>/dev/null; then
-    osascript -e "display notification \"No BUY criteria met today. Cash buffer preserved.\" with title \"Schwab Bot: 100% Cash Buffer\"" || true
+    osascript -e "display notification \"No BUY or SELL criteria met today.\" with title \"Schwab Bot: Idle\"" || true
   fi
   exit 0
 fi
@@ -133,15 +135,15 @@ fi
 # Step 3: Charles Schwab Execution Bridge
 printf "\n[Step 3/3] Initiating Charles Schwab Trader API Bridge...\n"
 if [ "$DRY_RUN" = "false" ]; then
-  echo " Transmitting $N_ACTIONABLE LIVE bracket orders to Charles Schwab..."
+  echo " Transmitting $N_ACTIONABLE LIVE orders ($N_SELLS Sells, $N_BUYS Buys) to Charles Schwab..."
   python3 execute_broker.py --broker=schwab --dry_run=false --yes --ticket_file="$LATEST_TICKET"
   
   printf "\n[Reconciliation] Synchronizing active Schwab account positions into portfolio.json...\n"
   python3 execute_broker.py --broker=schwab --sync --dry_run=false || true
   
-  NOTIF_MSG="Successfully submitted $N_ACTIONABLE live bracket order(s) to Charles Schwab!"
+  NOTIF_MSG="Successfully executed $N_ACTIONABLE order(s) ($N_SELLS Sells, $N_BUYS Buys) at Charles Schwab!"
   if command -v osascript &>/dev/null; then
-    osascript -e "display notification \"${NOTIF_MSG}\" with title \"Schwab Bot: LIVE ORDERS SENT\" sound name \"Glass\"" || true
+    osascript -e "display notification \"${NOTIF_MSG}\" with title \"Schwab Bot: ORDERS EXECUTED\" sound name \"Glass\"" || true
   fi
 else
   echo " Staging and validating Schwab REST bracket payloads (Dry Run Simulation)..."
