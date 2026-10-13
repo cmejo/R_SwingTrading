@@ -1,0 +1,18 @@
+[
+  {
+    "date": "2026-10-08",
+    "equity": 10000.0,
+    "cash": 10000.0,
+    "positions": 0,
+    "unrealized_pnl": 0.0,
+    "timestamp": "2026-10-08 09:30:00"
+  },
+  {
+    "date": "2026-10-12",
+    "equity": 10385.2,
+    "cash": 2339.86,
+    "positions": 3,
+    "unrealized_pnl": 192.6,
+    "timestamp": "2026-10-12 21:14:21.727200"
+  }
+]

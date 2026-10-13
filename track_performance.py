@@ -69,6 +69,23 @@ def update_equity_history(portfolio: Dict[str, Any]) -> List[Dict[str, Any]]:
             history = []
 
     today_str = datetime.date.today().strftime("%Y-%m-%d")
+
+    # If history has no baseline prior to today, seed the starting capital baseline ($10,000)
+    has_baseline = any(h.get("date") < today_str for h in history)
+    if not has_baseline:
+        # Find earliest entry date from active positions, or default to 2026-10-08
+        earliest_date = "2026-10-08"
+        for p in portfolio.get("positions", []):
+            if p.get("entry_date") and p["entry_date"] < earliest_date:
+                earliest_date = p["entry_date"]
+        history.insert(0, {
+            "date": earliest_date,
+            "equity": 10000.0,
+            "cash": 10000.0,
+            "positions": 0,
+            "unrealized_pnl": 0.0,
+            "timestamp": f"{earliest_date} 09:30:00"
+        })
     total_eq = float(portfolio.get("total_capital", 10000.0))
     cash_bal = float(portfolio.get("cash_balance", 10000.0))
     n_pos = len(portfolio.get("positions", []))
