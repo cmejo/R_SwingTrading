@@ -758,8 +758,26 @@ def interactive_edit_tickets(tickets: List[Dict[str, Any]]) -> List[Dict[str, An
     print("\n[Interactive Order Editor] Review and adjust order parameters below (press Enter to keep default):")
     for idx, t in enumerate(tickets, 1):
         print(f"\n------------------------------------------------------------")
-        print(f" Ticket #{idx}: {t['symbol']} ({t['sector']}) | P(Up): {t['p_up']}%")
-        print(f" Current: {t['shares']} shares | Stop: ${t['stop_loss']:.2f} | T1: ${t['tier1_target']:.2f} | T2: ${t['tier2_target']:.2f}")
+        if t.get("action") == "SELL":
+            print(f" Ticket #{idx}: [SELL] {t['symbol']} | Reason: {t.get('reason', 'EXIT')}")
+            print(f" Current: SELL {t['shares']} shares")
+            print(f"------------------------------------------------------------")
+            choice = input(f" Action for {t['symbol']} [1=Keep, 2=Edit Shares, 3=Skip]: ").strip().lower()
+            if choice in ["3", "s", "skip"]:
+                print(f" -> Skipped {t['symbol']}.")
+                continue
+            elif choice in ["2", "e", "edit"]:
+                new_shares_str = input(f"   Shares [{t['shares']}]: ").strip()
+                if new_shares_str:
+                    try:
+                        t['shares'] = float(new_shares_str)
+                    except ValueError:
+                        print("   Invalid number, keeping default.")
+            edited_tickets.append(t)
+            continue
+
+        print(f" Ticket #{idx}: {t['symbol']} ({t.get('sector', 'Swing')}) | P(Up): {t.get('p_up', 0.0)}%")
+        print(f" Current: {t['shares']} shares | Stop: ${t.get('stop_loss', 0.0):.2f} | T1: ${t.get('tier1_target', 0.0):.2f} | T2: ${t.get('tier2_target', 0.0):.2f}")
         print(f"------------------------------------------------------------")
         choice = input(f" Action for {t['symbol']} [1=Keep, 2=Edit, 3=Skip]: ").strip().lower()
         if choice in ["3", "s", "skip"]:
@@ -874,7 +892,14 @@ def main():
     print(f" Loaded {len(tickets)} Actionable Order Ticket(s):\n")
 
     for t in tickets:
-        print(f"  * #{t['rank']} {t['symbol']} ({t['sector']}): BUY {t['shares']} shs | Stop: ${t['stop_loss']} | T1: ${t['tier1_target']} | T2: ${t['tier2_target']}")
+        if t.get("action") == "SELL":
+            print(f"  * [SELL] {t['symbol']}: SELL {t['shares']} shs | Reason: {t.get('reason', 'EXIT')}")
+        else:
+            sec = t.get("sector", "Swing")
+            stp = t.get("stop_loss", 0.0)
+            t1 = t.get("tier1_target", 0.0)
+            t2 = t.get("tier2_target", 0.0)
+            print(f"  * #{t.get('rank', 1)} {t['symbol']} ({sec}): BUY {t['shares']} shs | Stop: ${stp} | T1: ${t1} | T2: ${t2}")
 
     # Interactive edit mode
     if args.interactive:
@@ -887,7 +912,12 @@ def main():
     if not dry_run and not args.yes:
         print(f"\n[Live Confirmation Required] You are about to transmit {len(tickets)} order(s) to {args.broker.upper()}:")
         for t in tickets:
-            print(f"   -> BUY {t['shares']} {t['symbol']} | Stop: ${t['stop_loss']:.2f} | T1: ${t['tier1_target']:.2f}")
+            if t.get("action") == "SELL":
+                print(f"   -> SELL {t['shares']} {t['symbol']} | Reason: {t.get('reason', 'EXIT')}")
+            else:
+                stp = t.get("stop_loss", 0.0)
+                t1 = t.get("tier1_target", 0.0)
+                print(f"   -> BUY {t['shares']} {t['symbol']} | Stop: ${stp:.2f} | T1: ${t1:.2f}")
         confirm = input("\nType 'yes' to transmit orders to broker: ").strip().lower()
         if confirm not in ["yes", "y"]:
             print("[Cancelled] Transmission aborted. No orders were sent.")
