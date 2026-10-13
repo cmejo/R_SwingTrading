@@ -520,7 +520,10 @@ def sync_ibkr(portfolio_file: str, host: str, port: int, client_id: int, dry_run
         return
 
     try:
-        from ib_insync import IB
+        try:
+            from ib_async import IB
+        except ImportError:
+            from ib_insync import IB
         ib = IB()
         ib.connect(host, port, clientId=client_id)
         
@@ -612,7 +615,7 @@ def sync_ibkr(portfolio_file: str, host: str, port: int, client_id: int, dry_run
         print(f"[IBKR Sync] SUCCESS: Synchronized {len(port_data['positions'])} positions, ${port_data['cash_balance']:.2f} cash.")
         ib.disconnect()
     except ImportError:
-        print("[IBKR Sync] 'ib_insync' package required for live IBKR sync. Install with: pip install ib_insync")
+        print("[IBKR Sync] 'ib_async' package required for live IBKR sync. Install with: pip install ib_async")
     except Exception as e:
         print(f"[IBKR Sync] Error: {e}")
         sys.exit(1)

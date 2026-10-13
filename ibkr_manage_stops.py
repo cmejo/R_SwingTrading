@@ -123,11 +123,14 @@ def main():
         return
 
     try:
-        from ib_insync import IB
+        from ib_async import IB
     except ImportError:
-        print("[IBKR Stop Monitor] Error: 'ib_insync' package required for live IBKR monitor.")
-        print("Install via: pip3 install -r requirements.txt")
-        sys.exit(1)
+        try:
+            from ib_insync import IB
+        except ImportError:
+            print("[IBKR Stop Monitor] Error: 'ib_async' package required for live IBKR monitor.")
+            print("Install via: pip3 install ib_async")
+            sys.exit(1)
 
     ib = IB()
     try:

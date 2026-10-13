@@ -199,11 +199,14 @@ def execute_ibkr(tickets: List[Dict[str, Any]], host: str, port: int, client_id:
         return
 
     try:
-        from ib_insync import IB, Stock, MarketOrder, StopOrder, LimitOrder
+        from ib_async import IB, Stock, MarketOrder, StopOrder, LimitOrder
     except ImportError:
-        print("[IBKRBridge] Error: 'ib_insync' is not installed.")
-        print("Install via: pip3 install ib_insync")
-        sys.exit(1)
+        try:
+            from ib_insync import IB, Stock, MarketOrder, StopOrder, LimitOrder
+        except ImportError:
+            print("[IBKRBridge] Error: 'ib_async' is not installed.")
+            print("Install via: pip3 install ib_async")
+            sys.exit(1)
 
     ib = IB()
     try:

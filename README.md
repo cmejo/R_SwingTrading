@@ -30,7 +30,7 @@ A systematic, institutional-grade swing trading system implemented in **pure R**
 
 ### 3. Automated Broker Bridges & Turnkey Execution
 - **Charles Schwab Trader API**: Native REST OAuth2 client supporting live `FIRST_TRIGGERS_OCO` bracket orders, automated OAuth token refreshes, position reconciliation, and dynamic auto-compounding.
-- **Interactive Brokers (IB Pro)**: Python `ib_insync` integration supporting OCA bracket orders and continuous stop monitoring (`execute_ibkr.py`, `ibkr_manage_stops.py`).
+- **Interactive Brokers (IB Pro)**: Python `ib_async` integration supporting OCA bracket orders and continuous stop monitoring (`execute_ibkr.py`, `ibkr_manage_stops.py`).
 - **Robinhood Bridge**: Direct bracket simulation, limit execution, and background polling daemon (`execute_robinhood.py`, `poll_robinhood_exits.py`).
 - **Dynamic Auto-Compounding**: [`auto_trade_schwab.sh`](file:///Volumes/2TB.ssd/_a%20Development/swingtrading/auto_trade_schwab.sh) automatically queries real-time account liquidation equity on startup to size trades, apply margin leverage, and park excess cash in `QQQ` without requiring manual file edits.
 - **Mobile Push Alerts**: Lightweight HTTP dispatchers for Discord and Telegram webhooks (`R/send_alert.R`) alerting entry tickets, stop adjustments, and Friday risk reviews.
@@ -117,7 +117,7 @@ Rscript -e 'install.packages(c("xts", "zoo", "quantmod", "TTR", "glmnet", "tseri
 # Install Python requirements
 pip install requests python-dotenv
 # Optional: for Interactive Brokers
-pip install ib_insync
+pip install ib_async
 ```
 
 Configure your environment credentials in [`.env`](file:///Volumes/2TB.ssd/_a%20Development/swingtrading/.env):
