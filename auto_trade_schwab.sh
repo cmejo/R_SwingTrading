@@ -103,6 +103,9 @@ if [ -f "$PROJECT_DIR/check_schwab_token.py" ]; then
   python3 "$PROJECT_DIR/check_schwab_token.py" --warn_hours=48 || true
 fi
 
+# Step 0b: Verify MS-GARCH R package availability
+Rscript -e 'if (!requireNamespace("MSGARCH", quietly=TRUE)) tryCatch(install.packages("MSGARCH", repos="https://cloud.r-project.org", quiet=TRUE), error=function(e) NULL)' 2>/dev/null || true
+
 # Step 1: Run Multi-Asset Scanner & Risk Management Engine
 printf "\n[Step 1/3] Running Quantitative Scanner & Ralph Vince Leverage Sizing...\n"
 Rscript daily_signal.R \

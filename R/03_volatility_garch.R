@@ -18,8 +18,23 @@
 suppressMessages({
   library(xts)
   library(zoo)
-  library(MSGARCH)
 })
+
+# Resilient package loader for MSGARCH
+has_msgarch <- requireNamespace("MSGARCH", quietly = TRUE)
+if (!has_msgarch) {
+  cat("[MS-GARCH] Notice: Package 'MSGARCH' not found in R environment. Attempting auto-installation...\n")
+  tryCatch({
+    install.packages("MSGARCH", repos = "https://cloud.r-project.org", quiet = TRUE)
+    has_msgarch <- requireNamespace("MSGARCH", quietly = TRUE)
+  }, error = function(e) {
+    cat(sprintf("[MS-GARCH] Auto-installation note: %s\n", e$message))
+  })
+}
+
+if (has_msgarch) {
+  suppressMessages(library(MSGARCH))
+}
 
 #' Fit Two-Regime MS-GARCH and extract regime parameters and state probabilities
 #'
@@ -59,20 +74,29 @@ compute_msgarch_volatility <- function(price_xts, train_idx = NULL) {
     rets_vec
   }
   
-  cat("[MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...\n")
+  spec <- NULL
+  fit  <- NULL
   
-  # Create 2-regime sGARCH specification with Normal innovations
-  spec <- CreateSpec(
-    variance.spec = list(model = c("sGARCH", "sGARCH")),
-    distribution.spec = list(distribution = c("norm", "norm"))
-  )
-  
-  fit <- tryCatch({
-    FitML(spec = spec, data = fit_sample)
-  }, error = function(e) {
-    cat(sprintf("[MS-GARCH] Warning: ML fitting failed (%s). Attempting fallback...\n", e$message))
-    NULL
-  })
+  if (isTRUE(has_msgarch)) {
+    cat("[MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...\n")
+    spec <- tryCatch({
+      CreateSpec(
+        variance.spec = list(model = c("sGARCH", "sGARCH")),
+        distribution.spec = list(distribution = c("norm", "norm"))
+      )
+    }, error = function(e) NULL)
+    
+    if (!is.null(spec)) {
+      fit <- tryCatch({
+        FitML(spec = spec, data = fit_sample)
+      }, error = function(e) {
+        cat(sprintf("[MS-GARCH] Warning: ML fitting failed (%s). Attempting fallback...\n", e$message))
+        NULL
+      })
+    }
+  } else {
+    cat("[MS-GARCH] Notice: MSGARCH package not loaded. Using robust empirical volatility.\n")
+  }
   
   # Check parameter validity
   is_valid_fit <- !is.null(fit) && !is.null(fit$par) && all(is.finite(fit$par))
