@@ -199,7 +199,7 @@ spy_ohlcv <- tryCatch({
 if (is.null(spy_ohlcv) && !is.null(qqq_ohlcv)) spy_ohlcv <- qqq_ohlcv
 spy_px <- if (!is.null(spy_ohlcv)) as.numeric(last(Cl(spy_ohlcv))) else 0
 
-# Dynamic CBOE VIX Volatility Regime
+# Dynamic CBOE VIX Volatility Regime & MS-GARCH Two-Regime Macro Gate
 vix_info <- tryCatch({
   vix_ohlcv <- load_stock_data("^VIX")
   vix_close <- suppressWarnings(na.omit(Cl(vix_ohlcv)))
@@ -210,23 +210,38 @@ vix_info <- tryCatch({
   list(close = 16.5, regime = "NORMAL (Default)")
 })
 
+# Estimate 2-Regime MS-GARCH on SPY Benchmark
+cat(" Estimating Two-Regime MS-GARCH Market Volatility on SPY...\n")
+spy_msgarch <- tryCatch({
+  if (!is.null(spy_ohlcv)) compute_msgarch_volatility(Cl(spy_ohlcv)) else NULL
+}, error = function(e) {
+  cat(sprintf("  -> Notice: SPY MS-GARCH estimate note: %s\n", e$message))
+  NULL
+})
+
+spy_p_high_vol <- if (!is.null(spy_msgarch)) tail(as.numeric(spy_msgarch$prob_high_vol), 1) else 0.05
+spy_ann_vol    <- if (!is.null(spy_msgarch)) tail(as.numeric(spy_msgarch$annualized_vol), 1) else 0.15
+spy_regime_str <- if (spy_p_high_vol >= 0.50) sprintf("HIGH VOL (%.1f%% Prob)", spy_p_high_vol * 100) else sprintf("LOW VOL (%.1f%% Prob)", (1 - spy_p_high_vol) * 100)
+
 # Multi-Factor Macro Sizing Policy
-# VIX Crisis must be checked FIRST since it's the most restrictive
-if (vix_info$close > 28) {
+# VIX Crisis or MS-GARCH Market High-Vol spike must be checked FIRST
+if (vix_info$close > 28 || spy_p_high_vol >= 0.80) {
   EFFECTIVE_MAX_POS       <- min(1, MAX_POSITIONS)
   EFFECTIVE_P_LONG        <- 0.68
   EFFECTIVE_SAFETY_FACTOR <- 0.15
-  macro_note <- "VIX Crisis (>28): Capital preservation mode, 1 position max, Safe f = 0.15"
+  macro_note <- sprintf("Crisis Volatility (VIX: %.1f, MS-GARCH P(High): %.1f%%): Capital preservation mode, 1 position max, Safe f = 0.15",
+                        vix_info$close, spy_p_high_vol * 100)
 } else if (MACRO_GATE && !macro_info$is_bullish) {
   EFFECTIVE_MAX_POS       <- min(2, MAX_POSITIONS)
   EFFECTIVE_P_LONG        <- 0.65
   EFFECTIVE_SAFETY_FACTOR <- min(SAFETY_FACTOR, 0.30)
   macro_note <- "QQQ Trend Deficit: Capping positions at 2, raising P(Up) >= 65%"
-} else if (vix_info$close >= 20) {
+} else if (vix_info$close >= 20 || spy_p_high_vol >= 0.50) {
   EFFECTIVE_MAX_POS       <- min(3, MAX_POSITIONS)
   EFFECTIVE_P_LONG        <- 0.60
   EFFECTIVE_SAFETY_FACTOR <- min(SAFETY_FACTOR, 0.30)
-  macro_note <- "VIX Elevated (20-28): Caution scaling to 3 positions, Safe f = 0.30"
+  macro_note <- sprintf("Elevated Volatility (VIX: %.1f, MS-GARCH Regime: %s): Caution scaling to 3 positions, Safe f = 0.30",
+                        vix_info$close, spy_regime_str)
 } else {
   EFFECTIVE_MAX_POS       <- MAX_POSITIONS
   EFFECTIVE_P_LONG        <- P_LONG
@@ -234,10 +249,12 @@ if (vix_info$close > 28) {
   macro_note <- "Full Risk-On Allocation: 5 positions, Safe f = 0.50, P(Up) >= 58.0%"
 }
 
-cat(sprintf(" [Macro Gate Status] %s | Volatility Regime: %s\n", macro_info$regime, vix_info$regime))
+cat(sprintf(" [Macro Gate Status] %s | Volatility Regime: %s | MS-GARCH Market Regime: %s\n", 
+            macro_info$regime, vix_info$regime, spy_regime_str))
 cat(sprintf("   QQQ Close: $%.2f | 50D lmMA Fit: $%.2f | Slope: %+.3f\n", 
             macro_info$close, macro_info$fit, macro_info$slope))
-cat(sprintf("   SPY Benchmark Close: $%.2f\n", spy_px))
+cat(sprintf("   SPY Benchmark Close: $%.2f | MS-GARCH Ann Vol: %.1f%% | P(High Vol Regime): %.1f%%\n",
+            spy_px, spy_ann_vol * 100, spy_p_high_vol * 100))
 cat(sprintf("   CBOE VIX:  %.2f   | Volatility Regime: %s\n", vix_info$close, vix_info$regime))
 cat(sprintf("   -> Dynamic Policy: Max Positions = %d | Safe f = %.2f | Min P(Up) >= %.1f%%\n\n", 
             EFFECTIVE_MAX_POS, EFFECTIVE_SAFETY_FACTOR, EFFECTIVE_P_LONG * 100))
@@ -361,13 +378,14 @@ for (sym in SYMBOLS) {
     top_feature_str   <- if (!is_intercept_only) paste0(feat_imp$Feature[1], " (", feat_imp$Direction[1], ")") else "Base-Rate"
 
     # Single source of truth for features and volatility from pipeline_out
-    curr_ann_vol       <- pipeline_out$latest_ann_vol
-    latest_rs_20       <- pipeline_out$latest_rs_20
-    latest_atr_ext     <- pipeline_out$latest_atr_ext
-    latest_sec_spread  <- pipeline_out$latest_sector_spread
-    latest_asym_vol    <- pipeline_out$latest_asym_vol
-    is_rs_leader       <- (!is.na(latest_rs_20) && latest_rs_20 >= 0)
-    is_overextended    <- (!is.na(latest_atr_ext) && latest_atr_ext > 3.0) # Feature 1: Mean-Reversion Guard
+    curr_ann_vol         <- pipeline_out$latest_ann_vol
+    latest_prob_high_vol <- pipeline_out$latest_prob_high_vol
+    latest_rs_20         <- pipeline_out$latest_rs_20
+    latest_atr_ext       <- pipeline_out$latest_atr_ext
+    latest_sec_spread    <- pipeline_out$latest_sector_spread
+    latest_asym_vol      <- pipeline_out$latest_asym_vol
+    is_rs_leader         <- (!is.na(latest_rs_20) && latest_rs_20 >= 0)
+    is_overextended      <- (!is.na(latest_atr_ext) && latest_atr_ext > 3.0) # Feature 1: Mean-Reversion Guard
 
     # 20-day Average Daily Volume & Dollar Volume (L3 Market Impact Guard)
     vol_series <- tryCatch(Vo(ohlcv), error = function(e) xts(rep(1e6, nrow(price)), order.by = index(price)))
@@ -442,6 +460,7 @@ for (sym in SYMBOLS) {
       Earnings_Date = ifelse(is.na(earn_date), "None/ETF", earn_date),
       Days_To_Earn = ifelse(is.na(days_to_earn), -999, days_to_earn),
       GARCH_AnnVol = curr_ann_vol,
+      Prob_HighVol = latest_prob_high_vol,
       Daily_Vol = curr_daily_vol,
       Stop_Loss = stop_loss_price,
       Take_Profit = take_profit_price,
@@ -503,6 +522,7 @@ summary_table <- data.frame(
                       df_scan$Earnings_Date),
   Filter_Note= df_scan$Gate_Note,
   GARCH_Vol  = sprintf("%.1f%%", df_scan$GARCH_AnnVol * 100),
+  P_HighVol  = sprintf("%.1f%%", df_scan$Prob_HighVol * 100),
   Stop_Loss  = sprintf("$%.2f (-%.1f%%)", df_scan$Stop_Loss, 2.0 * df_scan$Daily_Vol * 100),
   Take_Profit= sprintf("$%.2f (+%.1f%%)", df_scan$Take_Profit, 3.0 * df_scan$Daily_Vol * 100)
 )

@@ -99,6 +99,7 @@ load_stock_data <- function(symbol = "SNDK",
   prefix_pat <- paste0("^", gsub("\\^", "\\\\^", symbol), "\\.")
   colnames(data_xts) <- gsub(prefix_pat, "", colnames(data_xts))
   colnames(data_xts) <- gsub(paste0("^", gsub("[^A-Za-z0-9]", "", symbol), "\\."), "", colnames(data_xts))
+  data_xts <- na.omit(data_xts)
   
   cat(sprintf("[DataLoader] Loaded %d bars for %s [%s to %s]\n",
               nrow(data_xts), symbol,

@@ -90,23 +90,26 @@ build_feature_dataset <- function(ohlcv,
   feat_zscore <- residuals / resid_vol
   colnames(feat_zscore) <- "ZScore"
   
-  # 4. GARCH(1,1) Volatility Features
+  # 4. Two-Regime Markov-Switching GARCH (MS-GARCH) Volatility Features
   if (use_garch) {
-    garch_out <- compute_garch_volatility(price, train_idx = train_idx)
-    feat_garch_vol   <- garch_out$annualized_vol
-    feat_garch_shock <- garch_out$shocks
-    feat_garch_pct   <- garch_out$vol_percentile
+    garch_out <- compute_msgarch_volatility(price, train_idx = train_idx)
+    feat_garch_vol      <- garch_out$annualized_vol
+    feat_garch_shock    <- garch_out$shocks
+    feat_garch_pct      <- garch_out$vol_percentile
+    feat_prob_high_vol  <- garch_out$prob_high_vol
   } else {
     # Simple rolling volatility fallback
     rets <- na.omit(diff(log(price)))
-    feat_garch_vol   <- TTR::runSD(rets, n = 20) * sqrt(252)
-    feat_garch_shock <- rets / (feat_garch_vol / sqrt(252))
-    feat_garch_pct   <- runPercentRank(feat_garch_vol, n = 50)
+    feat_garch_vol      <- TTR::runSD(rets, n = 20) * sqrt(252)
+    feat_garch_shock    <- rets / (feat_garch_vol / sqrt(252))
+    feat_garch_pct      <- runPercentRank(feat_garch_vol, n = 50)
+    feat_prob_high_vol  <- xts(rep(0.5, length(feat_garch_vol)), order.by = index(feat_garch_vol))
   }
   
-  colnames(feat_garch_vol)   <- "GARCH_Vol"
-  colnames(feat_garch_shock) <- "GARCH_Shock"
-  colnames(feat_garch_pct)   <- "GARCH_VolPct"
+  colnames(feat_garch_vol)     <- "GARCH_Vol"
+  colnames(feat_garch_shock)   <- "GARCH_Shock"
+  colnames(feat_garch_pct)     <- "GARCH_VolPct"
+  colnames(feat_prob_high_vol) <- "MSGARCH_ProbHighVol"
   
   # 5. Volume & Institutional Accumulation Features
   vol <- tryCatch({
@@ -243,31 +246,33 @@ build_feature_dataset <- function(ohlcv,
   target_ret <- (fwd_price - price) / price
   colnames(target_ret) <- "TargetRet"
   
-  # 8. Merge all 18 predictor features
+  # 8. Merge all 19 predictor features (including MS-GARCH High-Vol Regime Probability)
   features_xts <- merge(
-    SlopeFast      = feat_slope_fast,
-    SlopeSlow      = feat_slope_slow,
-    SlopeWeeklyPct = feat_slope_weekly,
-    TrendQuality   = feat_rsq_fast,
-    DistPct        = feat_dist_pct,
-    ZScore         = feat_zscore,
-    GARCH_Vol      = feat_garch_vol,
-    GARCH_Shock    = feat_garch_shock,
-    GARCH_VolPct   = feat_garch_pct,
-    VolumeRatio    = feat_vol_ratio,
-    OBV_Slope      = feat_obv_slope,
-    RSI_14         = feat_rsi,
-    MACD_Hist      = feat_macd_hist,
-    BB_PctB        = feat_bbpct,
-    RS_20          = feat_rs_20,
-    ATRExt         = feat_atr_ext,
-    SectorSpread   = feat_sector_spread,
-    AsymVolRatio   = feat_asym_vol
+    SlopeFast          = feat_slope_fast,
+    SlopeSlow          = feat_slope_slow,
+    SlopeWeeklyPct     = feat_slope_weekly,
+    TrendQuality       = feat_rsq_fast,
+    DistPct            = feat_dist_pct,
+    ZScore             = feat_zscore,
+    GARCH_Vol          = feat_garch_vol,
+    GARCH_Shock        = feat_garch_shock,
+    GARCH_VolPct       = feat_garch_pct,
+    MSGARCH_ProbHighVol= feat_prob_high_vol,
+    VolumeRatio        = feat_vol_ratio,
+    OBV_Slope          = feat_obv_slope,
+    RSI_14             = feat_rsi,
+    MACD_Hist          = feat_macd_hist,
+    BB_PctB            = feat_bbpct,
+    RS_20              = feat_rs_20,
+    ATRExt             = feat_atr_ext,
+    SectorSpread       = feat_sector_spread,
+    AsymVolRatio       = feat_asym_vol
   )
   
   feature_names <- c("SlopeFast", "SlopeSlow", "SlopeWeeklyPct", "TrendQuality", "DistPct", 
-                     "ZScore", "GARCH_Vol", "GARCH_Shock", "GARCH_VolPct", "VolumeRatio", "OBV_Slope",
-                     "RSI_14", "MACD_Hist", "BB_PctB", "RS_20", "ATRExt", "SectorSpread", "AsymVolRatio")
+                     "ZScore", "GARCH_Vol", "GARCH_Shock", "GARCH_VolPct", "MSGARCH_ProbHighVol",
+                     "VolumeRatio", "OBV_Slope", "RSI_14", "MACD_Hist", "BB_PctB", "RS_20", 
+                     "ATRExt", "SectorSpread", "AsymVolRatio")
   
   # Clean warm-up NAs across features
   clean_feats_xts <- na.omit(features_xts)
@@ -286,6 +291,8 @@ build_feature_dataset <- function(ohlcv,
   }
   
   latest_vol_pct <- as.numeric(latest_feat_row[, "GARCH_VolPct"])
+  latest_prob_high_vol <- as.numeric(latest_feat_row[, "MSGARCH_ProbHighVol"])
+  if (is.na(latest_prob_high_vol)) latest_prob_high_vol <- 0.5
   
   # 9. Supervised learning target: align with forward returns
   merged_with_target <- merge(target_ret, clean_feats_xts)
@@ -294,27 +301,28 @@ build_feature_dataset <- function(ohlcv,
   
   # Convert to standard data.frame for model training
   df_model <- data.frame(
-    Date           = dates,
-    TargetRet      = as.numeric(clean_model_xts[, "TargetRet"]),
-    TargetBinary   = ifelse(as.numeric(clean_model_xts[, "TargetRet"]) > 0, 1, 0),
-    SlopeFast      = as.numeric(clean_model_xts[, "SlopeFast"]),
-    SlopeSlow      = as.numeric(clean_model_xts[, "SlopeSlow"]),
-    SlopeWeeklyPct = as.numeric(clean_model_xts[, "SlopeWeeklyPct"]),
-    TrendQuality   = as.numeric(clean_model_xts[, "TrendQuality"]),
-    DistPct        = as.numeric(clean_model_xts[, "DistPct"]),
-    ZScore         = as.numeric(clean_model_xts[, "ZScore"]),
-    GARCH_Vol      = as.numeric(clean_model_xts[, "GARCH_Vol"]),
-    GARCH_Shock    = as.numeric(clean_model_xts[, "GARCH_Shock"]),
-    GARCH_VolPct   = as.numeric(clean_model_xts[, "GARCH_VolPct"]),
-    VolumeRatio    = as.numeric(clean_model_xts[, "VolumeRatio"]),
-    OBV_Slope      = as.numeric(clean_model_xts[, "OBV_Slope"]),
-    RSI_14         = as.numeric(clean_model_xts[, "RSI_14"]),
-    MACD_Hist      = as.numeric(clean_model_xts[, "MACD_Hist"]),
-    BB_PctB        = as.numeric(clean_model_xts[, "BB_PctB"]),
-    RS_20          = as.numeric(clean_model_xts[, "RS_20"]),
-    ATRExt         = as.numeric(clean_model_xts[, "ATRExt"]),
-    SectorSpread   = as.numeric(clean_model_xts[, "SectorSpread"]),
-    AsymVolRatio   = as.numeric(clean_model_xts[, "AsymVolRatio"])
+    Date               = dates,
+    TargetRet          = as.numeric(clean_model_xts[, "TargetRet"]),
+    TargetBinary       = ifelse(as.numeric(clean_model_xts[, "TargetRet"]) > 0, 1, 0),
+    SlopeFast          = as.numeric(clean_model_xts[, "SlopeFast"]),
+    SlopeSlow          = as.numeric(clean_model_xts[, "SlopeSlow"]),
+    SlopeWeeklyPct     = as.numeric(clean_model_xts[, "SlopeWeeklyPct"]),
+    TrendQuality       = as.numeric(clean_model_xts[, "TrendQuality"]),
+    DistPct            = as.numeric(clean_model_xts[, "DistPct"]),
+    ZScore             = as.numeric(clean_model_xts[, "ZScore"]),
+    GARCH_Vol          = as.numeric(clean_model_xts[, "GARCH_Vol"]),
+    GARCH_Shock        = as.numeric(clean_model_xts[, "GARCH_Shock"]),
+    GARCH_VolPct       = as.numeric(clean_model_xts[, "GARCH_VolPct"]),
+    MSGARCH_ProbHighVol= as.numeric(clean_model_xts[, "MSGARCH_ProbHighVol"]),
+    VolumeRatio        = as.numeric(clean_model_xts[, "VolumeRatio"]),
+    OBV_Slope          = as.numeric(clean_model_xts[, "OBV_Slope"]),
+    RSI_14             = as.numeric(clean_model_xts[, "RSI_14"]),
+    MACD_Hist          = as.numeric(clean_model_xts[, "MACD_Hist"]),
+    BB_PctB            = as.numeric(clean_model_xts[, "BB_PctB"]),
+    RS_20              = as.numeric(clean_model_xts[, "RS_20"]),
+    ATRExt             = as.numeric(clean_model_xts[, "ATRExt"]),
+    SectorSpread       = as.numeric(clean_model_xts[, "SectorSpread"]),
+    AsymVolRatio       = as.numeric(clean_model_xts[, "AsymVolRatio"])
   )
   
   cat(sprintf("[Pipeline] Complete. Result: %d valid observation rows across %d features.\n",
@@ -328,6 +336,10 @@ build_feature_dataset <- function(ohlcv,
     latest_feature_matrix   = latest_feature_matrix,
     latest_ann_vol          = latest_ann_vol,
     latest_vol_pct          = latest_vol_pct,
+    latest_prob_high_vol    = latest_prob_high_vol,
+    regime_params           = if (!is.null(garch_out)) garch_out$regime_params else NULL,
+    high_regime_idx         = if (!is.null(garch_out)) garch_out$high_regime_idx else NULL,
+    low_regime_idx          = if (!is.null(garch_out)) garch_out$low_regime_idx else NULL,
     latest_weekly_slope_pct = as.numeric(tail(feat_slope_weekly, 1)),
     latest_rs_20            = as.numeric(tail(feat_rs_20, 1)),
     latest_atr_ext          = as.numeric(tail(feat_atr_ext, 1)),

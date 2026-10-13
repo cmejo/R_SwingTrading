@@ -36,7 +36,10 @@ cat(" Statistical Indicator Modernization & Volatility Regimes\n")
 cat("========================================================================\n\n")
 
 # System Parameters
-SYMBOL       <- "SNDK"
+args <- commandArgs(trailingOnly = TRUE)
+sym_arg <- grep("^--symbol=", args, value = TRUE)
+SYMBOL <- if (length(sym_arg) > 0) toupper(sub("^--symbol=", "", sym_arg[1])) else "NVDA"
+
 FAST_N       <- 20     # Fast lmMA trend window
 SLOW_N       <- 50     # Slow lmMA trend window
 LOOK_AHEAD   <- 7      # Swing trading target horizon (7 days)
@@ -45,14 +48,14 @@ P_LONG       <- 0.58   # Probability threshold for Long signal
 P_SHORT      <- 0.42   # Probability threshold for Short signal
 ALLOW_SHORT  <- FALSE  # Set TRUE for long/short, FALSE for long-only swing
 TARGET_VOL   <- 0.30   # Target annualized volatility for sizing
-CACHE_PATH   <- "data/data_sndk.rds"
+CACHE_PATH   <- sprintf("data/data_%s.rds", tolower(SYMBOL))
 OUTPUT_DIR   <- "output"
 
 dir.create(OUTPUT_DIR, showWarnings = FALSE, recursive = TRUE)
 
 # Step 1: Data Acquisition
-cat("[Step 1/6] Loading price series...\n")
-ohlcv <- load_stock_data(symbol = SYMBOL, cache_file = CACHE_PATH)
+cat(sprintf("[Step 1/6] Loading price series for %s...\n", SYMBOL))
+ohlcv <- load_stock_data(symbol = SYMBOL, cache_file = if (file.exists(CACHE_PATH)) CACHE_PATH else NULL)
 price <- Cl(ohlcv)
 
 # Step 2: Feature Engineering (lmMA + GARCH(1,1))
@@ -138,26 +141,32 @@ plot(index(price), as.numeric(pipeline_out$dual_lm$dist_pct), type = "l", col = 
 abline(h = 0, lty = 2, col = "gray40")
 dev.off()
 
-# Chart 2: GARCH(1,1) Conditional Volatility & Shocks
+# Chart 2: Two-Regime MS-GARCH Conditional Volatility, Bounds & Regime Probabilities
 rets <- na.omit(diff(log(price)))
-garch_vol <- compute_garch_volatility(price)
-png(file.path(OUTPUT_DIR, "02_garch_volatility.png"), width = 1200, height = 700, res = 120)
-par(mfrow = c(2, 1), mar = c(3, 4, 3, 2))
+garch_vol <- compute_msgarch_volatility(price)
+png(file.path(OUTPUT_DIR, "02_garch_volatility.png"), width = 1200, height = 900, res = 120)
+par(mfrow = c(3, 1), mar = c(3, 4, 3, 2))
 plot(index(rets), as.numeric(rets) * 100, type = "h", col = "gray50",
-     main = sprintf("%s: Daily Returns and GARCH(1,1) Conditional Volatility Bounds (95%%)", SYMBOL),
+     main = sprintf("%s: Daily Returns and MS-GARCH Conditional Volatility Bounds (95%%)", SYMBOL),
      ylab = "Return (%)", xlab = "")
 lines(index(rets), 1.96 * as.numeric(garch_vol$sigma) * 100, col = "red", lwd = 1.5)
 lines(index(rets), -1.96 * as.numeric(garch_vol$sigma) * 100, col = "red", lwd = 1.5)
-legend("topleft", legend = c("Daily Return", "+/- 1.96 GARCH Sigma"), col = c("gray50", "red"), lty = 1, bty = "n")
+legend("topleft", legend = c("Daily Return", "+/- 1.96 MS-GARCH Sigma"), col = c("gray50", "red"), lty = 1, bty = "n")
 
 plot(index(garch_vol$annualized_vol), as.numeric(garch_vol$annualized_vol) * 100, type = "l", col = "purple", lwd = 2,
-     main = "GARCH(1,1) Annualized Conditional Volatility (%)", ylab = "Annualized Vol (%)", xlab = "Date")
+     main = "MS-GARCH Annualized Conditional Volatility (%)", ylab = "Annualized Vol (%)", xlab = "")
 abline(h = mean(as.numeric(garch_vol$annualized_vol) * 100), lty = 2, col = "gray40")
+
+plot(index(garch_vol$prob_high_vol), as.numeric(garch_vol$prob_high_vol) * 100, type = "l", col = "firebrick", lwd = 2,
+     main = "MS-GARCH Filtered Probability of High Volatility Regime P(S_t = High | F_t)",
+     ylab = "Prob (%)", xlab = "Date", ylim = c(0, 100))
+abline(h = 50, lty = 2, col = "darkorange", lwd = 1.5)
+legend("topleft", legend = c("P(High Vol Regime)", "50% Regime Threshold"), col = c("firebrick", "darkorange"), lty = c(1, 2), bty = "n")
 dev.off()
 
 # Chart 3: Engineered Features Multi-Panel Dashboard
-png(file.path(OUTPUT_DIR, "03_features_dashboard.png"), width = 1200, height = 800, res = 120)
-par(mfrow = c(4, 1), mar = c(2.5, 4, 2, 2))
+png(file.path(OUTPUT_DIR, "03_features_dashboard.png"), width = 1200, height = 900, res = 120)
+par(mfrow = c(5, 1), mar = c(2.5, 4, 2, 2))
 plot(df_model$Date, df_model$SlopeFast, type = "l", col = "blue", lwd = 1.5,
      main = "Feature: Fast lmMA Slope (Momentum)", ylab = "Slope")
 abline(h = 0, lty = 2, col = "gray50")
@@ -170,7 +179,11 @@ plot(df_model$Date, df_model$ZScore, type = "l", col = "darkgreen", lwd = 1.5,
 abline(h = c(-2, 0, 2), lty = 2, col = c("red", "gray50", "red"))
 
 plot(df_model$Date, df_model$GARCH_Vol * 100, type = "l", col = "purple", lwd = 1.5,
-     main = "Feature: GARCH(1,1) Conditional Volatility (%)", ylab = "Vol %", xlab = "Date")
+     main = "Feature: MS-GARCH Annualized Conditional Volatility (%)", ylab = "Vol %")
+
+plot(df_model$Date, df_model$MSGARCH_ProbHighVol * 100, type = "l", col = "firebrick", lwd = 1.5,
+     main = "Feature: MS-GARCH Filtered P(High Vol Regime) (%)", ylab = "P(High) %", xlab = "Date", ylim = c(0, 100))
+abline(h = 50, lty = 2, col = "darkorange")
 dev.off()
 
 # Chart 4: Out-of-Sample Performance & Drawdown
