@@ -1,103 +1,195 @@
-[Config] Loaded 170 symbols from '/Volumes/2TB.ssd/_a Development/swingtrading/symbols_broad.txt': NVDA, AMD, TSM, AVGO, QCOM, MU, AMAT, LRCX, ARM, SNDK, SOXL, SMH, MSFT, AAPL, AMZN, GOOGL, META, TSLA, CRM, NOW, ADBE, INTU, ORCL, SNOW, WDAY, SHOP, PLTR, PANW, CRWD, FTNT, NET, ANET, CSCO, LITE, IONQ, SMHC, KXIAY, DELL, SMCI, V, MA, PYPL, SQ, COIN, MSTR, CEG, VST, GE, QQQ, QLD, SPY, XLK, LAC, BE, KOS, FET, SQM, ETN, EQNR, AVEX, STM, VRT, GLW, CIEN, OKLO, MO, FIG, MOD, ONTO, FLR, APH, GS, HROW, TQQQ, RXT, SKHY, TENB, SGML, GENB, MRAM, PENG, ADTN, PLAB, QUIK, MRVL, CEVA, RMBS, FORM, MXL, AOSL, HIMX, ACMR, LWLG, AEHR, ON, WDC, NVTS, RGTI, STX, CBRS, AAOI, ICHR, AMKR, ABTC, HYMC, AXTI, ASTS, RKLB, NVDU, AMUU, CRWV, CORZ, TLN, PLTU, CRSP, SEMTC, QBTS, APLD, SOUN, IMPP, ARQQ, PATH, AI, INOD, BBAI, RZLV, NTAP, ALGM, ALAB, POET, CRDO, WATT, COHR, ADI, BAND, ASML, GEV, NVT, APD, CFG, CLS, COP, CSL, CWST, DAL, DASH, EL, GLNG, LOAR, NXT, ORLY, TPG, TSN, UNH, UPS, VIK, VRTX, WFC, XYZ, ADYEY, ARGX, BBVA, HLN, HSBC, IHG, SNN, NTES, RMD, SSNLF, YUMC
+[Config] Loaded 17 symbols from 'symbols.txt': SNDK, NVDA, AAPL, AMD, MSFT, TSLA, QQQ, META, IONQ, MU, SMHC, KXIAY, LITE, QLD, SOXL, STX, WDC
 
 ========================================================================================
  1. MACRO MARKET & VOLATILITY REGIME GATE (QQQ + VIX DUAL FILTER)
 ========================================================================================
-[DataLoader] Attempting to fetch 'QQQ' from Yahoo Finance (2020-01-01 to 2026-10-08)...
-[DataLoader] Successfully fetched 1700 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'QQQ' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1703 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_qqq.rds
-[DataLoader] Loaded 1700 bars for QQQ [2020-01-02 to 2026-10-07]
-[DataLoader] Attempting to fetch 'SPY' from Yahoo Finance (2020-01-01 to 2026-10-08)...
-[DataLoader] Successfully fetched 1700 bars from Yahoo Finance.
+[DataLoader] Loaded 1703 bars for QQQ [2020-01-02 to 2026-10-12]
+  -> Warning: Macro calculation failed (Series contains non-leading NAs). Defaulting to Bullish.
+[DataLoader] Attempting to fetch 'SPY' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1703 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_spy.rds
-[DataLoader] Loaded 1700 bars for SPY [2020-01-02 to 2026-10-07]
-[DataLoader] Attempting to fetch '^VIX' from Yahoo Finance (2020-01-01 to 2026-10-08)...
-[DataLoader] Successfully fetched 1765 bars from Yahoo Finance.
+[DataLoader] Loaded 1703 bars for SPY [2020-01-02 to 2026-10-12]
+[DataLoader] Attempting to fetch '^VIX' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1768 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data__vix.rds
-[DataLoader] Loaded 1765 bars for ^VIX [2020-01-02 to 2026-10-07]
- [Macro Gate Status] BULLISH (Risk-On) | Volatility Regime: NORMAL (Low Volatility)
-   QQQ Close: $757.73 | 50D lmMA Fit: $743.38 | Slope: +0.895
-   SPY Benchmark Close: $777.22
-   CBOE VIX:  15.08   | Volatility Regime: NORMAL (Low Volatility)
-   -> Dynamic Policy: Max Positions = 3 | Safe f = 0.50 | Min P(Up) >= 58.0%
+[DataLoader] Loaded 1768 bars for ^VIX [2020-01-02 to 2026-10-12]
+ [Macro Gate Status] BULLISH (Default) | Volatility Regime: NORMAL (Low Volatility)
+   QQQ Close: $0.00 | 50D lmMA Fit: $0.00 | Slope: +0.000
+   SPY Benchmark Close: $NA
+   CBOE VIX:  15.21   | Volatility Regime: NORMAL (Low Volatility)
+   -> Dynamic Policy: Max Positions = 5 | Safe f = 0.50 | Min P(Up) >= 58.0%
 
 ========================================================================================
- 2. SCANNING WATCHLIST (170 ASSETS) WITH WALK-FORWARD RETRAINING
+ 2. SCANNING WATCHLIST (17 ASSETS) WITH WALK-FORWARD RETRAINING
 ========================================================================================
-[Scanning NVDA] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'SMH' from Yahoo Finance (2020-01-01 to 2026-10-08)...
-[DataLoader] Successfully fetched 1700 bars from Yahoo Finance.
+[Scanning SNDK] Fetching data, checking earnings & updating rolling model...
+[DataLoader] Attempting to fetch 'SMH' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1703 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_smh.rds
-[DataLoader] Loaded 1700 bars for SMH [2020-01-02 to 2026-10-07]
-[DataLoader] Attempting to fetch 'NVDA' from Yahoo Finance (2020-01-01 to 2026-10-08)...
-[DataLoader] Successfully fetched 1700 bars from Yahoo Finance.
+[DataLoader] Loaded 1703 bars for SMH [2020-01-02 to 2026-10-12]
+[DataLoader] Attempting to fetch 'SNDK' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 417 bars from Yahoo Finance.
+[DataLoader] Cached data saved to data/data_sndk.rds
+[DataLoader] Loaded 417 bars for SNDK [2025-02-13 to 2026-10-12]
+[Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
+  -> Skipping SNDK: Series contains non-leading NAs
+[Scanning NVDA] Fetching data, checking earnings & updating rolling model...
+[DataLoader] Attempting to fetch 'NVDA' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1703 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_nvda.rds
-[DataLoader] Loaded 1700 bars for NVDA [2020-01-02 to 2026-10-07]
+[DataLoader] Loaded 1703 bars for NVDA [2020-01-02 to 2026-10-12]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
-[GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000057, a1=0.0978, b1=0.8516 (persistence=0.9494)
-[Pipeline] Complete. Result: 1644 valid observation rows across 18 features.
+  -> Skipping NVDA: Series contains non-leading NAs
+[Scanning AAPL] Fetching data, checking earnings & updating rolling model...
+[DataLoader] Attempting to fetch 'AAPL' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1703 bars from Yahoo Finance.
+[DataLoader] Cached data saved to data/data_aapl.rds
+[DataLoader] Loaded 1703 bars for AAPL [2020-01-02 to 2026-10-12]
+[Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
+  -> Skipping AAPL: Series contains non-leading NAs
 [Scanning AMD] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'AMD' from Yahoo Finance (2020-01-01 to 2026-10-08)...
-[DataLoader] Successfully fetched 1700 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'AMD' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1703 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_amd.rds
-[DataLoader] Loaded 1700 bars for AMD [2020-01-02 to 2026-10-07]
+[DataLoader] Loaded 1703 bars for AMD [2020-01-02 to 2026-10-12]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
-[GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000113, a1=0.0759, b1=0.8331 (persistence=0.9090)
-[Pipeline] Complete. Result: 1644 valid observation rows across 18 features.
-[Scanning TSM] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'TSM' from Yahoo Finance (2020-01-01 to 2026-10-08)...
-[DataLoader] Successfully fetched 1700 bars from Yahoo Finance.
-[DataLoader] Cached data saved to data/data_tsm.rds
-[DataLoader] Loaded 1700 bars for TSM [2020-01-02 to 2026-10-07]
+  -> Skipping AMD: Series contains non-leading NAs
+[Scanning MSFT] Fetching data, checking earnings & updating rolling model...
+[DataLoader] Attempting to fetch 'MSFT' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1703 bars from Yahoo Finance.
+[DataLoader] Cached data saved to data/data_msft.rds
+[DataLoader] Loaded 1703 bars for MSFT [2020-01-02 to 2026-10-12]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
-[GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000079, a1=0.0923, b1=0.7754 (persistence=0.8677)
-[Pipeline] Complete. Result: 1644 valid observation rows across 18 features.
-[Scanning AVGO] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'AVGO' from Yahoo Finance (2020-01-01 to 2026-10-08)...
-[DataLoader] Successfully fetched 1700 bars from Yahoo Finance.
-[DataLoader] Cached data saved to data/data_avgo.rds
-[DataLoader] Loaded 1700 bars for AVGO [2020-01-02 to 2026-10-07]
+  -> Skipping MSFT: Series contains non-leading NAs
+[Scanning TSLA] Fetching data, checking earnings & updating rolling model...
+[DataLoader] Attempting to fetch 'TSLA' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1703 bars from Yahoo Finance.
+[DataLoader] Cached data saved to data/data_tsla.rds
+[DataLoader] Loaded 1703 bars for TSLA [2020-01-02 to 2026-10-12]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
-[GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000013, a1=0.0952, b1=0.8962 (persistence=0.9915)
-[Pipeline] Complete. Result: 1644 valid observation rows across 18 features.
-[Scanning QCOM] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'QCOM' from Yahoo Finance (2020-01-01 to 2026-10-08)...
-[DataLoader] Successfully fetched 1700 bars from Yahoo Finance.
-[DataLoader] Cached data saved to data/data_qcom.rds
-[DataLoader] Loaded 1700 bars for QCOM [2020-01-02 to 2026-10-07]
+  -> Skipping TSLA: Series contains non-leading NAs
+[Scanning QQQ] Fetching data, checking earnings & updating rolling model...
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
-[GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000066, a1=0.1196, b1=0.7886 (persistence=0.9082)
-[Pipeline] Complete. Result: 1644 valid observation rows across 18 features.
+  -> Skipping QQQ: Series contains non-leading NAs
+[Scanning META] Fetching data, checking earnings & updating rolling model...
+[DataLoader] Attempting to fetch 'META' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1703 bars from Yahoo Finance.
+[DataLoader] Cached data saved to data/data_meta.rds
+[DataLoader] Loaded 1703 bars for META [2020-01-02 to 2026-10-12]
+[Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
+  -> Skipping META: Series contains non-leading NAs
+[Scanning IONQ] Fetching data, checking earnings & updating rolling model...
+[DataLoader] Attempting to fetch 'XLK' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1703 bars from Yahoo Finance.
+[DataLoader] Cached data saved to data/data_xlk.rds
+[DataLoader] Loaded 1703 bars for XLK [2020-01-02 to 2026-10-12]
+[DataLoader] Attempting to fetch 'IONQ' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1450 bars from Yahoo Finance.
+[DataLoader] Cached data saved to data/data_ionq.rds
+[DataLoader] Loaded 1450 bars for IONQ [2021-01-04 to 2026-10-12]
+[Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
+  -> Skipping IONQ: Series contains non-leading NAs
 [Scanning MU] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'MU' from Yahoo Finance (2020-01-01 to 2026-10-08)...
-[DataLoader] Successfully fetched 1700 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'MU' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1703 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_mu.rds
-[DataLoader] Loaded 1700 bars for MU [2020-01-02 to 2026-10-07]
+[DataLoader] Loaded 1703 bars for MU [2020-01-02 to 2026-10-12]
+[Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
+  -> Skipping MU: Series contains non-leading NAs
+[Scanning SMHC] Fetching data, checking earnings & updating rolling model...
+[DataLoader] Attempting to fetch 'SMHC' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 77 bars from Yahoo Finance.
+[DataLoader] Cached data saved to data/data_smhc.rds
+[DataLoader] Loaded 77 bars for SMHC [2026-06-24 to 2026-10-12]
+[Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
+  -> Skipping SMHC: Series contains non-leading NAs
+[Scanning KXIAY] Fetching data, checking earnings & updating rolling model...
+[DataLoader] Attempting to fetch 'KXIAY' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 256 bars from Yahoo Finance.
+[DataLoader] Cached data saved to data/data_kxiay.rds
+[DataLoader] Loaded 256 bars for KXIAY [2025-10-06 to 2026-10-12]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000019, a1=0.0749, b1=0.9101 (persistence=0.9850)
-[Pipeline] Complete. Result: 1644 valid observation rows across 18 features.
-[Scanning AMAT] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'AMAT' from Yahoo Finance (2020-01-01 to 2026-10-08)...
-[DataLoader] Successfully fetched 1700 bars from Yahoo Finance.
-[DataLoader] Cached data saved to data/data_amat.rds
-[DataLoader] Loaded 1700 bars for AMAT [2020-01-02 to 2026-10-07]
+[GARCH] Fitted: a0=0.006248, a1=0.0000, b1=0.0267 (persistence=0.0267)
+[Pipeline] Complete. Result: 200 valid observation rows across 18 features.
+[Scanning LITE] Fetching data, checking earnings & updating rolling model...
+[DataLoader] Attempting to fetch 'LITE' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1703 bars from Yahoo Finance.
+[DataLoader] Cached data saved to data/data_lite.rds
+[DataLoader] Loaded 1703 bars for LITE [2020-01-02 to 2026-10-12]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
-[GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000071, a1=0.0979, b1=0.8234 (persistence=0.9213)
-[Pipeline] Complete. Result: 1644 valid observation rows across 18 features.
-[Scanning LRCX] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'LRCX' from Yahoo Finance (2020-01-01 to 2026-10-08)...
-[DataLoader] Successfully fetched 1700 bars from Yahoo Finance.
-[DataLoader] Cached data saved to data/data_lrcx.rds
-[DataLoader] Loaded 1700 bars for LRCX [2020-01-02 to 2026-10-07]
+  -> Skipping LITE: Series contains non-leading NAs
+[Scanning QLD] Fetching data, checking earnings & updating rolling model...
+[DataLoader] Attempting to fetch 'QLD' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1703 bars from Yahoo Finance.
+[DataLoader] Cached data saved to data/data_qld.rds
+[DataLoader] Loaded 1703 bars for QLD [2020-01-02 to 2026-10-12]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
-[GARCH] Estimating GARCH(1,1) parameters via quasi-maximum likelihood...
-[GARCH] Fitted: a0=0.000031, a1=0.0780, b1=0.8915 (persistence=0.9695)
-[Pipeline] Complete. Result: 1644 valid observation rows across 18 features.
-[Scanning ARM] Fetching data, checking earnings & updating rolling model...
+  -> Skipping QLD: Series contains non-leading NAs
+[Scanning SOXL] Fetching data, checking earnings & updating rolling model...
+[DataLoader] Attempting to fetch 'SOXL' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1703 bars from Yahoo Finance.
+[DataLoader] Cached data saved to data/data_soxl.rds
+[DataLoader] Loaded 1703 bars for SOXL [2020-01-02 to 2026-10-12]
+[Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
+  -> Skipping SOXL: Series contains non-leading NAs
+[Scanning STX] Fetching data, checking earnings & updating rolling model...
+[DataLoader] Attempting to fetch 'STX' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1703 bars from Yahoo Finance.
+[DataLoader] Cached data saved to data/data_stx.rds
+[DataLoader] Loaded 1703 bars for STX [2020-01-02 to 2026-10-12]
+[Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
+  -> Skipping STX: Series contains non-leading NAs
+[Scanning WDC] Fetching data, checking earnings & updating rolling model...
+[DataLoader] Attempting to fetch 'WDC' from Yahoo Finance (2020-01-01 to 2026-10-13)...
+[DataLoader] Successfully fetched 1703 bars from Yahoo Finance.
+[DataLoader] Cached data saved to data/data_wdc.rds
+[DataLoader] Loaded 1703 bars for WDC [2020-01-02 to 2026-10-12]
+[Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
+  -> Skipping WDC: Series contains non-leading NAs
+Warning message:
+In garch(fit_sample, order = c(1, 1), trace = FALSE) : singular information
+
+========================================================================================
+               MULTI-ASSET SWING TRADING OPPORTUNITY LEADERBOARD
+ Macro Gate: BULLISH (Default) | Max Positions: 5 | Buy Threshold: P(Up) >= 58.0%
+========================================================================================
+ Rank Symbol                Sector  Price  P_Up Score        Signal RS_SPY
+    1  KXIAY Hardware_EmergingTech $10.17 66.0% 0.000 COUNTER_TREND  -9.7%
+ ATR_Ext       Weekly Earnings          Filter_Note GARCH_Vol      Stop_Loss
+   -1.6x -0.3% [BEAR] None/ETF Weekly Bear (-0.29%)    127.2% $8.54 (-16.0%)
+     Take_Profit
+ $12.61 (+24.0%)
+
+========================================================================================
+                        MY PORTFOLIO HOLDINGS & CASH MONITOR
+========================================================================================
+ Currently 0 Open Positions. Portfolio is 100% in CASH.
+
+ TOTAL ACCOUNT VALUE:    $10000.00
+ PEAK EQUITY RECORD:     $10000.00 (Drawdown: +0.00%)
+ INVESTED IN EQUITIES:   $0.00 (0.0%)
+ AVAILABLE CASH BALANCE: $10000.00 (100.0%)
+ MARGIN LEVERAGE RATIO:  1.50x (Active Buying Power: $15000.00)
+ AVAILABLE CASH SLOTS:   5 of 5 (Regime Limit: 5)
+ PORTFOLIO HEAT (RISK):  $0.00 of $800.00 max allowed (0.00% of equity, Cap: 8.0%)
+
+========================================================================================
+              RECOMMENDED ORDERS FOR EMPTY CASH SLOTS (5 AVAILABLE)
+========================================================================================
+ No unowned symbols currently meet all BUY criteria (P(Up) >= 58.0%, Weekly Bullish, RS Leader, Sector Cap).
+
+----------------------------------------------------------------------------------------
+          CORE-SATELLITE CASH YIELD DEPLOYMENT (PARK UNALLOCATED CASH IN QQQ)
+----------------------------------------------------------------------------------------
+ Unallocated Cash:       $10000.00 (100% of available capital)
+ Macro Gate Status:      BULLISH (Default) (QQQ 50-day Trend is BULLISH)
+ Actionable Ticket:      BUY Inf shares of QQQ @ ~$0.00 ($NaN outlay)
+ Strategy Purpose:       Zero swing setups today. Park cash in QQQ to capture market momentum.
+----------------------------------------------------------------------------------------
+
+========================================================================================
+
