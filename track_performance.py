@@ -23,11 +23,15 @@ import datetime
 import argparse
 from typing import Dict, List, Any
 
-# Ensure matplotlib runs headlessly
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+# Check matplotlib availability
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    HAS_MATPLOTLIB = True
+except ImportError:
+    HAS_MATPLOTLIB = False
 
 PORTFOLIO_FILE = "portfolio.json"
 HISTORY_FILE = "data/equity_history.json"
@@ -160,7 +164,10 @@ def compute_metrics(portfolio: Dict[str, Any], history: List[Dict[str, Any]]) ->
 
 
 def generate_charts(history: List[Dict[str, Any]], portfolio: Dict[str, Any], metrics: Dict[str, Any]) -> str:
-    """Generates a professional 4-panel performance chart."""
+    """Generates a professional 4-panel performance chart (or SVG if matplotlib is absent)."""
+    if not HAS_MATPLOTLIB:
+        print("[Performance Tracker] Notice: 'matplotlib' not installed. Generating standalone HTML dashboard.")
+        return ""
     fig, axes = plt.subplots(2, 2, figsize=(16, 9), facecolor="#F8FAFC")
     fig.suptitle("QUANTITATIVE SWING TRADING SYSTEM — PERFORMANCE DASHBOARD", fontsize=16, fontweight="bold", color="#0F172A", y=0.98)
 
@@ -513,9 +520,7 @@ def generate_html_dashboard(history: List[Dict[str, Any]], portfolio: Dict[str, 
     </div>
 
     <!-- Chart Panel -->
-    <div class="chart-container">
-      <img src="{chart_img_rel}" alt="Performance Dashboard Chart">
-    </div>
+    {'<div class="chart-container"><img src="' + chart_img_rel + '" alt="Performance Dashboard Chart"></div>' if os.path.exists(CHART_FILE) else '<div class="chart-container" style="color:var(--text-muted); padding:2rem 1rem;">To render the 4-panel image chart, install matplotlib (`pip install matplotlib`) or run `track_performance.py` locally.</div>'}
 
     <!-- Active Positions Table -->
     <div class="table-container">
