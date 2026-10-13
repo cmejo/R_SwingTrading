@@ -1,8 +1,8 @@
 {
-  "total_capital": 10385.2,
+  "total_capital": 10255.24,
   "cash_balance": 2339.86,
   "max_positions": 5,
-  "last_updated": "2026-10-12 20:10:10.881084",
+  "last_updated": "2026-10-13 19:47:11.548487",
   "positions": [
     {
       "symbol": "QQQ",
@@ -12,13 +12,13 @@
       "current_price": 751.37,
       "entry_date": "2026-10-08",
       "stop_loss": 754.01,
-      "take_profit": 785.0,
+      "take_profit": 785,
       "tier1_target": 754.01,
-      "tier2_target": 795.0,
+      "tier2_target": 795,
       "tier1_hit": true,
       "tier2_hit": false,
       "is_runner": false,
-      "highest_price": 755.0,
+      "highest_price": 755,
       "atr": 10.5,
       "cost_basis": 2262.03,
       "status": "OPEN"
@@ -56,7 +56,7 @@
       "tier1_hit": false,
       "tier2_hit": false,
       "is_runner": false,
-      "highest_price": 74.96,
+      "highest_price": 78.2,
       "atr": 2.18,
       "cost_basis": 1957.5,
       "status": "OPEN"

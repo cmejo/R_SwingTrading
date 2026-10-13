@@ -14,5 +14,13 @@
     "positions": 3,
     "unrealized_pnl": 192.6,
     "timestamp": "2026-10-12 21:14:21.727200"
+  },
+  {
+    "date": "2026-10-13",
+    "equity": 10255.24,
+    "cash": 2339.86,
+    "positions": 3,
+    "unrealized_pnl": 192.6,
+    "timestamp": "2026-10-13 19:47:11.855875"
   }
 ]
