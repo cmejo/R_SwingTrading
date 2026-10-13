@@ -618,11 +618,35 @@ def main():
     if args.serve > 0:
         import http.server
         import socketserver
-        port = args.serve
+        start_port = args.serve
         os.chdir(OUTPUT_DIR)
         handler = http.server.SimpleHTTPRequestHandler
+
+        class ReusableTCPServer(socketserver.TCPServer):
+            allow_reuse_address = True
+
+        httpd = None
+        port = start_port
+        for p in range(start_port, start_port + 10):
+            try:
+                httpd = ReusableTCPServer(("", p), handler)
+                port = p
+                break
+            except OSError as e:
+                if e.errno in (98, 48):  # Linux Errno 98 / macOS Errno 48: Address already in use
+                    continue
+                raise
+
+        if not httpd:
+            print(f"\n❌ Error: Ports {start_port} through {start_port + 9} are currently in use.")
+            print(f"   Free port {start_port}: fuser -k {start_port}/tcp  (or: lsof -ti:{start_port} | xargs kill -9)")
+            print(f"   Or try a different port: python3 track_performance.py --serve 8888\n")
+            return
+
+        if port != start_port:
+            print(f" [Notice] Port {start_port} was busy. Using port {port} instead.")
         print(f" Serving dashboard at http://localhost:{port}/performance_dashboard.html (Press Ctrl+C to stop)...")
-        with socketserver.TCPServer(("", port), handler) as httpd:
+        with httpd:
             try:
                 httpd.serve_forever()
             except KeyboardInterrupt:
