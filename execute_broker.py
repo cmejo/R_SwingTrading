@@ -459,6 +459,46 @@ class SchwabTraderAPI:
             raise Exception(f"Failed to fetch Schwab orders ({resp.status_code}): {resp.text}")
         return resp.json()
 
+    def cancel_order(self, account_hash: str, order_id: str) -> bool:
+        import requests
+        token = self.get_valid_token()
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = requests.delete(f"{self.BASE_URL}/accounts/{account_hash}/orders/{order_id}", headers=headers)
+        if resp.status_code not in [200, 204]:
+            raise Exception(f"Failed to cancel order {order_id} ({resp.status_code}): {resp.text}")
+        return True
+
+    def cancel_open_orders_for_symbol(self, account_hash: str, symbol: str) -> int:
+        import time
+        orders = self.get_orders(account_hash)
+        cancelled = 0
+        working_statuses = {"WORKING", "QUEUED", "PENDING_ACTIVATION", "ACCEPTED"}
+
+        def _cancel_if_match(obj):
+            nonlocal cancelled
+            oid = obj.get("orderId")
+            status = obj.get("status")
+            legs = obj.get("orderLegCollection", [])
+            sym = legs[0].get("instrument", {}).get("symbol", "") if legs else ""
+            if sym == symbol and status in working_statuses and oid:
+                print(f"[Schwab Bridge] Cancelling conflicting open order #{oid} for {symbol} ({status})...")
+                try:
+                    self.cancel_order(account_hash, str(oid))
+                    cancelled += 1
+                except Exception as err:
+                    print(f"[Schwab Bridge] Warning: Could not cancel order #{oid}: {err}")
+            
+            for child in obj.get("childOrderStrategies", []):
+                _cancel_if_match(child)
+
+        for o in orders:
+            _cancel_if_match(o)
+
+        if cancelled > 0:
+            print(f"[Schwab Bridge] Cancelled {cancelled} open bracket order(s) for {symbol}. Waiting 2s for Schwab book refresh...")
+            time.sleep(2.0)
+        return cancelled
+
 def execute_schwab(tickets: List[Dict[str, Any]], dry_run: bool):
     print("\n[Schwab Bridge] Initializing Charles Schwab Trader API Bridge...")
     
@@ -504,6 +544,10 @@ def execute_schwab(tickets: List[Dict[str, Any]], dry_run: bool):
                 print(f"[Schwab Bridge] Skipping {t['symbol']}: {t['shares']} shares rounds to 0 whole shares.")
                 continue
             is_sell = (t.get("action") == "SELL")
+            if is_sell:
+                # Cancel conflicting open GTC bracket orders holding these shares first
+                schwab.cancel_open_orders_for_symbol(acct_hash, t['symbol'])
+
             for leg_i, leg in enumerate(legs, 1):
                 qty = leg["orderLegCollection"][0]["quantity"]
                 if is_sell:
@@ -932,6 +976,7 @@ def main():
     parser.add_argument("--portfolio_file", default="portfolio.json", help="Path to portfolio state file")
     parser.add_argument("--sync", action="store_true", help="Synchronize local portfolio state with live broker")
     parser.add_argument("--orders", action="store_true", help="Display recent order status, executions, and fills from broker")
+    parser.add_argument("--sell", type=str, default="", help="Direct market sell with automatic open-bracket clearance (e.g. --sell=PENG:13)")
     parser.add_argument("--auth", action="store_true", help="Authenticate with Charles Schwab OAuth2")
     parser.add_argument("--port", type=int, default=7497, help="IBKR TWS/Gateway port (7497 Paper, 7496 Live)")
     parser.add_argument("--host", default="127.0.0.1", help="IBKR Host IP")
@@ -951,6 +996,30 @@ def main():
             check_schwab_orders()
         else:
             print("[Orders] --orders currently implemented for Charles Schwab.")
+        print("\n================================================================================")
+        return
+
+    if args.sell:
+        parts = args.sell.split(":")
+        sell_sym = parts[0].strip().upper()
+        sell_qty = float(parts[1]) if len(parts) > 1 else 0.0
+        if sell_qty <= 0:
+            print(f"[Direct Sell] Error: Specify valid positive quantity (e.g. --sell={sell_sym}:13)")
+            sys.exit(1)
+        print(f" Operation: DIRECT MARKET SELL for {sell_sym} ({sell_qty} shares)")
+        direct_ticket = [{
+            "rank": 0,
+            "action": "SELL",
+            "symbol": sell_sym,
+            "shares": sell_qty,
+            "reason": "DIRECT_MANUAL_SELL"
+        }]
+        if args.broker == "schwab":
+            execute_schwab(direct_ticket, dry_run)
+            if not dry_run:
+                sync_schwab(args.portfolio_file, False)
+        else:
+            execute_ibkr(direct_ticket, args.host, args.port, args.client_id, dry_run)
         print("\n================================================================================")
         return
     
