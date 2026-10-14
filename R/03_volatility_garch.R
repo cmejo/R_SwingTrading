@@ -21,19 +21,11 @@ suppressMessages({
 })
 
 # Resilient package loader for MSGARCH
-has_msgarch <- requireNamespace("MSGARCH", quietly = TRUE)
-if (!has_msgarch) {
-  cat("[MS-GARCH] Notice: Package 'MSGARCH' not found in R environment. Attempting auto-installation...\n")
-  tryCatch({
-    install.packages("MSGARCH", repos = "https://cloud.r-project.org", quiet = TRUE)
-    has_msgarch <- requireNamespace("MSGARCH", quietly = TRUE)
-  }, error = function(e) {
-    cat(sprintf("[MS-GARCH] Auto-installation note: %s\n", e$message))
-  })
-}
-
+has_msgarch <- suppressWarnings(requireNamespace("MSGARCH", quietly = TRUE))
 if (has_msgarch) {
   suppressMessages(library(MSGARCH))
+} else {
+  cat("[MS-GARCH] Notice: Package 'MSGARCH' not installed/loaded. Operating with robust empirical volatility fallback.\n")
 }
 
 #' Fit Two-Regime MS-GARCH and extract regime parameters and state probabilities

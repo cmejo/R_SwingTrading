@@ -12,7 +12,7 @@ if (user_lib != "") {
   .libPaths(c(user_lib, .libPaths()))
 }
 
-needed <- c("xts", "zoo", "quantmod", "TTR", "glmnet", "tseries", "jsonlite")
+needed <- c("xts", "zoo", "quantmod", "TTR", "glmnet", "tseries", "jsonlite", "MSGARCH")
 installed <- rownames(installed.packages())
 to_install <- needed[!(needed %in% installed)]
 
