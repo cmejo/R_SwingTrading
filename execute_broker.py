@@ -678,10 +678,30 @@ def check_schwab_orders():
                 exec_px = elog.get("price")
                 exec_time = elog.get("time")
         
+        status_desc = o.get("statusDescription") or o.get("cancelDescription") or o.get("rejectReason") or ""
+        desc_info = f" -> {status_desc}" if status_desc else ""
         status_icon = "✓ [FILLED]" if status == "FILLED" else (f"❌ [{status}]" if status in ["CANCELED", "REJECTED", "EXPIRED"] else f"⏳ [{status}]")
         px_info = f" @ ${exec_px:.2f}" if exec_px is not None else ""
         time_info = f" (Filled: {exec_time})" if exec_time else f" (Entered: {entered_time})"
-        print(f"  * {status_icon} Order #{oid}: {inst} {filled_qty}/{qty} {sym} ({otype}){px_info}{time_info}")
+        print(f"  * {status_icon} Order #{oid}: {inst} {filled_qty}/{qty} {sym} ({otype}){px_info}{time_info}{desc_info}")
+        
+        # Display any linked child bracket orders (e.g. GTC stop-loss and profit target)
+        children = o.get("childOrderStrategies", [])
+        for ch in children:
+            sub_orders = ch.get("childOrderStrategies", []) if ch.get("orderStrategyType") == "OCO" else [ch]
+            for sub in sub_orders:
+                sub_id = sub.get("orderId", "")
+                sub_status = sub.get("status", "UNKNOWN")
+                sub_type = sub.get("orderType", "LIMIT")
+                sub_px = sub.get("price") or sub.get("stopPrice") or 0.0
+                sub_qty = sub.get("quantity", 0)
+                sub_filled = sub.get("filledQuantity", 0)
+                sub_legs = sub.get("orderLegCollection", [])
+                sub_sym = sub_legs[0].get("instrument", {}).get("symbol", sym) if sub_legs else sym
+                sub_inst = sub_legs[0].get("instruction", "SELL") if sub_legs else "SELL"
+                sub_icon = "✓ [FILLED]" if sub_status == "FILLED" else (f"⏳ [{sub_status}]" if sub_status in ["WORKING", "QUEUED", "PENDING_ACTIVATION"] else f"[{sub_status}]")
+                px_label = f"${sub_px:.2f}" if sub_px else ""
+                print(f"      ↳ {sub_icon} Child #{sub_id}: {sub_inst} {sub_filled}/{sub_qty} {sub_sym} {sub_type} {px_label}")
 
 def _get_quote_or_fallback(symbol: str):
     """Fetches latest quote for a symbol with fallback to Yahoo finance chart API."""
