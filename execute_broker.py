@@ -432,6 +432,19 @@ class SchwabTraderAPI:
             raise Exception(f"Failed to fetch account positions ({resp.status_code}): {resp.text}")
         return resp.json()
 
+    def get_orders(self, account_hash: str, from_date: str = None) -> List[Dict[str, Any]]:
+        import requests
+        token = self.get_valid_token()
+        headers = {"Authorization": f"Bearer {token}"}
+        url = f"{self.BASE_URL}/accounts/{account_hash}/orders"
+        params = {}
+        if from_date:
+            params["fromEnteredTime"] = f"{from_date}T00:00:00.000Z"
+        resp = requests.get(url, headers=headers, params=params)
+        if resp.status_code != 200:
+            raise Exception(f"Failed to fetch Schwab orders ({resp.status_code}): {resp.text}")
+        return resp.json()
+
 def execute_schwab(tickets: List[Dict[str, Any]], dry_run: bool):
     print("\n[Schwab Bridge] Initializing Charles Schwab Trader API Bridge...")
     
@@ -606,6 +619,58 @@ def sync_schwab(portfolio_file: str, dry_run: bool):
     except Exception as e:
         print(f"[Schwab Sync] Error: {e}")
         sys.exit(1)
+
+def check_schwab_orders():
+    import datetime
+    app_key = os.environ.get("SCHWAB_APP_KEY", "")
+    secret = os.environ.get("SCHWAB_SECRET", "")
+    if not app_key or not secret:
+        print("[Schwab Orders] Error: Set SCHWAB_APP_KEY and SCHWAB_SECRET in environment or .env.")
+        sys.exit(1)
+    schwab = SchwabTraderAPI(app_key, secret)
+    hashes = schwab.get_account_hashes()
+    if not hashes:
+        print("[Schwab Orders] No linked Schwab trading accounts found.")
+        sys.exit(1)
+    acct_hash = hashes[0]["hashValue"]
+    acct_num = hashes[0]["accountNumber"]
+    print(f"\n[Schwab Orders] Fetching recent orders for Account ***{acct_num[-4:]}...")
+    try:
+        today_str = datetime.date.today().isoformat()
+        orders = schwab.get_orders(acct_hash, from_date=today_str)
+        if not orders:
+            orders = schwab.get_orders(acct_hash)
+    except Exception as e:
+        print(f"[Schwab Orders] Query error: {e}")
+        return
+
+    if not orders:
+        print("  No recent orders found.")
+        return
+
+    print(f" Found {len(orders)} order(s):\n")
+    for o in orders:
+        oid = o.get("orderId", "N/A")
+        otype = o.get("orderType", "MARKET")
+        status = o.get("status", "UNKNOWN")
+        legs = o.get("orderLegCollection", [])
+        sym = legs[0].get("instrument", {}).get("symbol", "N/A") if legs else "N/A"
+        inst = legs[0].get("instruction", "ORDER") if legs else "N/A"
+        qty = o.get("quantity", legs[0].get("quantity", 0) if legs else 0)
+        filled_qty = o.get("filledQuantity", 0)
+        entered_time = o.get("enteredTime", "N/A")
+        acts = o.get("orderActivityCollection", [])
+        exec_px = None
+        exec_time = None
+        for act in acts:
+            for elog in act.get("executionLegs", []):
+                exec_px = elog.get("price")
+                exec_time = elog.get("time")
+        
+        status_icon = "✓ [FILLED]" if status == "FILLED" else (f"❌ [{status}]" if status in ["CANCELED", "REJECTED", "EXPIRED"] else f"⏳ [{status}]")
+        px_info = f" @ ${exec_px:.2f}" if exec_px is not None else ""
+        time_info = f" (Filled: {exec_time})" if exec_time else f" (Entered: {entered_time})"
+        print(f"  * {status_icon} Order #{oid}: {inst} {filled_qty}/{qty} {sym} ({otype}){px_info}{time_info}")
 
 def _get_quote_or_fallback(symbol: str):
     """Fetches latest quote for a symbol with fallback to Yahoo finance chart API."""
@@ -835,6 +900,7 @@ def main():
     parser.add_argument("--yes", "-y", action="store_true", help="Skip live execution confirmation prompt")
     parser.add_argument("--portfolio_file", default="portfolio.json", help="Path to portfolio state file")
     parser.add_argument("--sync", action="store_true", help="Synchronize local portfolio state with live broker")
+    parser.add_argument("--orders", action="store_true", help="Display recent order status, executions, and fills from broker")
     parser.add_argument("--auth", action="store_true", help="Authenticate with Charles Schwab OAuth2")
     parser.add_argument("--port", type=int, default=7497, help="IBKR TWS/Gateway port (7497 Paper, 7496 Live)")
     parser.add_argument("--host", default="127.0.0.1", help="IBKR Host IP")
@@ -847,6 +913,15 @@ def main():
     print("                 MULTI-BROKER ORDER EXECUTION & BRACKET BRIDGE                  ")
     print("================================================================================")
     print(f" Target Broker: {args.broker.upper()} | Mode: {'DRY RUN (Preview)' if dry_run else 'LIVE ACTION'}")
+
+    if args.orders:
+        print(f" Operation: ORDER STATUS & FILLS QUERY")
+        if args.broker == "schwab":
+            check_schwab_orders()
+        else:
+            print("[Orders] --orders currently implemented for Charles Schwab.")
+        print("\n================================================================================")
+        return
     
     if args.auth:
         if args.broker != "schwab":
