@@ -432,14 +432,28 @@ class SchwabTraderAPI:
             raise Exception(f"Failed to fetch account positions ({resp.status_code}): {resp.text}")
         return resp.json()
 
-    def get_orders(self, account_hash: str, from_date: str = None) -> List[Dict[str, Any]]:
+    def get_orders(self, account_hash: str, from_date: str = None, to_date: str = None) -> List[Dict[str, Any]]:
+        import datetime
         import requests
         token = self.get_valid_token()
         headers = {"Authorization": f"Bearer {token}"}
         url = f"{self.BASE_URL}/accounts/{account_hash}/orders"
-        params = {}
-        if from_date:
-            params["fromEnteredTime"] = f"{from_date}T00:00:00.000Z"
+        
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        if not from_date:
+            from_iso = (now_utc - datetime.timedelta(days=7)).strftime("%Y-%m-%dT00:00:00.000Z")
+        else:
+            from_iso = f"{from_date}T00:00:00.000Z" if "T" not in from_date else from_date
+            
+        if not to_date:
+            to_iso = (now_utc + datetime.timedelta(days=1)).strftime("%Y-%m-%dT23:59:59.000Z")
+        else:
+            to_iso = f"{to_date}T23:59:59.000Z" if "T" not in to_date else to_date
+
+        params = {
+            "fromEnteredTime": from_iso,
+            "toEnteredTime": to_iso
+        }
         resp = requests.get(url, headers=headers, params=params)
         if resp.status_code != 200:
             raise Exception(f"Failed to fetch Schwab orders ({resp.status_code}): {resp.text}")
@@ -636,10 +650,7 @@ def check_schwab_orders():
     acct_num = hashes[0]["accountNumber"]
     print(f"\n[Schwab Orders] Fetching recent orders for Account ***{acct_num[-4:]}...")
     try:
-        today_str = datetime.date.today().isoformat()
-        orders = schwab.get_orders(acct_hash, from_date=today_str)
-        if not orders:
-            orders = schwab.get_orders(acct_hash)
+        orders = schwab.get_orders(acct_hash)
     except Exception as e:
         print(f"[Schwab Orders] Query error: {e}")
         return
