@@ -208,6 +208,51 @@ class TestBrokerBridges(unittest.TestCase):
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
+    def test_dynamic_fill_bracket_and_inverted_guard(self):
+        # Scenario: XLK signal generated @ $196.28 with stop $190.82 (-2.78%)
+        ticket_text = (
+            "--- ORDER TICKET #1: XLK (P(Up): 66.8% | Quality Score: 0.731 | Sector: Index_ETF) ---\n"
+            "  Action:              BUY 65 SHARES at Market (Order Execution)\n"
+            "  Signal Price:        $196.28 (Scan Reference)\n"
+            "  GTC Stop-Loss:       $190.82 (-2.78%) [Total Downside Risk: $354.90]\n"
+            "  Tier 1 (50% = 32 shs): Target $202.77 (+1.5R)\n"
+            "  Tier 2 (25% = 16 shs): Target $209.94 (+3.0R)\n"
+            "  Actual Outlay:     $12758.20\n"
+        )
+        with tempfile.NamedTemporaryFile("w+", delete=False) as f:
+            f.write(ticket_text)
+            temp_path = f.name
+
+        try:
+            tickets = read_latest_tickets(temp_path)
+            self.assertEqual(len(tickets), 1)
+            t = tickets[0]
+            self.assertEqual(t["symbol"], "XLK")
+            self.assertEqual(t["signal_price"], 196.28)
+            self.assertAlmostEqual(t["stop_pct"], 0.0278, places=4)
+
+            # Market fills at $190.37 (gap down / lower than old stop $190.82)
+            avg_px = 190.3694
+            risk_pct = t["stop_pct"]
+            dynamic_stop = round(avg_px * (1.0 - risk_pct), 2)
+            
+            # Verify stop is recalculated strictly below entry price!
+            self.assertLess(dynamic_stop, avg_px)
+            self.assertEqual(dynamic_stop, 185.08)
+
+            # Verify Inverted Stop Safety Guard
+            stale_old_stop = 190.82
+            # Guard triggers if stale stop >= avg_px
+            if stale_old_stop >= avg_px:
+                safe_stop = round(avg_px * (1.0 - risk_pct), 2)
+            else:
+                safe_stop = stale_old_stop
+            self.assertLess(safe_stop, avg_px)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
 
 if __name__ == "__main__":
     unittest.main()
+

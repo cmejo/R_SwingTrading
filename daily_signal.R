@@ -792,6 +792,7 @@ if (isTRUE(IS_FRIDAY)) {
         cat(sprintf("--- ORDER TICKET #%d: %s (P(Up): %.1f%% | Quality Score: %.3f | Sector: %s) ---\n", 
                     i, row$Symbol, row$Prob_Up * 100, row$Quality_Score, c_sec))
         cat(sprintf("  Action:              BUY %s SHARES at Market (Order Execution)\n", shares_display))
+        cat(sprintf("  Signal Price:        $%.2f (Scan Reference)\n", row$Close))
         cat(sprintf("  Position Sizing:     %s\n", sizing_note))
         cat(sprintf("  Capital Allocation:  %s\n", alloc_note))
         cat(sprintf("  Relative Strength:   %+.2f%% vs SPY Benchmark [MARKET LEADER]\n", row$RS_20 * 100))

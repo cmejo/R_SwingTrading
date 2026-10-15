@@ -148,6 +148,40 @@ if [ "$DRY_RUN" = "false" ]; then
   if command -v osascript &>/dev/null; then
     osascript -e "display notification \"${NOTIF_MSG}\" with title \"Schwab Bot: ORDERS EXECUTED\" sound name \"Glass\"" || true
   fi
+
+  # Step 3b: Dynamic Re-Scan if Sells Opened Up Fresh Portfolio Slots
+  if [ "$N_SELLS" -gt 0 ]; then
+    printf "\n================================================================================\n"
+    printf " [Dynamic Re-Scan] Positions were closed (%s sells). Checking available cash slots...\n" "$N_SELLS"
+    printf "================================================================================\n"
+    
+    OPEN_SLOTS=$(python3 -c "import json; d=json.load(open('$PROJECT_DIR/portfolio.json')); print(max(0, d.get('max_positions', $MAX_POS) - len(d.get('positions', []))))" 2>/dev/null || echo "0")
+    
+    if [ "$OPEN_SLOTS" -gt 0 ]; then
+      echo " -> Found $OPEN_SLOTS open slot(s). Re-running quantitative scanner to find fresh buys at current prices..."
+      RESCAN_LOG="$PROJECT_DIR/logs/auto_trade_${TIMESTAMP}_rescan.log"
+      Rscript daily_signal.R \
+        --capital="$CAPITAL" \
+        --symbols_file="$SYMBOLS_FILE" \
+        --leverage="$LEVERAGE" \
+        --max_pos="$MAX_POS" \
+        --max_per_sector="$MAX_PER_SECTOR" \
+        --max_heat="$MAX_HEAT" \
+        --sizing_mode="vince" \
+        --portfolio_file="$PROJECT_DIR/portfolio.json" 2>&1 | tee "$RESCAN_LOG" "$LATEST_TICKET"
+        
+      NEW_BUYS=$(grep -c -E "(Action: *BUY [0-9]|Actionable Ticket: *BUY [0-9].*QQQ)" "$LATEST_TICKET" || true)
+      if [ "$NEW_BUYS" -gt 0 ]; then
+        echo " -> Found $NEW_BUYS fresh buy order(s) for newly opened slots. Transmitting to Schwab..."
+        python3 execute_broker.py --broker=schwab --dry_run=false --yes --ticket_file="$LATEST_TICKET"
+        python3 execute_broker.py --broker=schwab --sync --dry_run=false || true
+      else
+        echo " -> No qualified buy candidates met the probability/trend cutoff at current prices."
+      fi
+    else
+      echo " -> Portfolio slots remain fully occupied."
+    fi
+  fi
 else
   echo " Staging and validating Schwab REST bracket payloads (Dry Run Simulation)..."
   python3 execute_broker.py --broker=schwab --dry_run=true --ticket_file="$LATEST_TICKET"

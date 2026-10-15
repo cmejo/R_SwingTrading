@@ -41,9 +41,14 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
         if shares <= 0:
             continue
 
-        # Extract Stop Loss
-        stop_match = re.search(r"GTC Stop-Loss:\s+\$([\d\.]+)", body)
+        # Extract Stop Loss & Risk Percentage
+        stop_match = re.search(r"GTC Stop-Loss:\s+\$([\d\.]+)(?:\s+\(-?([\d\.]+)%\))?", body)
         stop_px = float(stop_match.group(1)) if stop_match else 0.0
+        stop_pct = float(stop_match.group(2)) / 100.0 if (stop_match and stop_match.group(2)) else 0.0
+
+        # Extract Signal / Reference Price
+        sig_match = re.search(r"(?:Signal Price:\s+\$|Breakeven\s+\$|EXECUTE AT MARKET \(\$|@ ~\$)([\d\.]+)", body)
+        sig_px = float(sig_match.group(1)) if sig_match else 0.0
 
         # Extract Tier 1 Target & Shares
         t1_match = re.search(r"Tier 1 \(\d+% = ([\d\.]+) shs\): Target \$([\d\.]+)", body)
@@ -59,12 +64,19 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
         alloc_match = re.search(r"Actual Outlay:\s+\$([\d\.]+)", body)
         outlay = float(alloc_match.group(1)) if alloc_match else 0.0
 
+        if sig_px == 0.0 and outlay > 0 and shares > 0:
+            sig_px = round(outlay / shares, 2)
+        if stop_pct == 0.0 and sig_px > 0 and stop_px > 0 and sig_px > stop_px:
+            stop_pct = round((sig_px - stop_px) / sig_px, 4)
+
         tickets.append({
             "rank": int(rank),
             "symbol": sym,
             "shares": shares,
             "sector": sector.strip(),
             "p_up": float(prob),
+            "signal_price": sig_px,
+            "stop_pct": stop_pct,
             "stop_loss": stop_px,
             "tier1_shares": t1_shares,
             "tier1_target": t1_price,
@@ -630,9 +642,29 @@ def sync_schwab(portfolio_file: str, dry_run: bool):
                     existing[0]["cost_basis"] = round(long_qty * avg_px, 2)
                 else:
                     t_match = ticket_lookup.get(sym)
-                    stop_px = round(float(t_match["stop_loss"]), 2) if t_match else round(avg_px * 0.95, 2)
-                    tgt_px = round(float(t_match["tier2_target"]), 2) if t_match else round(avg_px * 1.10, 2)
-                    t1_px = round(float(t_match["tier1_target"]), 2) if t_match else round(avg_px * 1.05, 2)
+                    # Dynamically anchor stop-loss and targets to actual Schwab fill price (avg_px)
+                    risk_pct = 0.04
+                    if t_match:
+                        if t_match.get("stop_pct", 0) > 0:
+                            risk_pct = float(t_match["stop_pct"])
+                        elif t_match.get("signal_price", 0) > 0 and t_match.get("stop_loss", 0) > 0:
+                            sig_p = float(t_match["signal_price"])
+                            risk_pct = max(0.015, min(0.12, (sig_p - float(t_match["stop_loss"])) / sig_p))
+                        elif t_match.get("stop_loss", 0) > 0 and float(t_match["stop_loss"]) < avg_px:
+                            risk_pct = max(0.015, min(0.12, (avg_px - float(t_match["stop_loss"])) / avg_px))
+
+                    # Calculate stop anchored to actual fill price
+                    stop_px = round(avg_px * (1.0 - risk_pct), 2)
+
+                    # INVERTED STOP SAFETY GUARD: Stop must be strictly lower than fill price!
+                    if stop_px >= avg_px or stop_px <= 0:
+                        stop_px = round(avg_px * 0.96, 2)
+
+                    # Dynamically anchor Tier 1 (+1.5R) and Tier 2 (+3.0R) to actual fill price
+                    risk_1r = max(0.01, avg_px - stop_px)
+                    t1_px = round(avg_px + 1.5 * risk_1r, 2)
+                    tgt_px = round(avg_px + 3.0 * risk_1r, 2)
+
                     port_data["positions"].append({
                         "symbol": sym,
                         "shares": long_qty,
@@ -654,10 +686,37 @@ def sync_schwab(portfolio_file: str, dry_run: bool):
 
         remaining = [pos for pos in port_data["positions"] if pos["symbol"] in active_symbols]
         closed = [pos for pos in port_data["positions"] if pos["symbol"] not in active_symbols]
+
+        recent_orders = []
+        try:
+            recent_orders = schwab.get_orders(acct_hash)
+        except Exception:
+            pass
+
         for c in closed:
-            exit_px = _get_quote_or_fallback(c["symbol"])
-            if exit_px is None or exit_px <= 0:
-                exit_px = float(c.get("current_price") or c.get("entry_price") or 0.0)
+            sym_c = c["symbol"]
+            real_fill_px = None
+            for o in recent_orders:
+                if o.get("status") == "FILLED":
+                    legs = o.get("orderLegCollection", [])
+                    o_sym = legs[0].get("instrument", {}).get("symbol", "") if legs else ""
+                    o_inst = legs[0].get("instruction", "") if legs else ""
+                    if o_sym == sym_c and o_inst == "SELL":
+                        acts = o.get("orderActivityCollection", [])
+                        for act in acts:
+                            for elog in act.get("executionLegs", []):
+                                if elog.get("price"):
+                                    real_fill_px = float(elog.get("price"))
+                                    break
+                        if real_fill_px is not None:
+                            break
+
+            if real_fill_px is not None and real_fill_px > 0:
+                exit_px = real_fill_px
+            else:
+                exit_px = _get_quote_or_fallback(sym_c)
+                if exit_px is None or exit_px <= 0:
+                    exit_px = float(c.get("current_price") or c.get("entry_price") or 0.0)
             c["exit_price"] = round(exit_px, 2)
             ent_px = float(c.get("entry_price", 0.0))
             shs = float(c.get("shares", 0.0))
