@@ -192,9 +192,46 @@ def check_token_health(warn_hours: float = 48.0) -> int:
         print(f"[Schwab Token Health] Error checking token: {ex}")
         return 1
 
+def set_token_creation_time(date_str: str) -> bool:
+    if not os.path.exists(TOKEN_FILE):
+        print(f"Error: {TOKEN_FILE} not found.")
+        return False
+    dt = None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            dt = datetime.datetime.strptime(date_str, fmt)
+            break
+        except ValueError:
+            pass
+    if not dt:
+        print(f"Error: Could not parse date string '{date_str}'. Expected format: 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS'.")
+        return False
+
+    ts = dt.timestamp()
+    exp_ts = ts + (7 * 86400)
+    try:
+        with open(TOKEN_FILE, "r") as f:
+            data = json.load(f)
+        data["refresh_token_created_at"] = ts
+        data["refresh_token_expires_at"] = exp_ts
+        with open(TOKEN_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+        print(f"✓ Updated Schwab token metadata in {TOKEN_FILE}:")
+        print(f"  Created: {dt.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"  Expires: {datetime.datetime.fromtimestamp(exp_ts).strftime('%Y-%m-%d %H:%M:%S')}\n")
+        return True
+    except Exception as e:
+        print(f"Error updating {TOKEN_FILE}: {e}")
+        return False
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Check Charles Schwab OAuth Token Expiration")
     parser.add_argument("--warn_hours", type=float, default=48.0, help="Warning threshold in hours (default: 48.0)")
+    parser.add_argument("--set_created", type=str, default=None, help="Set the true creation timestamp of the refresh token (e.g. '2026-10-14 13:10:33' or '2026-10-14')")
     args = parser.parse_args()
+
+    if args.set_created:
+        set_token_creation_time(args.set_created)
+
     sys.exit(check_token_health(warn_hours=args.warn_hours))
