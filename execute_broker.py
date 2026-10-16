@@ -374,6 +374,8 @@ class SchwabTraderAPI:
             raise Exception(f"Token exchange failed ({resp.status_code}): {resp.text}")
         token_data = resp.json()
         token_data["expires_at"] = time.time() + token_data.get("expires_in", 1800) - 60
+        token_data["refresh_token_created_at"] = time.time()
+        token_data["refresh_token_expires_at"] = time.time() + (7 * 86400)
         with open(self.TOKEN_FILE, "w") as f:
             json.dump(token_data, f, indent=2)
         return token_data
@@ -407,6 +409,21 @@ class SchwabTraderAPI:
             # Preserve existing refresh_token if not returned in response
             if "refresh_token" not in new_data:
                 new_data["refresh_token"] = refresh_token
+            # Preserve original refresh token creation and 7-day expiration timestamps
+            if "refresh_token_created_at" in token_data:
+                new_data["refresh_token_created_at"] = token_data["refresh_token_created_at"]
+                new_data["refresh_token_expires_at"] = token_data.get("refresh_token_expires_at", token_data["refresh_token_created_at"] + 7 * 86400)
+            elif "id_token" in token_data and "." in token_data["id_token"]:
+                try:
+                    part = token_data["id_token"].split(".")[1]
+                    part += "=" * ((4 - len(part) % 4) % 4)
+                    jwt_payload = json.loads(base64.urlsafe_b64decode(part))
+                    iat = jwt_payload.get("iat")
+                    if iat:
+                        new_data["refresh_token_created_at"] = iat
+                        new_data["refresh_token_expires_at"] = iat + 7 * 86400
+                except Exception:
+                    pass
             new_data["expires_at"] = time.time() + new_data.get("expires_in", 1800) - 60
             with open(self.TOKEN_FILE, "w") as f:
                 json.dump(new_data, f, indent=2)

@@ -100,9 +100,33 @@ def check_token_health(warn_hours: float = 48.0) -> int:
         return 1
 
     try:
-        mtime = os.path.getmtime(TOKEN_FILE)
-        created_dt = datetime.datetime.fromtimestamp(mtime)
-        expires_dt = created_dt + datetime.timedelta(days=7)
+        # Determine true refresh token creation and expiration time
+        created_dt = None
+        expires_dt = None
+        if os.path.exists(TOKEN_FILE):
+            try:
+                with open(TOKEN_FILE, "r") as tf:
+                    token_data = json.load(tf)
+                if "refresh_token_created_at" in token_data:
+                    created_dt = datetime.datetime.fromtimestamp(token_data["refresh_token_created_at"])
+                    expires_dt = datetime.datetime.fromtimestamp(token_data.get("refresh_token_expires_at", token_data["refresh_token_created_at"] + 7 * 86400))
+                elif "id_token" in token_data and "." in token_data["id_token"]:
+                    import base64
+                    part = token_data["id_token"].split(".")[1]
+                    part += "=" * ((4 - len(part) % 4) % 4)
+                    jwt_payload = json.loads(base64.urlsafe_b64decode(part))
+                    iat = jwt_payload.get("iat")
+                    if iat:
+                        created_dt = datetime.datetime.fromtimestamp(iat)
+                        expires_dt = created_dt + datetime.timedelta(days=7)
+            except Exception:
+                pass
+
+        if not created_dt:
+            mtime = os.path.getmtime(TOKEN_FILE)
+            created_dt = datetime.datetime.fromtimestamp(mtime)
+            expires_dt = created_dt + datetime.timedelta(days=7)
+
         now = datetime.datetime.now()
         remaining_seconds = (expires_dt - now).total_seconds()
         remaining_hours = remaining_seconds / 3600.0
