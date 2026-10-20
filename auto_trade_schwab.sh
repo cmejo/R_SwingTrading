@@ -28,6 +28,8 @@ MAX_POS="3"
 MAX_PER_SECTOR="3"
 MAX_HEAT="0.08"
 FORCE_REFRESH="false"
+CIRCUIT_BREAKER="true"
+RESET_PEAK_EQUITY="false"
 
 CAPITAL=""
 AUTO_CAPITAL="true"
@@ -62,6 +64,15 @@ for arg in "$@"; do
       ;;
     --force_refresh|--refresh)
       FORCE_REFRESH="true"
+      ;;
+    --circuit_breaker=*)
+      CIRCUIT_BREAKER="${arg#*=}"
+      ;;
+    --no_circuit_breaker|--disable_circuit_breaker)
+      CIRCUIT_BREAKER="false"
+      ;;
+    --reset_peak_equity|--reset_drawdown)
+      RESET_PEAK_EQUITY="true"
       ;;
   esac
 done
@@ -124,6 +135,8 @@ Rscript daily_signal.R \
   --max_heat="$MAX_HEAT" \
   --sizing_mode="vince" \
   --force_refresh="$FORCE_REFRESH" \
+  --circuit_breaker="$CIRCUIT_BREAKER" \
+  $([ "$RESET_PEAK_EQUITY" = "true" ] && echo "--reset_peak_equity") \
   --portfolio_file="$PROJECT_DIR/portfolio.json" 2>&1 | tee "$LOG_FILE" "$LATEST_TICKET"
 
 # Step 2: Check for Actionable Buy & Sell Tickets
