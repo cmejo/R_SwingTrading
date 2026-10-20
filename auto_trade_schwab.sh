@@ -29,6 +29,7 @@ MAX_PER_SECTOR="3"
 MAX_HEAT="0.08"
 FORCE_REFRESH="false"
 CIRCUIT_BREAKER="true"
+CIRCUIT_BREAKER_THRESH="-10.0"
 RESET_PEAK_EQUITY="false"
 
 CAPITAL=""
@@ -67,6 +68,9 @@ for arg in "$@"; do
       ;;
     --circuit_breaker=*)
       CIRCUIT_BREAKER="${arg#*=}"
+      ;;
+    --circuit_breaker_thresh=*|--circuit_breaker_threshold=*|--circuit_breaker_pct=*)
+      CIRCUIT_BREAKER_THRESH="${arg#*=}"
       ;;
     --no_circuit_breaker|--disable_circuit_breaker)
       CIRCUIT_BREAKER="false"
@@ -136,6 +140,7 @@ Rscript daily_signal.R \
   --sizing_mode="vince" \
   --force_refresh="$FORCE_REFRESH" \
   --circuit_breaker="$CIRCUIT_BREAKER" \
+  --circuit_breaker_threshold="$CIRCUIT_BREAKER_THRESH" \
   $([ "$RESET_PEAK_EQUITY" = "true" ] && echo "--reset_peak_equity") \
   --portfolio_file="$PROJECT_DIR/portfolio.json" 2>&1 | tee "$LOG_FILE" "$LATEST_TICKET"
 

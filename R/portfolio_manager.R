@@ -245,7 +245,8 @@ record_exit <- function(portfolio, symbol, exit_price, exit_date = as.character(
 #' @export
 sync_portfolio_with_market <- function(portfolio, current_prices, current_date = Sys.Date(), 
                                        is_friday = FALSE, model_scan_df = NULL, macro_bullish = TRUE,
-                                       enable_circuit_breaker = TRUE) {
+                                       enable_circuit_breaker = TRUE,
+                                       circuit_breaker_threshold = -10.0) {
   current_date <- as.Date(current_date)
   pos_list <- portfolio$positions
   
@@ -426,10 +427,10 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
   total_account_value <- round(portfolio$cash_balance + total_invested, 2)
   peak_equity <- if (!is.null(portfolio$peak_equity)) max(as.numeric(portfolio$peak_equity), total_account_value) else total_account_value
   drawdown_pct <- round(((total_account_value - peak_equity) / max(1.0, peak_equity)) * 100, 2)
-  circuit_breaker_active <- if (isTRUE(enable_circuit_breaker)) (drawdown_pct <= -4.0) else FALSE
+  circuit_breaker_active <- if (isTRUE(enable_circuit_breaker)) (drawdown_pct <= circuit_breaker_threshold) else FALSE
   
   if (circuit_breaker_active) {
-    alerts <- c(alerts, sprintf("[CIRCUIT BREAKER ACTIVE] Account Drawdown %+.2f%% exceeds -4.0%% ceiling! Safe f throttled by 50%%.", drawdown_pct))
+    alerts <- c(alerts, sprintf("[CIRCUIT BREAKER ACTIVE] Account Drawdown %+.2f%% exceeds %.1f%% ceiling! Safe f throttled by 50%%.", drawdown_pct, circuit_breaker_threshold))
   }
   
   available_slots <- max(0, portfolio$max_positions - nrow(pos_df))

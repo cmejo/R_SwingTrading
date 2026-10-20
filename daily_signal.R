@@ -47,7 +47,8 @@ LEVERAGE         <- 1.5     # Default leverage multiplier: 1.5x (margin). Set 1.
 MAX_PER_SECTOR   <- 3       # Maximum concurrent positions allowed in any single sector
 MAX_HEAT         <- 0.08    # Max portfolio heat budget (0.08 = 8.0% total dollars at risk across stops)
 FORCE_REFRESH    <- FALSE   # Bypass cache and re-download latest market data
-CIRCUIT_BREAKER  <- TRUE    # Account Drawdown Circuit Breaker (-4.0% throttle)
+CIRCUIT_BREAKER  <- TRUE    # Account Drawdown Circuit Breaker (-10.0% throttle)
+CIRCUIT_BREAKER_THRESH <- -10.0 # Circuit breaker threshold ceiling (default -10.0%)
 RESET_PEAK_EQUITY <- FALSE  # Reset peak equity high-water mark to current balance
 PORTFOLIO_FILE   <- "portfolio.json"
 IS_FRIDAY        <- (format(Sys.Date(), "%u") == "5") # Friday weekend exit check
@@ -79,6 +80,8 @@ for (arg in args) {
   if (grepl("^--force_refresh=", arg)) FORCE_REFRESH <- as.logical(sub("^--force_refresh=", "", arg))
   if (arg == "--force_refresh" || arg == "--refresh") FORCE_REFRESH <- TRUE
   if (grepl("^--circuit_breaker=", arg)) CIRCUIT_BREAKER <- as.logical(sub("^--circuit_breaker=", "", arg))
+  if (grepl("^--circuit_breaker_thresh", arg)) CIRCUIT_BREAKER_THRESH <- -abs(as.numeric(sub("^--circuit_breaker_thresh(old)?=", "", arg)))
+  if (grepl("^--circuit_breaker_pct=", arg)) CIRCUIT_BREAKER_THRESH <- -abs(as.numeric(sub("^--circuit_breaker_pct=", "", arg)))
   if (arg == "--no_circuit_breaker" || arg == "--disable_circuit_breaker") CIRCUIT_BREAKER <- FALSE
   if (arg == "--reset_peak_equity" || arg == "--reset_drawdown") RESET_PEAK_EQUITY <- TRUE
   if (grepl("^--portfolio_file=", arg)) PORTFOLIO_FILE <- sub("^--portfolio_file=", "", arg)
@@ -556,7 +559,8 @@ sync_res <- sync_portfolio_with_market(
   is_friday = IS_FRIDAY,
   model_scan_df = df_scan,
   macro_bullish = macro_info$is_bullish,
-  enable_circuit_breaker = CIRCUIT_BREAKER
+  enable_circuit_breaker = CIRCUIT_BREAKER,
+  circuit_breaker_threshold = CIRCUIT_BREAKER_THRESH
 )
 port_state <- sync_res$updated_portfolio
 save_portfolio(port_state, PORTFOLIO_FILE)
@@ -594,8 +598,8 @@ cat(sprintf(" AVAILABLE CASH SLOTS:   %d of %d (Regime Limit: %d)\n", empty_slot
 # Account Drawdown Circuit Breaker Enforcement
 if (isTRUE(CIRCUIT_BREAKER) && isTRUE(sync_res$circuit_breaker_active)) {
   EFFECTIVE_SAFETY_FACTOR <- EFFECTIVE_SAFETY_FACTOR * 0.50
-  cat(sprintf(" ⚠️  [CIRCUIT BREAKER ENGAGED] Account drawdown %+.2f%% <= -4.0%%! Throttling Safe f to %.2f\n", 
-              sync_res$drawdown_pct, EFFECTIVE_SAFETY_FACTOR))
+  cat(sprintf(" ⚠️  [CIRCUIT BREAKER ENGAGED] Account drawdown %+.2f%% <= %.1f%%! Throttling Safe f to %.2f\n", 
+              sync_res$drawdown_pct, CIRCUIT_BREAKER_THRESH, EFFECTIVE_SAFETY_FACTOR))
 } else if (!isTRUE(CIRCUIT_BREAKER)) {
   cat(sprintf(" ℹ️  [CIRCUIT BREAKER DISABLED] Full sizing active (Safe f = %.2f).\n", EFFECTIVE_SAFETY_FACTOR))
 }
