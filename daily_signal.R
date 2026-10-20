@@ -46,6 +46,7 @@ ALLOW_FRACTIONAL <- TRUE    # Allow fractional shares for exact risk budget allo
 LEVERAGE         <- 1.5     # Default leverage multiplier: 1.5x (margin). Set 1.0 for cash only.
 MAX_PER_SECTOR   <- 3       # Maximum concurrent positions allowed in any single sector
 MAX_HEAT         <- 0.08    # Max portfolio heat budget (0.08 = 8.0% total dollars at risk across stops)
+FORCE_REFRESH    <- FALSE   # Bypass cache and re-download latest market data
 PORTFOLIO_FILE   <- "portfolio.json"
 IS_FRIDAY        <- (format(Sys.Date(), "%u") == "5") # Friday weekend exit check
 
@@ -73,6 +74,8 @@ for (arg in args) {
   if (grepl("^--safety_factor=", arg)) SAFETY_FACTOR <- as.numeric(sub("^--safety_factor=", "", arg))
   if (grepl("^--vince_lookback=", arg)) VINCE_LOOKBACK <- as.numeric(sub("^--vince_lookback=", "", arg))
   if (grepl("^--fractional=", arg)) ALLOW_FRACTIONAL <- as.logical(sub("^--fractional=", "", arg))
+  if (grepl("^--force_refresh=", arg)) FORCE_REFRESH <- as.logical(sub("^--force_refresh=", "", arg))
+  if (arg == "--force_refresh" || arg == "--refresh") FORCE_REFRESH <- TRUE
   if (grepl("^--portfolio_file=", arg)) PORTFOLIO_FILE <- sub("^--portfolio_file=", "", arg)
   if (grepl("^--is_friday=", arg)) IS_FRIDAY <- as.logical(sub("^--is_friday=", "", arg))
   if (grepl("^--symbols_file=", arg)) SYMBOLS_FILE <- sub("^--symbols_file=", "", arg)
@@ -164,7 +167,7 @@ cat("\n=========================================================================
 cat(" 1. MACRO MARKET & VOLATILITY REGIME GATE (QQQ + VIX DUAL FILTER)\n")
 cat("========================================================================================\n")
 
-qqq_ohlcv <- tryCatch(load_stock_data("QQQ"), error = function(e) NULL)
+qqq_ohlcv <- tryCatch(load_stock_data("QQQ", force_refresh = FORCE_REFRESH), error = function(e) NULL)
 macro_info <- if (!is.null(qqq_ohlcv)) {
   tryCatch({
     qqq_price <- Cl(qqq_ohlcv)
@@ -192,7 +195,7 @@ macro_info <- if (!is.null(qqq_ohlcv)) {
 
 # Benchmark (SPY) for Relative Strength
 spy_ohlcv <- tryCatch({
-  load_stock_data("SPY")
+  load_stock_data("SPY", force_refresh = FORCE_REFRESH)
 }, error = function(e) {
   if (!is.null(qqq_ohlcv)) qqq_ohlcv else NULL
 })
@@ -201,7 +204,7 @@ spy_px <- if (!is.null(spy_ohlcv)) as.numeric(last(Cl(spy_ohlcv))) else 0
 
 # Dynamic CBOE VIX Volatility Regime & MS-GARCH Two-Regime Macro Gate
 vix_info <- tryCatch({
-  vix_ohlcv <- load_stock_data("^VIX")
+  vix_ohlcv <- load_stock_data("^VIX", force_refresh = FORCE_REFRESH)
   vix_close <- suppressWarnings(na.omit(Cl(vix_ohlcv)))
   vix_px <- as.numeric(last(vix_close))
   v_reg <- if (vix_px < 20) "NORMAL (Low Volatility)" else if (vix_px <= 28) "ELEVATED (Caution)" else "CRISIS (Extreme Volatility)"
@@ -323,11 +326,11 @@ for (sym in SYMBOLS) {
     cand_sec <- get_sector(sym)
     sec_etf_sym <- if (!is.null(cand_sec) && !is.null(sector_etf_map[[cand_sec]])) sector_etf_map[[cand_sec]] else "XLK"
     if (is.null(loaded_sector_etfs[[sec_etf_sym]])) {
-      loaded_sector_etfs[[sec_etf_sym]] <- tryCatch(load_stock_data(sec_etf_sym), error = function(e) NULL)
+      loaded_sector_etfs[[sec_etf_sym]] <- tryCatch(load_stock_data(sec_etf_sym, force_refresh = FORCE_REFRESH), error = function(e) NULL)
     }
     sec_ohlcv <- loaded_sector_etfs[[sec_etf_sym]]
 
-    ohlcv <- load_stock_data(symbol = sym)
+    ohlcv <- load_stock_data(symbol = sym, force_refresh = FORCE_REFRESH)
     price <- Cl(ohlcv)
     latest_date <- as.character(index(last(price)))
     latest_close <- as.numeric(last(price))

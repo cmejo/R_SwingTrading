@@ -27,6 +27,7 @@ LEVERAGE="1.5"
 MAX_POS="3"
 MAX_PER_SECTOR="3"
 MAX_HEAT="0.08"
+FORCE_REFRESH="false"
 
 CAPITAL=""
 AUTO_CAPITAL="true"
@@ -55,6 +56,12 @@ for arg in "$@"; do
     --capital=*)
       CAPITAL="${arg#*=}"
       AUTO_CAPITAL="false"
+      ;;
+    --force_refresh=*|--refresh=*)
+      FORCE_REFRESH="${arg#*=}"
+      ;;
+    --force_refresh|--refresh)
+      FORCE_REFRESH="true"
       ;;
   esac
 done
@@ -116,6 +123,7 @@ Rscript daily_signal.R \
   --max_per_sector="$MAX_PER_SECTOR" \
   --max_heat="$MAX_HEAT" \
   --sizing_mode="vince" \
+  --force_refresh="$FORCE_REFRESH" \
   --portfolio_file="$PROJECT_DIR/portfolio.json" 2>&1 | tee "$LOG_FILE" "$LATEST_TICKET"
 
 # Step 2: Check for Actionable Buy & Sell Tickets
