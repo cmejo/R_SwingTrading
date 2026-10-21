@@ -32,7 +32,7 @@ CIRCUIT_BREAKER="true"
 CIRCUIT_BREAKER_THRESH="-12.0"
 RESET_PEAK_EQUITY="false"
 
-CAPITAL=""
+CAPITAL="8230"
 AUTO_CAPITAL="true"
 
 # Parse CLI arguments
@@ -91,15 +91,15 @@ if [ "$AUTO_CAPITAL" = "true" ] || [ -z "$CAPITAL" ]; then
 
   # Extract total liquidation value from portfolio.json if available
   if [ -f "$PROJECT_DIR/portfolio.json" ]; then
-    EXTRACTED_CAP=$(python3 -c "import json; d=json.load(open('$PROJECT_DIR/portfolio.json')); print(int(round(float(d.get('total_capital', 10000)))))" 2>/dev/null || echo "10000")
+    EXTRACTED_CAP=$(python3 -c "import json; d=json.load(open('$PROJECT_DIR/portfolio.json')); print(int(round(float(d.get('total_capital', 8230)))))" 2>/dev/null || echo "8230")
     if [ -n "$EXTRACTED_CAP" ] && [ "$EXTRACTED_CAP" -gt 0 ] 2>/dev/null; then
       CAPITAL="$EXTRACTED_CAP"
       echo "[Auto-Capital] Dynamically scaled trading capital to full account balance: \$$CAPITAL"
     else
-      CAPITAL="10000"
+      CAPITAL="8230"
     fi
   else
-    CAPITAL="10000"
+    CAPITAL="8230"
   fi
 fi
 

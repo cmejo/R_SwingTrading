@@ -6,7 +6,7 @@
 #' and rolling Walk-Forward Retraining to generate actionable bracket order tickets.
 #'
 #' Usage:
-#'   Rscript daily_signal.R [--symbols=SNDK,NVDA,AAPL] [--capital=10000] [--max_pos=5]
+#'   Rscript daily_signal.R [--symbols=SNDK,NVDA,AAPL] [--capital=8230] [--max_pos=5]
 
 suppressPackageStartupMessages({
   library(xts)
@@ -28,7 +28,7 @@ source("R/portfolio_manager.R")
 source("R/send_alert.R")
 
 # Default Parameters
-CAPITAL          <- 10000
+CAPITAL          <- 8230
 MAX_POSITIONS    <- 3     # Max concurrent swing positions to hold (e.g., 3 positions @ $3,333 each)
 TARGET_VOL       <- 0.45  # Target Volatility Budget (0.45 = 45% annual vol, matches QQQ/tech growth)
 FAST_N           <- 20
@@ -108,6 +108,22 @@ if (RESET_PORT) {
   cat(sprintf("[PortfolioManager] Reset portfolio to $%.2f cash balance.\n", CAPITAL))
 } else {
   port_state <- load_portfolio(PORTFOLIO_FILE, default_capital = CAPITAL, max_positions = MAX_POSITIONS)
+  if (any(grepl("^--capital=", args))) {
+    cli_cap <- as.numeric(sub("^--capital=", "", args[grep("^--capital=", args)[1]]))
+    if (!is.na(cli_cap) && cli_cap > 0) {
+      port_state$total_capital <- cli_cap
+      pos_invested <- if (length(port_state$positions) > 0) {
+        sum(sapply(port_state$positions, function(p) as.numeric(p$shares) * as.numeric(p$entry_price)))
+      } else 0.0
+      hedge_invested <- if (!is.null(port_state$hedge_positions) && length(port_state$hedge_positions) > 0) {
+        sum(sapply(port_state$hedge_positions, function(p) as.numeric(p$shares) * as.numeric(p$entry_price)))
+      } else 0.0
+      port_state$cash_balance <- max(0, cli_cap - pos_invested - hedge_invested)
+      port_state$peak_equity <- max(as.numeric(port_state$peak_equity), cli_cap)
+      save_portfolio(port_state, PORTFOLIO_FILE)
+      cat(sprintf("[PortfolioManager] Updated capital to $%.2f (Deployable cash: $%.2f).\n", cli_cap, port_state$cash_balance))
+    }
+  }
   if (RESET_PEAK_EQUITY) {
     port_state$peak_equity <- port_state$total_capital
     save_portfolio(port_state, PORTFOLIO_FILE)
@@ -749,7 +765,7 @@ if (isTRUE(IS_FRIDAY)) {
     # ----------------------------------------------------------------------------------------
     deploy_unallocated_cash <- function(unalloc_cash, port_state, macro_info, gld_info,
                                         qqq_px, gld_px, fngd_px, sqqq_px, sgov_px,
-                                        allow_fractional = TRUE, total_account_val = 10000,
+                                        allow_fractional = TRUE, total_account_val = CAPITAL,
                                         swing_outlay = 0, raw_cash_balance = unalloc_cash) {
       has_existing_hedge <- (!is.null(port_state$hedge_positions) && length(port_state$hedge_positions) > 0)
       if (unalloc_cash < 100 && !has_existing_hedge) {

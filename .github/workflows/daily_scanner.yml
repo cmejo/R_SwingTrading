@@ -65,7 +65,7 @@ jobs:
       - name: Run Daily Swing Scanner
         run: |
           mkdir -p output logs data
-          Rscript daily_signal.R --symbols_file=symbols.txt --capital=10000 --max_pos=5 --sizing_mode=vince --safety_factor=0.50 --fractional=TRUE --portfolio_file=portfolio.json > LATEST_TICKET.txt 2>&1
+          Rscript daily_signal.R --symbols_file=symbols.txt --capital=8230 --max_pos=5 --sizing_mode=vince --safety_factor=0.50 --fractional=TRUE --portfolio_file=portfolio.json > LATEST_TICKET.txt 2>&1
           cat LATEST_TICKET.txt
 
       - name: Run Weekly/Monthly Evaluation (Fridays)

@@ -1,8 +1,8 @@
 {
-  "total_capital": 10192.6,
-  "cash_balance": 2339.86,
+  "total_capital": 8120.86,
+  "cash_balance": 377.26,
   "max_positions": 5,
-  "last_updated": "2026-10-15 15:01:14.434461",
+  "last_updated": "2026-10-21 14:53:35.261784",
   "positions": [
     {
       "symbol": "QQQ",
@@ -63,5 +63,6 @@
     }
   ],
   "closed_trades": [],
-  "peak_equity": 10385.2
+  "peak_equity": 8230,
+  "hedge_positions": []
 }

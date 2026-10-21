@@ -18,7 +18,7 @@ suppressPackageStartupMessages({
 #' @param max_positions Maximum concurrent positions.
 #' @return Portfolio state list.
 #' @export
-load_portfolio <- function(path = "portfolio.json", default_capital = 10000, max_positions = 5) {
+load_portfolio <- function(path = "portfolio.json", default_capital = 8230, max_positions = 5) {
   if (file.exists(path)) {
     tryCatch({
       state <- jsonlite::fromJSON(path, simplifyDataFrame = FALSE)
@@ -344,7 +344,7 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
       } else if (isTRUE(p$tier1_hit)) {
         # Addition #6: Trailing Stop Ratchet immediately after Tier 1 (+1.5R) hits
         suggested_stop <- max(suggested_stop, as.numeric(p$entry_price), chandelier_stop)
-        if (hp >= (p$entry_price + 2.2 * risk_1r)) {
+        if (highest_seen >= (p$entry_price + 2.2 * risk_1r)) {
           suggested_stop <- max(suggested_stop, round(p$entry_price + 0.85 * risk_1r, 2))
         }
       } else if (cp >= (p$entry_price + risk_1r) && chandelier_stop > suggested_stop) {

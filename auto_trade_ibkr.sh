@@ -26,7 +26,7 @@ SYMBOLS_FILE="$PROJECT_DIR/symbols_broad.txt"
 LEVERAGE="1.5"
 MAX_POS="5"
 MAX_PER_SECTOR="2"
-CAPITAL="10000"
+CAPITAL="8230"
 IB_PORT="7497" # 7497 = TWS Paper, 7496 = TWS Live, 4001 = IB Gateway Live, 4002 = IB Gateway Paper
 
 # Parse CLI arguments

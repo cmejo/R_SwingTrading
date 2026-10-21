@@ -26,7 +26,7 @@ SYMBOLS_FILE="$PROJECT_DIR/symbols_broad.txt"
 LEVERAGE="1.5"
 MAX_POS="5"
 MAX_PER_SECTOR="2"
-CAPITAL="10000"
+CAPITAL="8230"
 
 # Parse CLI arguments
 for arg in "$@"; do
