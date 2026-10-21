@@ -33,6 +33,7 @@ CIRCUIT_BREAKER_THRESH="-12.0"
 RESET_PEAK_EQUITY="false"
 
 CAPITAL=""
+MAX_CAPITAL="${MAX_CAPITAL:-8000}"
 AUTO_CAPITAL="true"
 
 # Parse CLI arguments
@@ -59,6 +60,9 @@ for arg in "$@"; do
     --capital=*)
       CAPITAL="${arg#*=}"
       AUTO_CAPITAL="false"
+      ;;
+    --max_capital=*|--max_cash=*)
+      MAX_CAPITAL="${arg#*=}"
       ;;
     --force_refresh=*|--refresh=*)
       FORCE_REFRESH="${arg#*=}"
@@ -93,10 +97,15 @@ if [ "$AUTO_CAPITAL" = "true" ] || [ -z "$CAPITAL" ]; then
   if [ -f "$PROJECT_DIR/portfolio.json" ]; then
     EXTRACTED_CAP=$(python3 -c "import json; d=json.load(open('$PROJECT_DIR/portfolio.json')); print(int(round(float(d.get('total_capital', 10000)))))" 2>/dev/null || echo "10000")
     if [ -n "$EXTRACTED_CAP" ] && [ "$EXTRACTED_CAP" -gt 0 ] 2>/dev/null; then
-      CAPITAL="$EXTRACTED_CAP"
-      echo "[Auto-Capital] Dynamically scaled trading capital to full account balance: \$$CAPITAL"
+      if [ -n "$MAX_CAPITAL" ] && [ "$EXTRACTED_CAP" -gt "$MAX_CAPITAL" ] 2>/dev/null; then
+        CAPITAL="$MAX_CAPITAL"
+        echo "[Auto-Capital] Live account equity (\$$EXTRACTED_CAP) exceeds max cash ceiling (\$$MAX_CAPITAL). Capping trading capital to \$$CAPITAL."
+      else
+        CAPITAL="$EXTRACTED_CAP"
+        echo "[Auto-Capital] Dynamically scaled trading capital to account balance: \$$CAPITAL"
+      fi
     else
-      CAPITAL="10000"
+      CAPITAL="${MAX_CAPITAL:-10000}"
     fi
   else
     CAPITAL="10000"
