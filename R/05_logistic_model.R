@@ -234,9 +234,21 @@ train_swing_model <- function(X_train,
     }, error = function(e) NULL)
   }
   
-  # 5. Predictions on X_test if provided
+  # 5. Predictions on X_test if provided (with Stacked 7-Feature Alpha Sub-Model & Conviction Tilt)
   pred_probs_vec <- numeric(0)
   pred_class <- numeric(0)
+  
+  alpha_sub_cols <- c("VolSqueeze", "SqueezeRelease", "CLV_5D", "IntradayVsGap_10D",
+                      "PEAD_Catalyst", "PullbackInUptrend", "BreakoutWithVolume")
+  has_alpha_sub  <- all(alpha_sub_cols %in% colnames(X_train))
+  alpha_sub_fit  <- NULL
+  if (has_alpha_sub && nrow(X_train) >= 80 && length(unique(y_train)) >= 2) {
+    alpha_sub_fit <- tryCatch(
+      glmnet::glmnet(X_train[, alpha_sub_cols, drop = FALSE], y_train,
+                     family = "binomial", alpha = 0.5, lambda = 0.008),
+      error = function(e) NULL
+    )
+  }
   
   if (!is.null(X_test) && nrow(as.matrix(X_test)) > 0) {
     X_test <- as.matrix(X_test)
@@ -249,6 +261,26 @@ train_swing_model <- function(X_train,
       pred_probs_vec <- if (all(!is.na(cal_probs))) (0.70 * cal_probs + 0.30 * raw_probs) else raw_probs
     } else {
       pred_probs_vec <- raw_probs
+    }
+    
+    # Apply Stacked Ensemble Blend (82% Core + 18% Orthogonal 7-Feature Alpha Sub-Model + Conviction Tilt)
+    if (active_feats_count > 0 && has_alpha_sub && !is.null(alpha_sub_fit) && all(alpha_sub_cols %in% colnames(X_test))) {
+      p_alpha_sub <- tryCatch(
+        as.numeric(predict(alpha_sub_fit, newx = X_test[, alpha_sub_cols, drop = FALSE], type = "response")),
+        error = function(e) pred_probs_vec
+      )
+      sq_rel_v <- as.numeric(X_test[, "SqueezeRelease"])
+      clv_v    <- as.numeric(X_test[, "CLV_5D"])
+      pead_v   <- as.numeric(X_test[, "PEAD_Catalyst"])
+      pb_v     <- as.numeric(X_test[, "PullbackInUptrend"])
+      bo_v     <- as.numeric(X_test[, "BreakoutWithVolume"])
+      conv_tilt <- pmin(0.06, pmax(-0.03,
+        0.015 * pmin(sq_rel_v, 2.0) +
+        0.025 * clv_v +
+        0.020 * pmin(pead_v, 2.0) +
+        0.015 * pmin(pb_v + bo_v, 2.0)
+      ))
+      pred_probs_vec <- pmin(0.999, pmax(0.001, 0.82 * pred_probs_vec + 0.18 * p_alpha_sub + conv_tilt))
     }
     
     pred_class <- ifelse(pred_probs_vec > p_long, 1,

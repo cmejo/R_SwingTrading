@@ -341,6 +341,12 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
       # If Tier 2 was hit (Runner Lot active), stop is governed strictly by Chandelier stop
       if (isTRUE(p$is_runner) || isTRUE(p$tier2_hit)) {
         suggested_stop <- max(suggested_stop, chandelier_stop)
+      } else if (isTRUE(p$tier1_hit)) {
+        # Addition #6: Trailing Stop Ratchet immediately after Tier 1 (+1.5R) hits
+        suggested_stop <- max(suggested_stop, as.numeric(p$entry_price), chandelier_stop)
+        if (hp >= (p$entry_price + 2.2 * risk_1r)) {
+          suggested_stop <- max(suggested_stop, round(p$entry_price + 0.85 * risk_1r, 2))
+        }
       } else if (cp >= (p$entry_price + risk_1r) && chandelier_stop > suggested_stop) {
         suggested_stop <- chandelier_stop
       }

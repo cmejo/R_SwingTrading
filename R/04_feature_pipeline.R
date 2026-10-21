@@ -91,6 +91,7 @@ build_feature_dataset <- function(ohlcv,
   colnames(feat_zscore) <- "ZScore"
   
   # 4. Two-Regime Markov-Switching GARCH (MS-GARCH) Volatility Features
+  garch_out <- NULL
   if (use_garch) {
     garch_out <- compute_msgarch_volatility(price, train_idx = train_idx)
     feat_garch_vol      <- garch_out$annualized_vol
@@ -240,6 +241,109 @@ build_feature_dataset <- function(ohlcv,
     r
   })
 
+  # 6h. Volatility Contraction / TTM Squeeze Ratio (BB Width / Keltner Width) & Squeeze Release
+  feat_vol_squeeze <- xts(rep(1.0, nrow(price)), order.by = index(price))
+  feat_squeeze_rel <- xts(rep(0.0, nrow(price)), order.by = index(price))
+  tryCatch({
+    bb_sq  <- TTR::BBands(price, n = 20, sd = 2)
+    atr_sq <- TTR::ATR(HLC(ohlcv), n = 14)$atr
+    sq_vec <- as.numeric((bb_sq[, "up"] - bb_sq[, "dn"]) / (4.0 * atr_sq + 1e-6))
+    sq_vec[is.na(sq_vec)] <- 1.0
+    sq_vec <- pmin(pmax(sq_vec, 0.2), 3.0)
+    feat_vol_squeeze <- xts(sq_vec, order.by = index(price))
+
+    sq_lag <- c(1.0, head(sq_vec, -1))
+    sf_vec <- as.numeric(feat_slope_fast)
+    sf_vec[is.na(sf_vec)] <- 0
+    sq_rel_vec <- pmax(0, 1.25 - sq_lag) * pmax(0, sf_vec)
+    feat_squeeze_rel <- xts(sq_rel_vec, order.by = index(price))
+  }, error = function(e) NULL)
+  colnames(feat_vol_squeeze) <- "VolSqueeze"
+  colnames(feat_squeeze_rel) <- "SqueezeRelease"
+
+  # 6i. Intraday Institutional Accumulation: 5D Closing Location Value (CLV_5D) & Intraday vs Overnight Drift
+  feat_clv_5d <- xts(rep(0.0, nrow(price)), order.by = index(price))
+  feat_intra_vs_gap <- xts(rep(0.0, nrow(price)), order.by = index(price))
+  tryCatch({
+    op_v <- as.numeric(Op(ohlcv))
+    hi_v <- as.numeric(Hi(ohlcv))
+    lo_v <- as.numeric(Lo(ohlcv))
+    cl_v <- as.numeric(Cl(ohlcv))
+    clv_raw <- ((cl_v - lo_v) - (hi_v - cl_v)) / (hi_v - lo_v + 1e-6)
+    clv_5 <- as.numeric(TTR::runMean(clv_raw, n = 5))
+    clv_5[is.na(clv_5)] <- 0
+    feat_clv_5d <- xts(clv_5, order.by = index(price))
+
+    prev_cl <- c(cl_v[1], head(cl_v, -1))
+    intra_r <- (cl_v / (op_v + 1e-6)) - 1
+    gap_r   <- (op_v / (prev_cl + 1e-6)) - 1
+    gap_r[is.na(gap_r)] <- 0
+    diff_ig <- (intra_r - gap_r) * 100
+    ig_10 <- as.numeric(TTR::runMean(diff_ig, n = 10))
+    ig_10[is.na(ig_10)] <- 0
+    feat_intra_vs_gap <- xts(ig_10, order.by = index(price))
+  }, error = function(e) NULL)
+  colnames(feat_clv_5d) <- "CLV_5D"
+  colnames(feat_intra_vs_gap) <- "IntradayVsGap_10D"
+
+  # 6j. Post-Earnings / High-Volume Gap Catalyst (PEAD_Catalyst)
+  feat_pead <- xts(rep(0.0, nrow(price)), order.by = index(price))
+  tryCatch({
+    op_v <- as.numeric(Op(ohlcv))
+    lo_v <- as.numeric(Lo(ohlcv))
+    cl_v <- as.numeric(Cl(ohlcv))
+    vr_v <- as.numeric(feat_vol_ratio)
+    atr_v <- as.numeric(TTR::ATR(HLC(ohlcv), n = 14)$atr)
+    atr_v[is.na(atr_v) | atr_v <= 0] <- cl_v[is.na(atr_v) | atr_v <= 0] * 0.02
+
+    pead_vec <- numeric(n_rows)
+    last_cat_idx <- -999L
+    last_cat_low <- 0.0
+    last_cat_mag <- 0.0
+    for (ii in 2:n_rows) {
+      gap_up <- op_v[ii] - cl_v[ii - 1]
+      is_cat <- (!is.na(gap_up) && !is.na(vr_v[ii]) &&
+                 gap_up >= 1.2 * atr_v[ii - 1] &&
+                 vr_v[ii] >= 1.75 &&
+                 cl_v[ii] >= op_v[ii])
+      if (is_cat) {
+        last_cat_idx <- ii
+        last_cat_low <- lo_v[ii]
+        last_cat_mag <- min(3.0, (gap_up / (atr_v[ii - 1] + 1e-6)) * (vr_v[ii] / 2.0))
+      }
+      age <- ii - last_cat_idx
+      if (age >= 0 && age <= 5 && !is.na(cl_v[ii]) && cl_v[ii] >= last_cat_low) {
+        pead_vec[ii] <- last_cat_mag * (1.0 - age / 6.0)
+      }
+    }
+    feat_pead <- xts(pead_vec, order.by = index(price))
+  }, error = function(e) NULL)
+  colnames(feat_pead) <- "PEAD_Catalyst"
+
+  # 6k. Explicit Non-Linear Regime Interactions (PullbackInUptrend & BreakoutWithVolume)
+  feat_pullback_up <- xts(rep(0.0, nrow(price)), order.by = index(price))
+  feat_breakout_vol <- xts(rep(0.0, nrow(price)), order.by = index(price))
+  tryCatch({
+    cl_v <- as.numeric(price)
+    slow_fit_v <- as.numeric(dual_lm$slow_lm$fit)
+    ss_v <- as.numeric(feat_slope_slow)
+    zs_v <- as.numeric(feat_zscore)
+    above_slow <- ifelse(!is.na(cl_v) & !is.na(slow_fit_v) & cl_v >= slow_fit_v, 1.0, 0.0)
+    pb_up <- pmax(0, ifelse(is.na(ss_v), 0, ss_v)) * pmax(0, ifelse(is.na(zs_v), 0, -zs_v)) * above_slow
+    feat_pullback_up <- xts(pb_up, order.by = index(price))
+
+    sf_v <- as.numeric(feat_slope_fast)
+    vr_v <- as.numeric(feat_vol_ratio)
+    rs_v <- as.numeric(feat_rs_20)
+    bo_vol <- pmax(0, ifelse(is.na(sf_v), 0, sf_v)) *
+              pmax(0, ifelse(is.na(vr_v), 0, vr_v - 1.0)) *
+              pmax(0, ifelse(is.na(rs_v), 0, rs_v * 100))
+    bo_vol <- pmin(bo_vol, 10.0)
+    feat_breakout_vol <- xts(bo_vol, order.by = index(price))
+  }, error = function(e) NULL)
+  colnames(feat_pullback_up) <- "PullbackInUptrend"
+  colnames(feat_breakout_vol) <- "BreakoutWithVolume"
+
   # 7. Forward Target & Path-Dependent Triple-Barrier Label (Look-Ahead k Days)
   # Upper Profit Barrier: +1.5R (+3.0 * sigma_daily)
   # Lower Stop Barrier:   -1.0R (-2.0 * sigma_daily)
@@ -269,7 +373,7 @@ build_feature_dataset <- function(ohlcv,
       
       win_slice <- (t_idx + 1):(t_idx + look_ahead)
       hit_up <- which(hi_vec[win_slice] >= upper_bar)[1]
-      hit_dn <- which(lo_vec[win_slice] <= lower_bar)[1]
+      hit_dn <- which(cl_vec[win_slice] <= lower_bar)[1]
       
       if (!is.na(hit_up) && (is.na(hit_dn) || hit_up < hit_dn)) {
         tb_labels[t_idx] <- 1 # Hit +1.5R target before stop
@@ -284,7 +388,7 @@ build_feature_dataset <- function(ohlcv,
   target_tb <- xts(tb_labels, order.by = index(price))
   colnames(target_tb) <- "TargetBinary"
   
-  # 8. Merge all 19 predictor features (including MS-GARCH High-Vol Regime Probability)
+  # 8. Merge all 26 predictor features (including MS-GARCH & High-Alpha Microstructure/Squeeze Features)
   features_xts <- merge(
     SlopeFast          = feat_slope_fast,
     SlopeSlow          = feat_slope_slow,
@@ -304,13 +408,22 @@ build_feature_dataset <- function(ohlcv,
     RS_20              = feat_rs_20,
     ATRExt             = feat_atr_ext,
     SectorSpread       = feat_sector_spread,
-    AsymVolRatio       = feat_asym_vol
+    AsymVolRatio       = feat_asym_vol,
+    VolSqueeze         = feat_vol_squeeze,
+    SqueezeRelease     = feat_squeeze_rel,
+    CLV_5D             = feat_clv_5d,
+    IntradayVsGap_10D  = feat_intra_vs_gap,
+    PEAD_Catalyst      = feat_pead,
+    PullbackInUptrend  = feat_pullback_up,
+    BreakoutWithVolume = feat_breakout_vol
   )
   
   feature_names <- c("SlopeFast", "SlopeSlow", "SlopeWeeklyPct", "TrendQuality", "DistPct", 
                      "ZScore", "GARCH_Vol", "GARCH_Shock", "GARCH_VolPct", "MSGARCH_ProbHighVol",
                      "VolumeRatio", "OBV_Slope", "RSI_14", "MACD_Hist", "BB_PctB", "RS_20", 
-                     "ATRExt", "SectorSpread", "AsymVolRatio")
+                     "ATRExt", "SectorSpread", "AsymVolRatio",
+                     "VolSqueeze", "SqueezeRelease", "CLV_5D", "IntradayVsGap_10D",
+                     "PEAD_Catalyst", "PullbackInUptrend", "BreakoutWithVolume")
   
   # Clean warm-up NAs across features
   clean_feats_xts <- na.omit(features_xts)
@@ -360,7 +473,14 @@ build_feature_dataset <- function(ohlcv,
     RS_20              = as.numeric(clean_model_xts[, "RS_20"]),
     ATRExt             = as.numeric(clean_model_xts[, "ATRExt"]),
     SectorSpread       = as.numeric(clean_model_xts[, "SectorSpread"]),
-    AsymVolRatio       = as.numeric(clean_model_xts[, "AsymVolRatio"])
+    AsymVolRatio       = as.numeric(clean_model_xts[, "AsymVolRatio"]),
+    VolSqueeze         = as.numeric(clean_model_xts[, "VolSqueeze"]),
+    SqueezeRelease     = as.numeric(clean_model_xts[, "SqueezeRelease"]),
+    CLV_5D             = as.numeric(clean_model_xts[, "CLV_5D"]),
+    IntradayVsGap_10D  = as.numeric(clean_model_xts[, "IntradayVsGap_10D"]),
+    PEAD_Catalyst      = as.numeric(clean_model_xts[, "PEAD_Catalyst"]),
+    PullbackInUptrend  = as.numeric(clean_model_xts[, "PullbackInUptrend"]),
+    BreakoutWithVolume = as.numeric(clean_model_xts[, "BreakoutWithVolume"])
   )
   
   cat(sprintf("[Pipeline] Complete. Result: %d valid observation rows across %d features.\n",
