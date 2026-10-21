@@ -246,7 +246,7 @@ record_exit <- function(portfolio, symbol, exit_price, exit_date = as.character(
 sync_portfolio_with_market <- function(portfolio, current_prices, current_date = Sys.Date(), 
                                        is_friday = FALSE, model_scan_df = NULL, macro_bullish = TRUE,
                                        enable_circuit_breaker = TRUE,
-                                       circuit_breaker_threshold = -10.0) {
+                                       circuit_breaker_threshold = -12.0) {
   current_date <- as.Date(current_date)
   pos_list <- portfolio$positions
   

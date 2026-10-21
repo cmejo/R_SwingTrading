@@ -47,8 +47,8 @@ LEVERAGE         <- 1.5     # Default leverage multiplier: 1.5x (margin). Set 1.
 MAX_PER_SECTOR   <- 3       # Maximum concurrent positions allowed in any single sector
 MAX_HEAT         <- 0.08    # Max portfolio heat budget (0.08 = 8.0% total dollars at risk across stops)
 FORCE_REFRESH    <- FALSE   # Bypass cache and re-download latest market data
-CIRCUIT_BREAKER  <- TRUE    # Account Drawdown Circuit Breaker (-10.0% throttle)
-CIRCUIT_BREAKER_THRESH <- -10.0 # Circuit breaker threshold ceiling (default -10.0%)
+CIRCUIT_BREAKER  <- TRUE    # Account Drawdown Circuit Breaker (-12.0% throttle)
+CIRCUIT_BREAKER_THRESH <- -12.0 # Circuit breaker threshold ceiling (default -12.0%)
 RESET_PEAK_EQUITY <- FALSE  # Reset peak equity high-water mark to current balance
 PORTFOLIO_FILE   <- "portfolio.json"
 IS_FRIDAY        <- (format(Sys.Date(), "%u") == "5") # Friday weekend exit check
@@ -215,6 +215,40 @@ spy_ohlcv <- tryCatch({
 if (is.null(spy_ohlcv) && !is.null(qqq_ohlcv)) spy_ohlcv <- qqq_ohlcv
 spy_px <- if (!is.null(spy_ohlcv)) as.numeric(last(Cl(spy_ohlcv))) else 0
 
+# Gold (GLD) Trend Gate for Defensive Capital Rotation
+gld_ohlcv <- tryCatch(load_stock_data("GLD", force_refresh = FORCE_REFRESH), error = function(e) NULL)
+gld_info <- if (!is.null(gld_ohlcv)) {
+  tryCatch({
+    gld_price <- Cl(gld_ohlcv)
+    gld_lm <- lmMA(gld_price, n = 50)
+    latest_gld_close <- as.numeric(last(gld_price))
+    latest_gld_fit   <- as.numeric(last(gld_lm$fit))
+    latest_gld_slope <- as.numeric(last(gld_lm$slope))
+    is_bullish <- (latest_gld_close >= latest_gld_fit) && (latest_gld_slope >= 0)
+    list(
+      close = latest_gld_close,
+      fit = latest_gld_fit,
+      slope = latest_gld_slope,
+      is_bullish = is_bullish,
+      regime = if (is_bullish) "BULLISH (Uptrend)" else "BEARISH (Downtrend)"
+    )
+  }, error = function(e) {
+    list(close = 0, fit = 0, slope = 0, is_bullish = FALSE, regime = "UNKNOWN")
+  })
+} else {
+  list(close = 0, fit = 0, slope = 0, is_bullish = FALSE, regime = "FETCH_FAILED")
+}
+
+# Defensive Inverse & Cash Anchor Quotes
+fngd_ohlcv <- tryCatch(load_stock_data("FNGD", force_refresh = FORCE_REFRESH), error = function(e) NULL)
+fngd_px <- if (!is.null(fngd_ohlcv)) as.numeric(last(Cl(fngd_ohlcv))) else 0
+
+sqqq_ohlcv <- tryCatch(load_stock_data("SQQQ", force_refresh = FORCE_REFRESH), error = function(e) NULL)
+sqqq_px <- if (!is.null(sqqq_ohlcv)) as.numeric(last(Cl(sqqq_ohlcv))) else 0
+
+sgov_ohlcv <- tryCatch(load_stock_data("SGOV", force_refresh = FORCE_REFRESH), error = function(e) NULL)
+sgov_px <- if (!is.null(sgov_ohlcv)) as.numeric(last(Cl(sgov_ohlcv))) else 0
+
 # Dynamic CBOE VIX Volatility Regime & MS-GARCH Two-Regime Macro Gate
 vix_info <- tryCatch({
   vix_ohlcv <- load_stock_data("^VIX", force_refresh = FORCE_REFRESH)
@@ -267,8 +301,10 @@ if (vix_info$close > 28 || spy_p_high_vol >= 0.80) {
 
 cat(sprintf(" [Macro Gate Status] %s | Volatility Regime: %s | MS-GARCH Market Regime: %s\n", 
             macro_info$regime, vix_info$regime, spy_regime_str))
-cat(sprintf("   QQQ Close: $%.2f | 50D lmMA Fit: $%.2f | Slope: %+.3f\n", 
-            macro_info$close, macro_info$fit, macro_info$slope))
+cat(sprintf("   QQQ Close: $%.2f | 50D lmMA Fit: $%.2f | Slope: %+.3f (%s)\n", 
+            macro_info$close, macro_info$fit, macro_info$slope, ifelse(macro_info$is_bullish, "Bullish", "Bearish")))
+cat(sprintf("   GLD Gold Close: $%.2f | 50D lmMA Fit: $%.2f | Slope: %+.3f (%s)\n",
+            gld_info$close, gld_info$fit, gld_info$slope, gld_info$regime))
 cat(sprintf("   SPY Benchmark Close: $%.2f | MS-GARCH Ann Vol: %.1f%% | P(High Vol Regime): %.1f%%\n",
             spy_px, spy_ann_vol * 100, spy_p_high_vol * 100))
 cat(sprintf("   CBOE VIX:  %.2f   | Volatility Regime: %s\n", vix_info$close, vix_info$regime))
@@ -688,7 +724,141 @@ if (isTRUE(IS_FRIDAY)) {
       }
     }
     
+    # ----------------------------------------------------------------------------------------
+    # Core-Satellite Cash Yield Allocation & Defensive Asset Deployment
+    # 1. Macro Bullish -> Park in QQQ
+    # 2. QQQ Bearish, Gold Bullish -> Park in GLD
+    # 3. Dual Bear -> 75% FNGD + 25% SQQQ with 15-Day Time Stop / -10% Max Loss -> SGOV
+    # ----------------------------------------------------------------------------------------
+    deploy_unallocated_cash <- function(unalloc_cash, port_state, macro_info, gld_info,
+                                        qqq_px, gld_px, fngd_px, sqqq_px, sgov_px,
+                                        allow_fractional = TRUE, total_account_val = 10000) {
+      if (unalloc_cash < 100) return(list(tickets = character(), port_state = port_state))
+      
+      cat("----------------------------------------------------------------------------------------\n")
+      cat("       CORE-SATELLITE CASH ALLOCATION & DEFENSIVE ASSET DEPLOYMENT\n")
+      cat("----------------------------------------------------------------------------------------\n")
+      cat(sprintf(" Unallocated Cash:       $%.2f (%.1f%% of available capital)\n", 
+                  unalloc_cash, unalloc_cash / max(1, total_account_val) * 100))
+      
+      tickets <- character()
+      today_str <- as.character(Sys.Date())
+      
+      if (isTRUE(macro_info$is_bullish)) {
+        cat(sprintf(" Macro Gate Status:      %s (QQQ 50-day Trend is BULLISH)\n", macro_info$regime))
+        port_state$hedge_state <- list(regime = "QQQ_BULL", entry_date = today_str, days_held = 0L, rotated_to_sgov = FALSE, rotation_reason = "")
+        
+        qqq_shs <- if (isTRUE(allow_fractional)) round(unalloc_cash / qqq_px, 3) else floor(unalloc_cash / qqq_px)
+        if (qqq_shs > 0) {
+          cat(sprintf(" Actionable Ticket:      BUY %s shares of QQQ @ ~$%.2f ($%.2f outlay)\n",
+                      ifelse(isTRUE(allow_fractional), sprintf("%.3f", qqq_shs), sprintf("%d", as.integer(qqq_shs))),
+                      qqq_px, round(qqq_shs * qqq_px, 2)))
+          cat(" Strategy Purpose:       Park idle cash in QQQ to capture market momentum and eliminate 0% cash drag.\n")
+          cat("                         Automatically trimmed/liquidated when high-probability swing setups qualify.\n")
+          tickets <- c(tickets, sprintf("BUY %s shares of QQQ @ ~$%.2f", qqq_shs, qqq_px))
+        }
+      } else if (isTRUE(gld_info$is_bullish)) {
+        cat(sprintf(" Macro Gate Status:      %s | Gold Trend: BULLISH (GLD >= 50D lmMA)\n", macro_info$regime))
+        port_state$hedge_state <- list(regime = "GLD_BULL", entry_date = today_str, days_held = 0L, rotated_to_sgov = FALSE, rotation_reason = "")
+        
+        gld_px_val <- if (gld_px > 0) gld_px else gld_info$close
+        gld_shs <- if (isTRUE(allow_fractional)) round(unalloc_cash / gld_px_val, 3) else floor(unalloc_cash / gld_px_val)
+        if (gld_shs > 0) {
+          cat(sprintf(" Actionable Ticket:      BUY %s shares of GLD @ ~$%.2f ($%.2f outlay)\n",
+                      ifelse(isTRUE(allow_fractional), sprintf("%.3f", gld_shs), sprintf("%d", as.integer(gld_shs))),
+                      gld_px_val, round(gld_shs * gld_px_val, 2)))
+          cat(" Strategy Purpose:       QQQ is in a trend deficit, but Gold is in a bull trend. Park cash in GLD.\n")
+          cat("                         Captures non-correlated gold alpha while preserving purchasing power.\n")
+          tickets <- c(tickets, sprintf("BUY %s shares of GLD @ ~$%.2f", gld_shs, gld_px_val))
+        }
+      } else {
+        # DUAL BEAR REGIME: Both QQQ & GLD are Bearish
+        cat(sprintf(" Macro Gate Status:      %s | Gold Trend: %s (DUAL BEAR ACTIVE)\n", 
+                    macro_info$regime, gld_info$regime))
+        
+        h_state <- port_state$hedge_state
+        if (is.null(h_state) || is.null(h_state$regime) || h_state$regime != "DUAL_BEAR_HEDGE") {
+          h_state <- list(
+            regime = "DUAL_BEAR_HEDGE",
+            entry_date = today_str,
+            days_held = 1L,
+            entry_fngd_px = fngd_px,
+            entry_sqqq_px = sqqq_px,
+            peak_ratio = 1.0,
+            rotated_to_sgov = FALSE,
+            rotation_reason = ""
+          )
+        } else {
+          ent_dt <- tryCatch(as.Date(h_state$entry_date), error = function(e) Sys.Date())
+          cur_dt <- Sys.Date()
+          if (cur_dt > ent_dt) {
+            all_d <- seq(ent_dt + 1, cur_dt, by = "day")
+            bus_days <- sum(!weekdays(all_d) %in% c("Saturday", "Sunday"))
+            h_state$days_held <- max(1L, as.integer(bus_days))
+          }
+          
+          r_fngd <- if (!is.null(h_state$entry_fngd_px) && h_state$entry_fngd_px > 0 && fngd_px > 0) (fngd_px / h_state$entry_fngd_px) - 1 else 0
+          r_sqqq <- if (!is.null(h_state$entry_sqqq_px) && h_state$entry_sqqq_px > 0 && sqqq_px > 0) (sqqq_px / h_state$entry_sqqq_px) - 1 else 0
+          hedge_cum_pnl <- (0.75 * r_fngd) + (0.25 * r_sqqq)
+          
+          cur_ratio <- 1.0 + hedge_cum_pnl
+          prev_peak <- if (!is.null(h_state$peak_ratio)) as.numeric(h_state$peak_ratio) else 1.0
+          h_state$peak_ratio <- max(prev_peak, cur_ratio)
+          
+          # Safety Stops: 15-Day Time Stop OR -10.0% Max Loss Stop
+          if (h_state$days_held > 15) {
+            h_state$rotated_to_sgov <- TRUE
+            h_state$rotation_reason <- sprintf("15-Day Time Stop Reached (%d trading days held)", h_state$days_held)
+          } else if (hedge_cum_pnl <= -0.10) {
+            h_state$rotated_to_sgov <- TRUE
+            h_state$rotation_reason <- sprintf("-10.0%% Max Loss Triggered (Cumulative P&L: %+.1f%%)", hedge_cum_pnl * 100)
+          }
+        }
+        
+        port_state$hedge_state <- h_state
+        
+        if (isTRUE(h_state$rotated_to_sgov)) {
+          sgov_px_val <- if (sgov_px > 0) sgov_px else 100.0
+          sgov_shs <- if (isTRUE(allow_fractional)) round(unalloc_cash / sgov_px_val, 3) else floor(unalloc_cash / sgov_px_val)
+          cat(sprintf(" 🛡️  HEDGE DEFENSE TRIGGERED: %s\n", h_state$rotation_reason))
+          cat(sprintf(" Actionable Ticket:      BUY %s shares of SGOV @ ~$%.2f ($%.2f outlay)\n",
+                      ifelse(isTRUE(allow_fractional), sprintf("%.3f", sgov_shs), sprintf("%d", as.integer(sgov_shs))),
+                      sgov_px_val, round(sgov_shs * sgov_px_val, 2)))
+          cat(" Strategy Purpose:       Safety stop triggered. Rotates 100% of defensive cash into risk-free SGOV yield\n")
+          cat("                         to completely avoid late-stage bear market counter-trend squeezes and volatility decay.\n")
+          tickets <- c(tickets, sprintf("BUY %s shares of SGOV @ ~$%.2f", sgov_shs, sgov_px_val))
+        } else {
+          fngd_px_val <- if (fngd_px > 0) fngd_px else 10.0
+          sqqq_px_val <- if (sqqq_px > 0) sqqq_px else 10.0
+          
+          fngd_cash <- round(unalloc_cash * 0.75, 2)
+          sqqq_cash <- round(unalloc_cash * 0.25, 2)
+          fngd_shs  <- if (isTRUE(allow_fractional)) round(fngd_cash / fngd_px_val, 3) else floor(fngd_cash / fngd_px_val)
+          sqqq_shs  <- if (isTRUE(allow_fractional)) round(sqqq_cash / sqqq_px_val, 3) else floor(sqqq_cash / sqqq_px_val)
+          
+          cat(sprintf(" ⚔️  DUAL BEAR HEDGE ACTIVE: Day %d of 15 (75%% FNGD + 25%% SQQQ | -10%% Max Loss Protection)\n", h_state$days_held))
+          cat(sprintf(" Actionable Ticket:      BUY %s shares of FNGD @ ~$%.2f ($%.2f outlay)\n",
+                      ifelse(isTRUE(allow_fractional), sprintf("%.3f", fngd_shs), sprintf("%d", as.integer(fngd_shs))),
+                      fngd_px_val, round(fngd_shs * fngd_px_val, 2)))
+          cat(sprintf(" Actionable Ticket:      BUY %s shares of SQQQ @ ~$%.2f ($%.2f outlay)\n",
+                      ifelse(isTRUE(allow_fractional), sprintf("%.3f", sqqq_shs), sprintf("%d", as.integer(sqqq_shs))),
+                      sqqq_px_val, round(sqqq_shs * sqqq_px_val, 2)))
+          cat(" Strategy Purpose:       Captures explosive crash alpha during severe market selloffs.\n")
+          cat("                         Protected by automatic 15-day time stop and -10.0% max loss circuit into SGOV.\n")
+          tickets <- c(
+            tickets,
+            sprintf("BUY %s shares of FNGD @ ~$%.2f", fngd_shs, fngd_px_val),
+            sprintf("BUY %s shares of SQQQ @ ~$%.2f", sqqq_shs, sqqq_px_val)
+          )
+        }
+      }
+      
+      cat("----------------------------------------------------------------------------------------\n\n")
+      return(list(tickets = tickets, port_state = port_state))
+    }
+    
     n_actionable <- length(filtered_candidates)
+    alert_tickets <- character()
     
     if (n_actionable > 0) {
       candidate_syms <- filtered_candidates
@@ -842,27 +1012,26 @@ if (isTRUE(IS_FRIDAY)) {
         shs * actionable_df$Close[actionable_df$Symbol == candidate_syms[idx]]
       }))
       
-      # Core-Satellite Cash Yield Allocation (Park surplus unallocated cash in QQQ)
+
+      
       unalloc_cash <- max(0, cash_available - total_swing_outlay)
       if (unalloc_cash >= 100) {
-        qqq_px <- macro_info$close
-        qqq_shs <- if (isTRUE(ALLOW_FRACTIONAL)) round(unalloc_cash / qqq_px, 3) else floor(unalloc_cash / qqq_px)
-        
-        cat("----------------------------------------------------------------------------------------\n")
-        cat("          CORE-SATELLITE CASH YIELD DEPLOYMENT (PARK UNALLOCATED CASH IN QQQ)\n")
-        cat("----------------------------------------------------------------------------------------\n")
-        cat(sprintf(" Unallocated Cash:       $%.2f (%.1f%% of available capital)\n", unalloc_cash, unalloc_cash / max(1, sync_res$total_account_value) * 100))
-        cat(sprintf(" Macro Gate Status:      %s (QQQ 50-day Trend is %s)\n", macro_info$regime, ifelse(macro_info$is_bullish, "BULLISH", "BEARISH")))
-        if (isTRUE(macro_info$is_bullish)) {
-          cat(sprintf(" Actionable Ticket:      BUY %s shares of QQQ @ ~$%.2f ($%.2f outlay)\n", 
-                      ifelse(isTRUE(ALLOW_FRACTIONAL), sprintf("%.3f", qqq_shs), sprintf("%d", as.integer(qqq_shs))),
-                      qqq_px, round(qqq_shs * qqq_px, 2)))
-          cat(" Strategy Purpose:       Eliminates 0% cash drag. Surplus cash is held in QQQ to capture market yield,\n")
-          cat("                         and will be automatically liquidated to fund fresh high-probability swing setups.\n")
-        } else {
-          cat(" Strategy Purpose:       Macro regime is defensive. Keep $%.2f in 0% Cash or SGOV short-term yield.\n", unalloc_cash)
-        }
-        cat("----------------------------------------------------------------------------------------\n\n")
+        cash_plan <- deploy_unallocated_cash(
+          unalloc_cash = unalloc_cash,
+          port_state = port_state,
+          macro_info = macro_info,
+          gld_info = gld_info,
+          qqq_px = macro_info$close,
+          gld_px = gld_info$close,
+          fngd_px = fngd_px,
+          sqqq_px = sqqq_px,
+          sgov_px = sgov_px,
+          allow_fractional = ALLOW_FRACTIONAL,
+          total_account_val = sync_res$total_account_value
+        )
+        port_state <- cash_plan$port_state
+        save_portfolio(port_state, PORTFOLIO_FILE)
+        alert_tickets <- c(alert_tickets, cash_plan$tickets)
       }
       
       # Dispatch Mobile Webhook Alert
@@ -879,24 +1048,33 @@ if (isTRUE(IS_FRIDAY)) {
       cat(sprintf(" No unowned symbols currently meet all BUY criteria (P(Up) >= %.1f%%, Weekly Bullish, RS Leader, Sector Cap).\n",
                   EFFECTIVE_P_LONG * 100))
       
-      # When 0 swing setups qualify, park 100% idle cash into QQQ if Macro Gate is Bullish
+      # When 0 swing setups qualify, deploy 100% idle cash into dynamic cash / hedge engine
       if (cash_available >= 100) {
-        qqq_px <- macro_info$close
-        qqq_shs <- if (isTRUE(ALLOW_FRACTIONAL)) round(cash_available / qqq_px, 3) else floor(cash_available / qqq_px)
-        cat("\n----------------------------------------------------------------------------------------\n")
-        cat("          CORE-SATELLITE CASH YIELD DEPLOYMENT (PARK UNALLOCATED CASH IN QQQ)\n")
-        cat("----------------------------------------------------------------------------------------\n")
-        cat(sprintf(" Unallocated Cash:       $%.2f (100%% of available capital)\n", cash_available))
-        cat(sprintf(" Macro Gate Status:      %s (QQQ 50-day Trend is %s)\n", macro_info$regime, ifelse(macro_info$is_bullish, "BULLISH", "BEARISH")))
-        if (isTRUE(macro_info$is_bullish)) {
-          cat(sprintf(" Actionable Ticket:      BUY %s shares of QQQ @ ~$%.2f ($%.2f outlay)\n", 
-                      ifelse(isTRUE(ALLOW_FRACTIONAL), sprintf("%.3f", qqq_shs), sprintf("%d", as.integer(qqq_shs))),
-                      qqq_px, round(qqq_shs * qqq_px, 2)))
-          cat(" Strategy Purpose:       Zero swing setups today. Park cash in QQQ to capture market momentum.\n")
-        } else {
-          cat(sprintf(" Strategy Purpose:       Market risk-off. Retain $%.2f in 0%% Cash / SGOV.\n", cash_available))
+        cash_plan <- deploy_unallocated_cash(
+          unalloc_cash = cash_available,
+          port_state = port_state,
+          macro_info = macro_info,
+          gld_info = gld_info,
+          qqq_px = macro_info$close,
+          gld_px = gld_info$close,
+          fngd_px = fngd_px,
+          sqqq_px = sqqq_px,
+          sgov_px = sgov_px,
+          allow_fractional = ALLOW_FRACTIONAL,
+          total_account_val = sync_res$total_account_value
+        )
+        port_state <- cash_plan$port_state
+        save_portfolio(port_state, PORTFOLIO_FILE)
+        if (length(cash_plan$tickets) > 0) {
+          alert_tickets <- c(alert_tickets, cash_plan$tickets)
+          alert_body <- paste(
+            c(sprintf("Macro Gate: %s | VIX: %.2f | Open Slots: %d\n", macro_info$regime, vix_info$close, empty_slots),
+              "Actionable Cash & Hedge Tickets:",
+              alert_tickets),
+            collapse = "\n"
+          )
+          broadcast_alert(title = "🛡️ Defensive Cash / Hedge Deployment", body = alert_body, level = "INFO")
         }
-        cat("----------------------------------------------------------------------------------------\n\n")
       }
     }
   } else {

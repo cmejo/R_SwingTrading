@@ -85,23 +85,21 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
             "estimated_outlay": outlay
         })
 
-    # Match Core-Satellite QQQ Cash Yield ticket
-    qqq_match = re.search(
-        r"CORE-SATELLITE CASH YIELD DEPLOYMENT.*?Actionable Ticket:\s+BUY\s+([\d\.]+)\s+shares of QQQ @ ~\$([\d\.]+)\s+\(\$([\d\.]+)\s+outlay\)",
-        content,
-        re.DOTALL
+    # Match Core-Satellite Cash Yield & Defensive Hedge tickets (QQQ, GLD, FNGD, SQQQ, SGOV)
+    cash_park_matches = re.findall(
+        r"Actionable Ticket:\s+BUY\s+([\d\.]+)\s+shares of ([A-Za-z0-9\.\-]+) @ ~\$([\d\.]+)\s+\(\$([\d\.]+)\s+outlay\)",
+        content
     )
-    if qqq_match:
-        qqq_shs = float(qqq_match.group(1))
-        qqq_px = float(qqq_match.group(2))
-        qqq_outlay = float(qqq_match.group(3))
-        if qqq_shs >= 1.0:
+    for shs_str, sym, px_str, outlay_str in cash_park_matches:
+        shs = float(shs_str)
+        outlay = float(outlay_str)
+        if shs >= 1.0 or (shs > 0 and "." in shs_str):
             tickets.append({
                 "rank": 99,
                 "action": "BUY",
-                "symbol": "QQQ",
-                "shares": qqq_shs,
-                "sector": "Index_ETF",
+                "symbol": sym.upper(),
+                "shares": shs,
+                "sector": "Cash_Hedge_ETF",
                 "p_up": 0.99,
                 "is_cash_park": True,
                 "stop_loss": 0.0,
@@ -109,7 +107,7 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
                 "tier1_target": 0.0,
                 "tier2_shares": 0.0,
                 "tier2_target": 0.0,
-                "estimated_outlay": qqq_outlay
+                "estimated_outlay": outlay
             })
 
     # =========================================================================
