@@ -146,7 +146,7 @@ Rscript daily_signal.R \
 
 # Step 2: Check for Actionable Buy & Sell Tickets
 N_BUYS=$(grep -c -E "(Action: *BUY [0-9]|Actionable Ticket: *BUY [0-9])" "$LATEST_TICKET" || true)
-N_SELLS=$(grep -c -E "(\[STOP-LOSS HIT\]|\[TIER 1 HIT\]|\[TIER 2 HIT\]|\[TIME EXIT\]|\[DEFENSIVE WEEKEND EXIT\])" "$LATEST_TICKET" || true)
+N_SELLS=$(grep -c -E "(\[STOP-LOSS HIT\]|\[TIER 1 HIT\]|\[TIER 2 HIT\]|\[TIME EXIT\]|\[DEFENSIVE WEEKEND EXIT\]|Actionable Ticket: *SELL [0-9])" "$LATEST_TICKET" || true)
 N_ACTIONABLE=$((N_BUYS + N_SELLS))
 MACRO_GATE=$(grep -m 1 "Macro Gate:" "$LATEST_TICKET" | sed 's/.*Macro Gate: \([^ |]*\).*/\1/' || echo "Active")
 

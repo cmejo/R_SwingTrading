@@ -53,11 +53,11 @@ build_feature_dataset <- function(ohlcv,
   cat(sprintf("[Pipeline] Engineering features with fast_n=%d, slow_n=%d, look_ahead=%d...\n",
               fast_n, slow_n, look_ahead))
   
-  # 1. Dual Linear Model Moving Averages (Fast & Slow)
+  # 1. Dual Linear Model Moving Averages (Fast & Slow) — Price-Normalized (%/day)
   dual_lm <- calculate_dual_lmMA(price, fast_n = fast_n, slow_n = slow_n)
   
-  feat_slope_fast <- dual_lm$fast_lm$slope
-  feat_slope_slow <- dual_lm$slow_lm$slope
+  feat_slope_fast <- (dual_lm$fast_lm$slope / (price + 1e-6)) * 100
+  feat_slope_slow <- (dual_lm$slow_lm$slope / (price + 1e-6)) * 100
   feat_rsq_fast   <- dual_lm$fast_lm$r.squared
   feat_dist_pct   <- dual_lm$dist_pct
   
@@ -240,11 +240,49 @@ build_feature_dataset <- function(ohlcv,
     r
   })
 
-  # 7. Forward Target: Return k periods into future
-  # (Price_{t+k} / Price_t - 1)
+  # 7. Forward Target & Path-Dependent Triple-Barrier Label (Look-Ahead k Days)
+  # Upper Profit Barrier: +1.5R (+3.0 * sigma_daily)
+  # Lower Stop Barrier:   -1.0R (-2.0 * sigma_daily)
+  # Vertical Time Barrier: k = look_ahead trading days
   fwd_price <- lag.xts(price, k = -look_ahead)
   target_ret <- (fwd_price - price) / price
   colnames(target_ret) <- "TargetRet"
+  
+  hi_vec <- tryCatch(as.numeric(Hi(ohlcv)), error = function(e) as.numeric(price))
+  lo_vec <- tryCatch(as.numeric(Lo(ohlcv)), error = function(e) as.numeric(price))
+  cl_vec <- as.numeric(price)
+  
+  # Align daily conditional volatility to price index
+  vol_aligned <- merge(price, feat_garch_vol)[, "GARCH_Vol"]
+  vol_vec <- as.numeric(vol_aligned) / sqrt(252)
+  vol_vec[is.na(vol_vec) | vol_vec < 0.005 | vol_vec > 0.15] <- 0.02
+  
+  tb_labels <- rep(NA_real_, n_rows)
+  if (n_rows > look_ahead) {
+    for (t_idx in 1:(n_rows - look_ahead)) {
+      p0  <- cl_vec[t_idx]
+      sig <- vol_vec[t_idx]
+      if (is.na(p0) || p0 <= 0) next
+      
+      upper_bar <- p0 * (1.0 + 3.0 * sig) # +1.5R Tier 1 Target
+      lower_bar <- p0 * (1.0 - 2.0 * sig) # -1.0R Stop-Loss
+      
+      win_slice <- (t_idx + 1):(t_idx + look_ahead)
+      hit_up <- which(hi_vec[win_slice] >= upper_bar)[1]
+      hit_dn <- which(lo_vec[win_slice] <= lower_bar)[1]
+      
+      if (!is.na(hit_up) && (is.na(hit_dn) || hit_up < hit_dn)) {
+        tb_labels[t_idx] <- 1 # Hit +1.5R target before stop
+      } else if (!is.na(hit_dn)) {
+        tb_labels[t_idx] <- 0 # Stopped out at -1.0R before target
+      } else {
+        # Neither barrier breached: evaluate vertical time barrier at t + look_ahead
+        tb_labels[t_idx] <- ifelse(cl_vec[t_idx + look_ahead] > p0, 1, 0)
+      }
+    }
+  }
+  target_tb <- xts(tb_labels, order.by = index(price))
+  colnames(target_tb) <- "TargetBinary"
   
   # 8. Merge all 19 predictor features (including MS-GARCH High-Vol Regime Probability)
   features_xts <- merge(
@@ -294,8 +332,8 @@ build_feature_dataset <- function(ohlcv,
   latest_prob_high_vol <- as.numeric(latest_feat_row[, "MSGARCH_ProbHighVol"])
   if (is.na(latest_prob_high_vol)) latest_prob_high_vol <- 0.5
   
-  # 9. Supervised learning target: align with forward returns
-  merged_with_target <- merge(target_ret, clean_feats_xts)
+  # 9. Supervised learning target: align with forward returns & triple-barrier label
+  merged_with_target <- merge(target_ret, target_tb, clean_feats_xts)
   clean_model_xts <- na.omit(merged_with_target)
   dates <- index(clean_model_xts)
   
@@ -303,7 +341,7 @@ build_feature_dataset <- function(ohlcv,
   df_model <- data.frame(
     Date               = dates,
     TargetRet          = as.numeric(clean_model_xts[, "TargetRet"]),
-    TargetBinary       = ifelse(as.numeric(clean_model_xts[, "TargetRet"]) > 0, 1, 0),
+    TargetBinary       = as.numeric(clean_model_xts[, "TargetBinary"]),
     SlopeFast          = as.numeric(clean_model_xts[, "SlopeFast"]),
     SlopeSlow          = as.numeric(clean_model_xts[, "SlopeSlow"]),
     SlopeWeeklyPct     = as.numeric(clean_model_xts[, "SlopeWeeklyPct"]),

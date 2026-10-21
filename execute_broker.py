@@ -85,7 +85,7 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
             "estimated_outlay": outlay
         })
 
-    # Match Core-Satellite Cash Yield & Defensive Hedge tickets (QQQ, GLD, FNGD, SQQQ, SGOV)
+    # Match Core-Satellite Cash Yield & Defensive Hedge BUY tickets (QQQ, GLD, FNGD, SQQQ, SGOV)
     cash_park_matches = re.findall(
         r"Actionable Ticket:\s+BUY\s+([\d\.]+)\s+shares of ([A-Za-z0-9\.\-]+) @ ~\$([\d\.]+)\s+\(\$([\d\.]+)\s+outlay\)",
         content
@@ -108,6 +108,31 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
                 "tier2_shares": 0.0,
                 "tier2_target": 0.0,
                 "estimated_outlay": outlay
+            })
+
+    # Match Core-Satellite Cash Yield & Defensive Hedge SELL liquidation tickets
+    cash_sell_matches = re.findall(
+        r"Actionable Ticket:\s+SELL\s+([\d\.]+)\s+shares of ([A-Za-z0-9\.\-]+) @ ~\$([\d\.]+)\s+\(([^\)]+)\)",
+        content
+    )
+    for shs_str, sym, px_str, reason_str in cash_sell_matches:
+        shs = float(shs_str)
+        if shs >= 1.0 or (shs > 0 and "." in shs_str):
+            tickets.append({
+                "rank": 0,
+                "action": "SELL",
+                "symbol": sym.upper(),
+                "shares": shs,
+                "reason": reason_str.strip().upper().replace(" ", "_"),
+                "sector": "Cash_Hedge_ETF",
+                "p_up": 0.0,
+                "is_cash_park": True,
+                "stop_loss": 0.0,
+                "tier1_shares": 0.0,
+                "tier1_target": 0.0,
+                "tier2_shares": 0.0,
+                "tier2_target": 0.0,
+                "estimated_outlay": 0.0
             })
 
     # =========================================================================
@@ -643,20 +668,48 @@ def sync_schwab(portfolio_file: str, dry_run: bool):
             except Exception:
                 pass
 
+        if "hedge_positions" not in port_data:
+            port_data["hedge_positions"] = []
+        pure_hedge_etfs = {"FNGD", "SQQQ", "SGOV", "GLD", "BIL"}
+
         positions = sec_acct.get("positions", [])
         active_symbols = set()
+        active_hedge_symbols = set()
         for p in positions:
             sym = p.get("instrument", {}).get("symbol", "")
             long_qty = float(p.get("longQuantity", 0))
             if sym and long_qty > 0:
-                active_symbols.add(sym)
                 avg_px = float(p.get("averagePrice", 0))
+                t_match = ticket_lookup.get(sym)
+                is_hedge_pos = (
+                    sym.upper() in pure_hedge_etfs
+                    or (t_match and t_match.get("is_cash_park"))
+                    or any(hp.get("symbol") == sym for hp in port_data.get("hedge_positions", []))
+                )
+                if is_hedge_pos:
+                    active_hedge_symbols.add(sym)
+                    existing_h = [hp for hp in port_data["hedge_positions"] if hp.get("symbol") == sym]
+                    if existing_h:
+                        existing_h[0]["shares"] = long_qty
+                        existing_h[0]["cost_basis"] = round(long_qty * avg_px, 2)
+                    else:
+                        port_data["hedge_positions"].append({
+                            "symbol": sym,
+                            "shares": long_qty,
+                            "entry_price": avg_px,
+                            "entry_date": str(datetime.date.today()),
+                            "cost_basis": round(long_qty * avg_px, 2),
+                            "is_cash_park": True,
+                            "status": "OPEN"
+                        })
+                    continue
+
+                active_symbols.add(sym)
                 existing = [pos for pos in port_data["positions"] if pos["symbol"] == sym]
                 if existing:
                     existing[0]["shares"] = long_qty
                     existing[0]["cost_basis"] = round(long_qty * avg_px, 2)
                 else:
-                    t_match = ticket_lookup.get(sym)
                     # Dynamically anchor stop-loss and targets to actual Schwab fill price (avg_px)
                     risk_pct = 0.04
                     if t_match:
@@ -699,8 +752,9 @@ def sync_schwab(portfolio_file: str, dry_run: bool):
                         "status": "OPEN"
                     })
 
+        port_data["hedge_positions"] = [hp for hp in port_data.get("hedge_positions", []) if hp.get("symbol") in active_hedge_symbols]
         remaining = [pos for pos in port_data["positions"] if pos["symbol"] in active_symbols]
-        closed = [pos for pos in port_data["positions"] if pos["symbol"] not in active_symbols]
+        closed = [pos for pos in port_data["positions"] if pos["symbol"] not in active_symbols and pos["symbol"] not in active_hedge_symbols]
 
         recent_orders = []
         try:

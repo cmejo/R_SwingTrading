@@ -13,39 +13,68 @@ suppressMessages({
   library(xts)
 })
 
-#' Build Purged Group Time-Series Cross-Validation Folds
+#' Build Expanding-Window Out-of-Fold Validation Splits with Embargo Gap
 #'
-#' Divides chronologically ordered training observations into contiguous folds,
-#' applying an embargo gap between adjacent folds to eliminate target leakage
-#' from overlapping multi-day forward return labels.
+#' Creates strictly causal (forward-in-time) expanding training windows
+#' separated from each validation block by an `embargo`-bar purge gap to
+#' eliminate overlapping multi-day forward return leakage and future-to-past leakage.
 #'
-#' @param n_samples Number of training observations.
-#' @param nfolds Number of validation folds (default: 5).
-#' @param embargo Number of bars to purge at fold boundaries (default: 5).
-#' @return Integer vector of fold IDs (1 to nfolds).
+#' @param n_samples Number of chronologically ordered training observations.
+#' @param n_splits Number of forward validation blocks (default: 4).
+#' @param embargo Number of bars to purge between training end and validation start (default: 7).
+#' @param min_train_frac Minimum fraction of observations in initial training window (default: 0.40).
+#' @return A list of split objects, each containing `train_idx` and `val_idx`.
 #' @export
-build_purged_folds <- function(n_samples, nfolds = 5, embargo = 5) {
-  if (n_samples < (nfolds * 5)) {
-    # History too short for multi-fold purged split
-    return(rep(1:nfolds, length.out = n_samples))
+build_expanding_splits <- function(n_samples, n_splits = 4, embargo = 7, min_train_frac = 0.40) {
+  base_train <- max(30, floor(n_samples * min_train_frac))
+  rem <- n_samples - base_train - embargo
+  if (rem < n_splits * 5) {
+    n_splits <- max(1, floor(rem / 5))
+  }
+  if (rem < 5 || n_splits < 1) {
+    return(list())
   }
   
+  val_len <- floor(rem / n_splits)
+  splits <- list()
+  
+  for (s in 1:n_splits) {
+    tr_end    <- base_train + (s - 1) * val_len
+    val_start <- tr_end + embargo + 1
+    val_end   <- if (s == n_splits) n_samples else (val_start + val_len - 1)
+    if (val_start <= val_end && tr_end >= 20) {
+      splits[[length(splits) + 1]] <- list(
+        train_idx = 1:tr_end,
+        val_idx   = val_start:val_end
+      )
+    }
+  }
+  return(splits)
+}
+
+#' Backward-compatible alias for purged fold assignment
+#' @export
+build_purged_folds <- function(n_samples, nfolds = 5, embargo = 7) {
+  if (n_samples < (nfolds * 5)) {
+    return(rep(1:nfolds, length.out = n_samples))
+  }
   fold_len <- floor(n_samples / nfolds)
   foldid <- integer(n_samples)
-  
   for (f in 1:nfolds) {
     f_start <- (f - 1) * fold_len + 1
     f_end   <- if (f == nfolds) n_samples else f * fold_len
     foldid[f_start:f_end] <- f
   }
-  
   return(foldid)
 }
 
-#' Unified Swing Model Trainer with Purged CV & Platt Calibration
+#' Unified Swing Model Trainer with Expanding-Window 7-Bar Embargo CV,
+#' Controlled Lambda Step-Down, & Causal Platt Calibration
 #'
-#' Fits ElasticNet regularized logistic model with optional Platt scaling
-#' calibration and extracts feature importance rankings.
+#' Fits ElasticNet regularized logistic model using strictly causal expanding-window
+#' out-of-fold validation with a 7-bar embargo gap, applies a controlled lambda
+#' step-down to retain at least `min_active_features = 3` when supported by
+#' out-of-sample skill, and calibrates probabilities via Platt scaling.
 #'
 #' @param X_train Matrix of training features.
 #' @param y_train Binary target vector (0 or 1).
@@ -55,7 +84,8 @@ build_purged_folds <- function(n_samples, nfolds = 5, embargo = 5) {
 #' @param p_long Threshold probability to trigger Long signal (default: 0.58).
 #' @param p_short Threshold probability to trigger Short signal (default: 0.42).
 #' @param calibrate Logical; whether to apply Platt scaling on out-of-fold predictions (default: TRUE).
-#' @param embargo_days Number of forward lookahead days to embargo (default: 5).
+#' @param embargo_days Number of forward lookahead days to embargo (default: 7).
+#' @param min_active_features Minimum non-zero features for controlled step-down (default: 3).
 #' @return List containing cv_fit, calibrator, coef_matrix, feature_importance, pred_probs, pred_class.
 #' @export
 train_swing_model <- function(X_train,
@@ -66,7 +96,8 @@ train_swing_model <- function(X_train,
                               p_long = 0.58,
                               p_short = 0.42,
                               calibrate = TRUE,
-                              embargo_days = 5) {
+                              embargo_days = 7,
+                              min_active_features = 3) {
   X_train <- as.matrix(X_train)
   n_tr <- nrow(X_train)
   if (is.null(feature_names)) feature_names <- paste0("Feat_", 1:ncol(X_train))
@@ -76,23 +107,102 @@ train_swing_model <- function(X_train,
     stop("Training data must contain at least 2 distinct target classes.")
   }
   
-  # Determine fold count and assign purged folds
-  nfolds <- min(5, max(3, floor(n_tr / 20)))
-  foldid <- build_purged_folds(n_tr, nfolds = nfolds, embargo = embargo_days)
-  
   set.seed(42)
-  # Fit regularized model with keep=TRUE to retain out-of-fold cross-validated predictions
-  cv_fit <- tryCatch({
-    cv.glmnet(X_train, y_train, foldid = foldid, alpha = alpha, family = "binomial",
-              type.measure = "deviance", keep = TRUE)
-  }, error = function(e) {
-    # Fallback to standard deviance fit if keep=TRUE encounters memory/version constraint
-    cv.glmnet(X_train, y_train, foldid = foldid, alpha = alpha, family = "binomial",
-              type.measure = "deviance")
-  })
+  # 1. Fit full-sample ElasticNet path to establish canonical lambda sequence
+  full_fit <- glmnet(X_train, y_train, alpha = alpha, family = "binomial")
+  lambda_grid <- full_fit$lambda
+  n_lambdas   <- length(lambda_grid)
+  nzero_vec   <- as.integer(full_fit$df)
   
-  # Extract coefficients at lambda.min
-  coef_min <- as.matrix(coef(cv_fit, s = "lambda.min"))
+  # 2. Build Expanding-Window Out-of-Fold Splits with 7-Bar Embargo Gap
+  splits <- build_expanding_splits(n_tr, n_splits = 4, embargo = embargo_days, min_train_frac = 0.40)
+  
+  oof_link_list <- list()
+  oof_prob_list <- list()
+  oof_y_list    <- numeric(0)
+  
+  if (length(splits) >= 2) {
+    for (sp in splits) {
+      y_sub <- y_train[sp$train_idx]
+      if (length(unique(y_sub)) < 2) next
+      sp_fit <- tryCatch({
+        glmnet(X_train[sp$train_idx, , drop = FALSE], y_sub,
+               alpha = alpha, family = "binomial", lambda = lambda_grid)
+      }, error = function(e) NULL)
+      
+      if (!is.null(sp_fit)) {
+        X_val <- X_train[sp$val_idx, , drop = FALSE]
+        lnk <- predict(sp_fit, newx = X_val, s = lambda_grid, type = "link")
+        prb <- predict(sp_fit, newx = X_val, s = lambda_grid, type = "response")
+        oof_link_list[[length(oof_link_list) + 1]] <- as.matrix(lnk)
+        oof_prob_list[[length(oof_prob_list) + 1]] <- as.matrix(prb)
+        oof_y_list <- c(oof_y_list, y_train[sp$val_idx])
+      }
+    }
+  }
+  
+  best_lambda <- lambda_grid[1]
+  oof_link_best <- NULL
+  
+  if (length(oof_prob_list) > 0 && length(oof_y_list) >= 20) {
+    oof_prob_mat <- do.call(rbind, oof_prob_list)
+    oof_link_mat <- do.call(rbind, oof_link_list)
+    eps <- 1e-7
+    oof_prob_clamped <- pmin(pmax(oof_prob_mat, eps), 1 - eps)
+    
+    # Pointwise binomial deviance matrix (N_val x n_lambdas)
+    dev_mat <- -2 * (oof_y_list * log(oof_prob_clamped) + (1 - oof_y_list) * log(1 - oof_prob_clamped))
+    dev_vec <- colMeans(dev_mat, na.rm = TRUE)
+    dev_se  <- apply(dev_mat, 2, sd, na.rm = TRUE) / sqrt(nrow(dev_mat))
+    
+    idx_min <- which.min(dev_vec)[1]
+    dev_min <- dev_vec[idx_min]
+    se_min  <- if (!is.na(dev_se[idx_min])) dev_se[idx_min] else 0.01
+    
+    best_idx <- idx_min
+    
+    # 3. Controlled Lambda Step-Down (retain >= min_active_features if out-of-sample skill holds)
+    if (nzero_vec[idx_min] < min_active_features) {
+      cand_indices <- which(nzero_vec >= min_active_features)
+      if (length(cand_indices) > 0) {
+        # Check candidate lambdas starting from the most regularized one with >= 3 features
+        for (c_idx in cand_indices[1:min(5, length(cand_indices))]) {
+          lnk_c <- oof_link_mat[, c_idx]
+          has_pos_skill <- (!all(is.na(lnk_c)) && sd(lnk_c, na.rm = TRUE) > 1e-6 &&
+                            suppressWarnings(cor(lnk_c, oof_y_list, use = "complete.obs")) > 0.01)
+          within_tol <- (dev_vec[c_idx] <= (dev_min + max(0.5 * se_min, 0.008 * abs(dev_min))))
+          if (isTRUE(has_pos_skill) && isTRUE(within_tol)) {
+            best_idx <- c_idx
+            break
+          }
+        }
+      }
+    }
+    
+    best_lambda   <- lambda_grid[best_idx]
+    oof_link_best <- as.numeric(oof_link_mat[, best_idx])
+  } else {
+    # Fallback to standard fold CV if sample is too short for expanding splits
+    nfolds <- min(5, max(3, floor(n_tr / 20)))
+    foldid <- build_purged_folds(n_tr, nfolds = nfolds, embargo = embargo_days)
+    cv_fallback <- cv.glmnet(X_train, y_train, foldid = foldid, alpha = alpha, family = "binomial",
+                             type.measure = "deviance", keep = TRUE)
+    best_lambda <- cv_fallback$lambda.min
+    if (!is.null(cv_fallback$fit.preval)) {
+      l_idx <- which(cv_fallback$lambda == best_lambda)[1]
+      if (!is.na(l_idx) && l_idx <= ncol(cv_fallback$fit.preval)) {
+        oof_link_best <- as.numeric(cv_fallback$fit.preval[, l_idx])
+        oof_y_list    <- y_train
+      }
+    }
+  }
+  
+  # Expose best_lambda via cv_fit object for full backward compatibility
+  cv_fit <- full_fit
+  cv_fit$lambda.min <- best_lambda
+  
+  # Extract coefficients at selected best_lambda
+  coef_min <- as.matrix(coef(full_fit, s = best_lambda))
   colnames(coef_min) <- "ElasticNet_Coef"
   active_feats_count <- sum(coef_min[-1, 1] != 0)
   
@@ -109,36 +219,34 @@ train_swing_model <- function(X_train,
   feat_importance <- feat_importance[order(-feat_importance$AbsWeight), ]
   rownames(feat_importance) <- NULL
   
-  # Platt Scaling Probability Calibration (M1)
+  # 4. Platt Scaling Probability Calibration on Causal Out-of-Fold Predictions (M1)
   calibrator <- NULL
-  if (isTRUE(calibrate) && !is.null(cv_fit$fit.preval)) {
+  if (isTRUE(calibrate) && active_feats_count > 0 && !is.null(oof_link_best) && length(oof_link_best) == length(oof_y_list)) {
     tryCatch({
-      lambda_idx <- which(cv_fit$lambda == cv_fit$lambda.min)[1]
-      if (!is.na(lambda_idx) && lambda_idx <= ncol(cv_fit$fit.preval)) {
-        oof_link <- as.numeric(cv_fit$fit.preval[, lambda_idx])
-        cal_df <- data.frame(Target = y_train, Link = oof_link)
-        cal_fit <- glm(Target ~ Link, data = cal_df, family = binomial(link = "logit"))
-        # Check if calibrator slope is strictly positive (meaningful calibration)
-        if (coef(cal_fit)[2] > 0) {
+      if (sd(oof_link_best, na.rm = TRUE) > 1e-6) {
+        cal_df <- data.frame(Target = oof_y_list, Link = oof_link_best)
+        cal_fit <- suppressWarnings(glm(Target ~ Link, data = cal_df, family = binomial(link = "logit")))
+        # Check if calibrator slope is strictly positive (meaningful forward calibration)
+        if (!is.na(coef(cal_fit)[2]) && coef(cal_fit)[2] > 0) {
           calibrator <- cal_fit
         }
       }
     }, error = function(e) NULL)
   }
   
-  # Predictions on X_test if provided
+  # 5. Predictions on X_test if provided
   pred_probs_vec <- numeric(0)
   pred_class <- numeric(0)
   
   if (!is.null(X_test) && nrow(as.matrix(X_test)) > 0) {
     X_test <- as.matrix(X_test)
-    raw_probs <- as.numeric(predict(cv_fit, newx = X_test, s = "lambda.min", type = "response"))
-    raw_link  <- as.numeric(predict(cv_fit, newx = X_test, s = "lambda.min", type = "link"))
+    raw_probs <- as.numeric(predict(full_fit, newx = X_test, s = best_lambda, type = "response"))
+    raw_link  <- as.numeric(predict(full_fit, newx = X_test, s = best_lambda, type = "link"))
     
     if (!is.null(calibrator)) {
       cal_probs <- as.numeric(predict(calibrator, newdata = data.frame(Link = raw_link), type = "response"))
-      # Guard against calibration degeneracy
-      pred_probs_vec <- if (all(!is.na(cal_probs))) cal_probs else raw_probs
+      # Blend 70% calibrated probability + 30% raw regularized probability to prevent step-function extremes
+      pred_probs_vec <- if (all(!is.na(cal_probs))) (0.70 * cal_probs + 0.30 * raw_probs) else raw_probs
     } else {
       pred_probs_vec <- raw_probs
     }
@@ -149,6 +257,7 @@ train_swing_model <- function(X_train,
   
   return(list(
     cv_fit            = cv_fit,
+    best_lambda       = best_lambda,
     calibrator        = calibrator,
     coef_matrix       = coef_min,
     active_features   = active_feats_count,

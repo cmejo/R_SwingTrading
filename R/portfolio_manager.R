@@ -22,12 +22,13 @@ load_portfolio <- function(path = "portfolio.json", default_capital = 10000, max
   if (file.exists(path)) {
     tryCatch({
       state <- jsonlite::fromJSON(path, simplifyDataFrame = FALSE)
-      # Ensure numeric types
-      state$total_capital  <- as.numeric(state$total_capital)
-      state$cash_balance   <- as.numeric(state$cash_balance)
-      state$max_positions  <- as.integer(state$max_positions)
-      state$peak_equity    <- if (!is.null(state$peak_equity)) as.numeric(state$peak_equity) else max(state$total_capital, state$cash_balance, default_capital)
+      # Ensure numeric types with safe fallbacks
+      state$total_capital  <- if (length(state$total_capital) > 0 && !is.na(state$total_capital)) as.numeric(state$total_capital) else default_capital
+      state$cash_balance   <- if (length(state$cash_balance) > 0 && !is.na(state$cash_balance)) as.numeric(state$cash_balance) else default_capital
+      state$max_positions  <- if (length(state$max_positions) > 0 && !is.na(state$max_positions)) as.integer(state$max_positions) else max_positions
+      state$peak_equity    <- if (length(state$peak_equity) > 0 && !is.na(state$peak_equity)) as.numeric(state$peak_equity) else max(state$total_capital, state$cash_balance, default_capital)
       if (is.null(state$positions)) state$positions <- list()
+      if (is.null(state$hedge_positions)) state$hedge_positions <- list()
       if (is.null(state$closed_trades)) state$closed_trades <- list()
       return(state)
     }, error = function(e) {
@@ -43,6 +44,7 @@ load_portfolio <- function(path = "portfolio.json", default_capital = 10000, max
     peak_equity = default_capital,
     last_updated = as.character(Sys.time()),
     positions = list(),
+    hedge_positions = list(),
     closed_trades = list()
   )
   save_portfolio(default_state, path)
@@ -248,6 +250,31 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
                                        enable_circuit_breaker = TRUE,
                                        circuit_breaker_threshold = -12.0) {
   current_date <- as.Date(current_date)
+  if (is.null(portfolio$hedge_positions)) portfolio$hedge_positions <- list()
+  
+  # Automatically segregate any Cash-Park / Defensive Hedge ETFs from active Swing Slots
+  pure_hedge_etfs <- c("FNGD", "SQQQ", "SGOV", "GLD", "BIL")
+  raw_pos_list <- portfolio$positions
+  swing_pos_list <- list()
+  hedge_pos_list <- portfolio$hedge_positions
+  
+  if (length(raw_pos_list) > 0) {
+    for (p in raw_pos_list) {
+      if (isTRUE(p$is_cash_park) || toupper(p$symbol) %in% pure_hedge_etfs) {
+        p$is_cash_park <- TRUE
+        existing_h <- which(sapply(hedge_pos_list, function(hp) toupper(hp$symbol) == toupper(p$symbol)))
+        if (length(existing_h) > 0) {
+          hedge_pos_list[[existing_h[1]]] <- p
+        } else {
+          hedge_pos_list[[length(hedge_pos_list) + 1]] <- p
+        }
+      } else {
+        swing_pos_list[[length(swing_pos_list) + 1]] <- p
+      }
+    }
+  }
+  portfolio$positions <- swing_pos_list
+  portfolio$hedge_positions <- hedge_pos_list
   pos_list <- portfolio$positions
   
   pos_df <- data.frame(
@@ -424,7 +451,45 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
     }
   }
   
-  total_account_value <- round(portfolio$cash_balance + total_invested, 2)
+  # Value Cash-Park / Defensive Hedge Holdings (do NOT consume active swing slots)
+  hedge_df <- data.frame(
+    Symbol = character(),
+    Shares = numeric(),
+    Entry_Price = numeric(),
+    Current_Price = numeric(),
+    Market_Value = numeric(),
+    Unrealized_PnL = numeric(),
+    Return_Pct = character(),
+    stringsAsFactors = FALSE
+  )
+  hedge_invested <- 0
+  if (length(portfolio$hedge_positions) > 0) {
+    for (hi in seq_along(portfolio$hedge_positions)) {
+      hp <- portfolio$hedge_positions[[hi]]
+      hsym <- toupper(hp$symbol)
+      hshs <- as.numeric(hp$shares)
+      if (is.na(hshs) || hshs <= 0) next
+      hent <- if (!is.null(hp$entry_price)) as.numeric(hp$entry_price) else 0
+      hcp  <- if (!is.na(current_prices[hsym]) && current_prices[hsym] > 0) as.numeric(current_prices[hsym]) else hent
+      hmv  <- round(hshs * hcp, 2)
+      hcost <- if (!is.null(hp$cost_basis)) as.numeric(hp$cost_basis) else round(hshs * hent, 2)
+      hpnl <- round(hmv - hcost, 2)
+      hpct <- if (hent > 0) (hcp / hent - 1) * 100 else 0
+      hedge_invested <- hedge_invested + hmv
+      hedge_df <- rbind(hedge_df, data.frame(
+        Symbol = hsym,
+        Shares = hshs,
+        Entry_Price = hent,
+        Current_Price = hcp,
+        Market_Value = hmv,
+        Unrealized_PnL = hpnl,
+        Return_Pct = sprintf("%+.2f%%", hpct),
+        stringsAsFactors = FALSE
+      ))
+    }
+  }
+  
+  total_account_value <- round(portfolio$cash_balance + total_invested + hedge_invested, 2)
   peak_equity <- if (!is.null(portfolio$peak_equity)) max(as.numeric(portfolio$peak_equity), total_account_value) else total_account_value
   drawdown_pct <- round(((total_account_value - peak_equity) / max(1.0, peak_equity)) * 100, 2)
   circuit_breaker_active <- if (isTRUE(enable_circuit_breaker)) (drawdown_pct <= circuit_breaker_threshold) else FALSE
@@ -442,7 +507,9 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
   
   return(list(
     holdings_df            = pos_df,
+    hedge_df               = hedge_df,
     total_invested         = total_invested,
+    hedge_invested         = hedge_invested,
     cash_balance           = portfolio$cash_balance,
     total_account_value    = total_account_value,
     peak_equity            = peak_equity,
