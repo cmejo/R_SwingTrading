@@ -3,37 +3,37 @@
  MONTHLY STRATEGY HEALTH EVALUATION | SNDK (PAST 30 DAYS)
 ========================================================================
 
-[DataLoader] Loaded 421 bars for SNDK [2025-02-13 to 2026-10-16]
+[DataLoader] Loaded 425 bars for SNDK [2025-02-13 to 2026-10-22]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.002947, a1=0.0000, b1=0.4232 (pers=0.4232, unc_vol=113.5%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000458, a1=0.7697, b1=0.2279 (pers=0.9976, unc_vol=693.5%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9903, P(2->1)=0.0155 | Steady-State Low/High: 61.5% / 38.5%
-[Pipeline] Complete. Result: 367 valid observation rows across 19 features.
-[LogisticModel] Training set: 332 bars (2025-04-25 to 2026-08-20 | 5-day embargo applied)
-[LogisticModel] Testing set:  30 bars (2026-08-28 to 2026-10-09)
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.001922, a1=0.0001, b1=0.6405 (pers=0.6406, unc_vol=116.1%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000470, a1=0.7798, b1=0.2179 (pers=0.9977, unc_vol=714.6%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9901, P(2->1)=0.0157 | Steady-State Low/High: 61.4% / 38.6%
+[Pipeline] Complete. Result: 371 valid observation rows across 26 features.
+[LogisticModel] Training set: 336 bars (2025-04-25 to 2026-08-26 | 5-day embargo applied)
+[LogisticModel] Testing set:  30 bars (2026-09-03 to 2026-10-15)
 [LogisticModel] Fitting cv.glmnet with alpha=0.50 (ElasticNet + Purged CV)...
 ------------------------------------------------------------------------
- EVALUATION PERIOD: 2026-08-28 to 2026-10-09 (30 Trading Days)
+ EVALUATION PERIOD: 2026-09-03 to 2026-10-15 (30 Trading Days)
 ------------------------------------------------------------------------
                                Strategy Cumulative_Return Annualized_Return
- ML Swing Strategy (GARCH Vol-Targeted)            +7.29%           +84.30%
-                 Classic MA Trend Cross           +17.17%          +296.15%
-                     Buy & Hold (Close)            +6.52%           +73.15%
+ ML Swing Strategy (GARCH Vol-Targeted)            -9.52%           -58.09%
+                 Classic MA Trend Cross           +11.89%          +165.46%
+                     Buy & Hold (Close)           -10.30%           -61.11%
  Annualized_Vol Sharpe_Ratio Sortino_Ratio Max_Drawdown Calmar_Ratio Win_Rate
-         66.75%         1.23          2.44      -15.40%         5.47    44.8%
-         65.30%         2.42          5.33      -13.84%        21.39    50.0%
-         69.86%         1.11          2.16      -16.17%         4.52    44.8%
+         68.21%        -0.95         -1.61      -25.29%        -2.30    34.5%
+         63.20%         1.84          4.00      -13.84%        11.95    44.4%
+         71.77%        -0.98         -1.64      -26.08%        -2.34    34.5%
  Profit_Factor
-          1.24
-          1.63
-          1.21
+          0.85
+          1.50
+          0.85
 
 ========================================================================
- STRATEGY HEALTH VERDICT: [ACCEPTABLE (CHOPPY / TRANSITIONAL REGIME)]
+ STRATEGY HEALTH VERDICT: [UNDERPERFORMING (REVIEW SIZING / MARKET REGIME)]
 ========================================================================
- ! Strategy is profitable but experiencing lower edge due to sideways market action.
- ✓ Maximum Drawdown (-15.40%) remained strictly within normal boundaries.
+ X Profit Factor fell below 1.0 over this window. Market may be in prolonged non-trending chop.
+ ✓ Maximum Drawdown (-25.29%) remained strictly within normal boundaries.
 ========================================================================
 
 null device 
