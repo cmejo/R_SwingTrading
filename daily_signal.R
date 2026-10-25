@@ -720,6 +720,36 @@ if (isTRUE(IS_FRIDAY)) {
     cat(" Portfolio is 100% in cash. No open weekend exposure.\n\n")
   }
   cat(" -> NEXT WEEKLY BUYS: Fresh opportunities will be scanned and executed MONDAY at 14:00 EDT.\n")
+  
+  # Manage defensive cash & hedge sleeves on Friday if idle cash or hedge positions exist
+  if (cash_available >= 100 || length(port_state$hedge_positions) > 0) {
+    cash_plan <- deploy_unallocated_cash(
+      unalloc_cash = cash_available,
+      port_state = port_state,
+      macro_info = macro_info,
+      gld_info = gld_info,
+      qqq_px = macro_info$close,
+      gld_px = gld_info$close,
+      fngd_px = fngd_px,
+      sqqq_px = sqqq_px,
+      sgov_px = sgov_px,
+      allow_fractional = ALLOW_FRACTIONAL,
+      total_account_val = sync_res$total_account_value,
+      swing_outlay = 0,
+      raw_cash_balance = sync_res$cash_balance
+    )
+    port_state <- cash_plan$port_state
+    save_portfolio(port_state, PORTFOLIO_FILE)
+    if (length(cash_plan$tickets) > 0) {
+      alert_body <- paste(
+        c(sprintf("Macro Gate: %s | VIX: %.2f | Friday Cash Allocation\n", macro_info$regime, vix_info$close),
+          "Actionable Cash & Hedge Tickets:",
+          cash_plan$tickets),
+        collapse = "\n"
+      )
+      broadcast_alert(title = "🛡️ Friday Defensive Cash / Hedge Deployment", body = alert_body, level = "INFO")
+    }
+  }
   cat("========================================================================================\n\n")
 } else {
   cat(sprintf("              RECOMMENDED ORDERS FOR EMPTY CASH SLOTS (%d AVAILABLE)\n", empty_slots))
@@ -1225,7 +1255,37 @@ if (isTRUE(IS_FRIDAY)) {
     }
   } else {
     cat(sprintf(" All %d active portfolio slots are currently filled or constrained by Macro Regime.\n", EFFECTIVE_MAX_POS))
-    cat(" No new purchases needed today.\n")
+    cat(" No new swing purchases needed today.\n")
+    
+    # When all swing slots are filled/constrained, deploy any remaining unallocated cash or manage hedge sleeves
+    if (cash_available >= 100 || length(port_state$hedge_positions) > 0) {
+      cash_plan <- deploy_unallocated_cash(
+        unalloc_cash = cash_available,
+        port_state = port_state,
+        macro_info = macro_info,
+        gld_info = gld_info,
+        qqq_px = macro_info$close,
+        gld_px = gld_info$close,
+        fngd_px = fngd_px,
+        sqqq_px = sqqq_px,
+        sgov_px = sgov_px,
+        allow_fractional = ALLOW_FRACTIONAL,
+        total_account_val = sync_res$total_account_value,
+        swing_outlay = 0,
+        raw_cash_balance = sync_res$cash_balance
+      )
+      port_state <- cash_plan$port_state
+      save_portfolio(port_state, PORTFOLIO_FILE)
+      if (length(cash_plan$tickets) > 0) {
+        alert_body <- paste(
+          c(sprintf("Macro Gate: %s | VIX: %.2f | Open Slots: %d\n", macro_info$regime, vix_info$close, empty_slots),
+            "Actionable Cash & Hedge Tickets:",
+            cash_plan$tickets),
+          collapse = "\n"
+        )
+        broadcast_alert(title = "🛡️ Defensive Cash / Hedge Deployment", body = alert_body, level = "INFO")
+      }
+    }
   }
   cat("========================================================================================\n\n")
 }

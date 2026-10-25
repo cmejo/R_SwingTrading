@@ -81,14 +81,14 @@ for arg in "$@"; do
   esac
 done
 
-# If no explicit capital passed, dynamically sync/extract full account equity
-if [ "$AUTO_CAPITAL" = "true" ] || [ -z "$CAPITAL" ]; then
-  # If Schwab credentials exist and live mode or token present, sync live account balance first
-  if [ -f "$PROJECT_DIR/schwab_token.json" ]; then
-    printf "[Auto-Capital] Syncing live account equity from Charles Schwab...\n"
-    python3 execute_broker.py --broker=schwab --sync --dry_run=false >/dev/null 2>&1 || true
-  fi
+# 1. Always synchronize live Schwab account positions and cash before running scanner
+if [ -f "$PROJECT_DIR/schwab_token.json" ]; then
+  printf "[Pre-Scan Sync] Synchronizing live positions & cash from Charles Schwab into portfolio.json...\n"
+  python3 execute_broker.py --broker=schwab --sync --dry_run=false || true
+fi
 
+# 2. If no explicit capital passed, dynamically extract full account equity from synced portfolio.json
+if [ "$AUTO_CAPITAL" = "true" ] || [ -z "$CAPITAL" ]; then
   # Extract total liquidation value from portfolio.json if available
   if [ -f "$PROJECT_DIR/portfolio.json" ]; then
     EXTRACTED_CAP=$(python3 -c "import json; d=json.load(open('$PROJECT_DIR/portfolio.json')); print(int(round(float(d.get('total_capital', 8230)))))" 2>/dev/null || echo "8230")
