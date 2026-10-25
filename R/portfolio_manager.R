@@ -253,7 +253,7 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
   if (is.null(portfolio$hedge_positions)) portfolio$hedge_positions <- list()
   
   # Automatically segregate any Cash-Park / Defensive Hedge ETFs from active Swing Slots
-  pure_hedge_etfs <- c("FNGD", "SQQQ", "SGOV", "GLD", "BIL")
+  pure_hedge_etfs <- c("QQQ", "GLD", "FNGD", "SQQQ", "SGOV", "BIL")
   raw_pos_list <- portfolio$positions
   swing_pos_list <- list()
   hedge_pos_list <- portfolio$hedge_positions
@@ -375,17 +375,17 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
         status <- "STOP_TRIGGERED"
         alerts <- c(alerts, sprintf("[STOP-LOSS HIT] %s breached stop at $%.2f (Current: $%.2f). Exit immediately.", sym, suggested_stop, cp))
       } else if (!isTRUE(p$tier1_hit) && cp >= t1_tgt) {
-        shs_to_exit <- round(as.numeric(p$shares) * 0.50, 3)
+        shs_to_exit <- if (as.numeric(p$shares) %% 1 == 0) max(1, floor(as.numeric(p$shares) * 0.50)) else round(as.numeric(p$shares) * 0.50, 3)
         action <- sprintf("SCALE OUT 50%% @ TIER 1 (+1.5R: $%.2f reached | Breakeven Stop $%.2f)", t1_tgt, p$entry_price)
         status <- "TIER1_TARGET_TRIGGERED"
-        alerts <- c(alerts, sprintf("[TIER 1 HIT] %s hit +1.5R target ($%.2f). Sell 50%% (%.3f shares) and raise stop to Breakeven $%.2f!",
-                                    sym, t1_tgt, shs_to_exit, p$entry_price))
+        alerts <- c(alerts, sprintf("[TIER 1 HIT] %s hit +1.5R target ($%.2f). Sell 50%% (%s shares) and raise stop to Breakeven $%.2f!",
+                                    sym, t1_tgt, ifelse(shs_to_exit %% 1 == 0, sprintf("%d", as.integer(shs_to_exit)), sprintf("%.3f", shs_to_exit)), p$entry_price))
       } else if (isTRUE(p$tier1_hit) && !isTRUE(p$tier2_hit) && cp >= t2_tgt) {
-        shs_to_exit <- round(as.numeric(p$shares) * 0.50, 3) # 50% of the remaining 50% = 25% of initial
+        shs_to_exit <- if (as.numeric(p$shares) %% 1 == 0) max(1, floor(as.numeric(p$shares) * 0.50)) else round(as.numeric(p$shares) * 0.50, 3) # 50% of the remaining 50% = 25% of initial
         action <- sprintf("SCALE OUT 25%% @ TIER 2 (+3.0R: $%.2f reached | 25%% RUNNER REMAINS)", t2_tgt)
         status <- "TIER2_TARGET_TRIGGERED"
-        alerts <- c(alerts, sprintf("[TIER 2 HIT] %s hit +3.0R target ($%.2f). Sell %.3f shares. Retain 25%% RUNNER trailing on Chandelier Stop ($%.2f)!",
-                                    sym, t2_tgt, shs_to_exit, chandelier_stop))
+        alerts <- c(alerts, sprintf("[TIER 2 HIT] %s hit +3.0R target ($%.2f). Sell %s shares. Retain 25%% RUNNER trailing on Chandelier Stop ($%.2f)!",
+                                    sym, t2_tgt, ifelse(shs_to_exit %% 1 == 0, sprintf("%d", as.integer(shs_to_exit)), sprintf("%.3f", shs_to_exit)), chandelier_stop))
       } else if (isTRUE(p$is_runner) || isTRUE(p$tier2_hit)) {
         action <- sprintf("HOLD RUNNER (Chandelier Trailing Stop: $%.2f | P&L: %+.2f%%)", chandelier_stop, pnl_pct)
         status <- "RUNNER_ACTIVE"

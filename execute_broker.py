@@ -144,8 +144,12 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
             with open("portfolio.json", "r") as pf:
                 pj = json.load(pf)
                 port_positions = {p["symbol"]: p for p in pj.get("positions", [])}
+                for hp in pj.get("hedge_positions", []):
+                    port_positions[hp["symbol"]] = hp
         except Exception:
             pass
+
+    seen_full_sells = set()
 
     # 1. Stop-Loss Hit
     # e.g.: [STOP-LOSS HIT] QQQ breached stop at $754.01 (Current: $742.19). Exit immediately.
@@ -154,6 +158,8 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
         content
     )
     for sym in stop_alerts:
+        if sym in seen_full_sells:
+            continue
         pos = port_positions.get(sym, {})
         shs = float(pos.get("shares", 0.0))
         if shs > 0:
@@ -165,6 +171,7 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
                 "reason": "STOP_LOSS_HIT",
                 "price": float(pos.get("current_price", pos.get("entry_price", 0.0)))
             })
+            seen_full_sells.add(sym)
 
     # 2. Tier 1 Target Hit (+1.5R Scale-Out 50%)
     # e.g.: [TIER 1 HIT] PENG hit +1.5R target ($76.85). Sell 50% (13.500 shares) and raise stop to Breakeven $72.50!
@@ -173,6 +180,8 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
         content
     )
     for sym, shs in t1_alerts:
+        if sym in seen_full_sells:
+            continue
         pos = port_positions.get(sym, {})
         tickets.append({
             "rank": 0,
@@ -190,6 +199,8 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
         content
     )
     for sym, shs in t2_alerts:
+        if sym in seen_full_sells:
+            continue
         pos = port_positions.get(sym, {})
         tickets.append({
             "rank": 0,
@@ -207,6 +218,8 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
         content
     )
     for sym in time_alerts:
+        if sym in seen_full_sells:
+            continue
         pos = port_positions.get(sym, {})
         shs = float(pos.get("shares", 0.0))
         if shs > 0:
@@ -218,6 +231,7 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
                 "reason": "MAX_7DAY_TIME_EXIT",
                 "price": float(pos.get("current_price", pos.get("entry_price", 0.0)))
             })
+            seen_full_sells.add(sym)
 
     # 5. Defensive Friday Weekend Exit
     # e.g.: [DEFENSIVE WEEKEND EXIT] SYMBOL must be closed before 16:00 Friday
@@ -226,6 +240,8 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
         content
     )
     for sym in wknd_alerts:
+        if sym in seen_full_sells:
+            continue
         pos = port_positions.get(sym, {})
         shs = float(pos.get("shares", 0.0))
         if shs > 0:
@@ -237,6 +253,7 @@ def parse_latest_tickets(ticket_file: str = "LATEST_TICKET.txt") -> List[Dict[st
                 "reason": "DEFENSIVE_WEEKEND_EXIT",
                 "price": float(pos.get("current_price", pos.get("entry_price", 0.0)))
             })
+            seen_full_sells.add(sym)
 
     return tickets
 
@@ -654,12 +671,19 @@ def sync_schwab(portfolio_file: str, dry_run: bool):
         
         sec_acct = details.get("securitiesAccount", {})
         balances = sec_acct.get("currentBalances", {})
-        cash = balances.get("cashAvailableForTrading", balances.get("cashBalance", 10000.0))
-        liquidation_val = balances.get("liquidationValue", 10000.0)
+        cash_raw = balances.get("cashAvailableForTrading")
+        if cash_raw is None:
+            cash_raw = balances.get("cashBalance") or balances.get("availableFunds") or port_data.get("cash_balance", 8230.0)
+        cash = float(cash_raw)
 
-        port_data["cash_balance"] = round(float(cash), 2)
-        port_data["total_capital"] = round(float(liquidation_val), 2)
-        port_data["peak_equity"] = max(port_data.get("peak_equity", float(liquidation_val)), float(liquidation_val))
+        liq_raw = balances.get("liquidationValue")
+        if liq_raw is None:
+            liq_raw = balances.get("equity") or port_data.get("total_capital", cash)
+        liquidation_val = float(liq_raw)
+
+        port_data["cash_balance"] = round(cash, 2)
+        port_data["total_capital"] = round(liquidation_val, 2)
+        port_data["peak_equity"] = max(port_data.get("peak_equity", liquidation_val), liquidation_val)
 
         ticket_lookup = {}
         if os.path.exists("LATEST_TICKET.txt"):
@@ -670,7 +694,7 @@ def sync_schwab(portfolio_file: str, dry_run: bool):
 
         if "hedge_positions" not in port_data:
             port_data["hedge_positions"] = []
-        pure_hedge_etfs = {"FNGD", "SQQQ", "SGOV", "GLD", "BIL"}
+        pure_hedge_etfs = {"QQQ", "GLD", "FNGD", "SQQQ", "SGOV", "BIL"}
 
         positions = sec_acct.get("positions", [])
         active_symbols = set()
@@ -707,6 +731,15 @@ def sync_schwab(portfolio_file: str, dry_run: bool):
                 active_symbols.add(sym)
                 existing = [pos for pos in port_data["positions"] if pos["symbol"] == sym]
                 if existing:
+                    old_shs = float(existing[0].get("shares", long_qty))
+                    init_shs = float(existing[0].get("initial_shares", old_shs))
+                    if long_qty < old_shs:
+                        if not existing[0].get("tier1_hit") and long_qty <= round(init_shs * 0.55, 3):
+                            existing[0]["tier1_hit"] = True
+                            existing[0]["stop_loss"] = max(float(existing[0]["stop_loss"]), float(existing[0]["entry_price"]))
+                        elif existing[0].get("tier1_hit") and not existing[0].get("tier2_hit") and long_qty <= round(init_shs * 0.30, 3):
+                            existing[0]["tier2_hit"] = True
+                            existing[0]["is_runner"] = True
                     existing[0]["shares"] = long_qty
                     existing[0]["cost_basis"] = round(long_qty * avg_px, 2)
                 else:

@@ -14,7 +14,7 @@
 # ==============================================================================
 
 set -e
-export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+export PATH="$HOME/.pyenv/shims:/opt/homebrew/Caskroom/miniforge/base/bin:$HOME/miniforge3/bin:$PATH:/opt/homebrew/bin:/usr/local/bin"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${PROJECT_DIR:-$SCRIPT_DIR}"
@@ -138,6 +138,7 @@ Rscript daily_signal.R \
   --max_per_sector="$MAX_PER_SECTOR" \
   --max_heat="$MAX_HEAT" \
   --sizing_mode="vince" \
+  --fractional=false \
   --force_refresh="$FORCE_REFRESH" \
   --circuit_breaker="$CIRCUIT_BREAKER" \
   --circuit_breaker_threshold="$CIRCUIT_BREAKER_THRESH" \
@@ -194,9 +195,10 @@ if [ "$DRY_RUN" = "false" ]; then
         --max_per_sector="$MAX_PER_SECTOR" \
         --max_heat="$MAX_HEAT" \
         --sizing_mode="vince" \
+        --fractional=false \
         --portfolio_file="$PROJECT_DIR/portfolio.json" 2>&1 | tee "$RESCAN_LOG" "$LATEST_TICKET"
         
-      NEW_BUYS=$(grep -c -E "(Action: *BUY [0-9]|Actionable Ticket: *BUY [0-9].*QQQ)" "$LATEST_TICKET" || true)
+      NEW_BUYS=$(grep -c -E "(Action: *BUY [0-9]|Actionable Ticket: *BUY [0-9])" "$LATEST_TICKET" || true)
       if [ "$NEW_BUYS" -gt 0 ]; then
         echo " -> Found $NEW_BUYS fresh buy order(s) for newly opened slots. Transmitting to Schwab..."
         python3 execute_broker.py --broker=schwab --dry_run=false --yes --ticket_file="$LATEST_TICKET"

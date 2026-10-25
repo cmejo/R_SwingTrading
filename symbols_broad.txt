@@ -69,7 +69,7 @@ VST
 GE
 
 # 8. Benchmark & Leveraged Index ETFs
-QQQ
+# QQQ is managed exclusively by core-satellite cash engine to eliminate cash drag
 QLD
 SPY
 XLK

@@ -252,6 +252,65 @@ class TestBrokerBridges(unittest.TestCase):
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
+    def test_hedge_sell_and_alert_deduplication(self):
+        """Verifies hedge positions are recognized on sell alerts and duplicate alerts don't create multiple sell tickets."""
+        port_state = {
+            "total_capital": 8230.0,
+            "cash_balance": 2000.0,
+            "positions": [
+                {"symbol": "NVDA", "shares": 10.0, "entry_price": 120.0, "cost_basis": 1200.0}
+            ],
+            "hedge_positions": [
+                {"symbol": "FNGD", "shares": 250.0, "entry_price": 10.0, "cost_basis": 2500.0}
+            ]
+        }
+        with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".json") as pf:
+            json.dump(port_state, pf)
+            port_path = pf.name
+
+        ticket_content = (
+            "----------------------------------------------------------------------------------------\n"
+            " ⚠️  PORTFOLIO ACTION ALERTS:\n"
+            "    * [STOP-LOSS HIT] FNGD breached stop at $9.00 (Current: $8.90). Exit immediately.\n"
+            "    * [STOP-LOSS HIT] FNGD breached stop at $9.00 (Current: $8.90). Exit immediately.\n"
+            "    * [DEFENSIVE WEEKEND EXIT] NVDA must be closed before 16:00 Friday (Macro Risk-Off). P&L: -1.50%\n"
+            "    * [DEFENSIVE WEEKEND EXIT] NVDA must be closed before 16:00 Friday (Macro Risk-Off). P&L: -1.50%\n"
+            "----------------------------------------------------------------------------------------\n"
+        )
+        with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".txt") as tf:
+            tf.write(ticket_content)
+            ticket_path = tf.name
+
+        try:
+            # Temporarily redirect portfolio.json to port_path
+            old_port = None
+            if os.path.exists("portfolio.json"):
+                with open("portfolio.json", "r") as f:
+                    old_port = f.read()
+            with open("portfolio.json", "w") as f:
+                json.dump(port_state, f)
+
+            tickets = read_latest_tickets(ticket_path)
+            # Should have exactly 2 sell tickets (1 for FNGD, 1 for NVDA), with duplicates eliminated!
+            sell_tickets = [t for t in tickets if t.get("action") == "SELL"]
+            self.assertEqual(len(sell_tickets), 2)
+
+            fngd_t = [t for t in sell_tickets if t["symbol"] == "FNGD"][0]
+            self.assertEqual(fngd_t["shares"], 250.0)
+            self.assertEqual(fngd_t["reason"], "STOP_LOSS_HIT")
+
+            nvda_t = [t for t in sell_tickets if t["symbol"] == "NVDA"][0]
+            self.assertEqual(nvda_t["shares"], 10.0)
+            self.assertEqual(nvda_t["reason"], "DEFENSIVE_WEEKEND_EXIT")
+        finally:
+            if old_port is not None:
+                with open("portfolio.json", "w") as f:
+                    f.write(old_port)
+            if os.path.exists(port_path):
+                os.remove(port_path)
+            if os.path.exists(ticket_path):
+                os.remove(ticket_path)
+
 
 if __name__ == "__main__":
     unittest.main()

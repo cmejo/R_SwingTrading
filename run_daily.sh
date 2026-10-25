@@ -3,7 +3,7 @@
 # Automated Daily Execution Script for Multi-Asset Swing Trading Model
 # ==============================================================================
 
-export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+export PATH="$HOME/.pyenv/shims:/opt/homebrew/Caskroom/miniforge/base/bin:$HOME/miniforge3/bin:$PATH:/opt/homebrew/bin:/usr/local/bin"
 
 # Resolve project directory from script location
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
