@@ -289,28 +289,34 @@ spy_p_high_vol <- if (!is.null(spy_msgarch)) tail(as.numeric(spy_msgarch$prob_hi
 spy_ann_vol    <- if (!is.null(spy_msgarch)) tail(as.numeric(spy_msgarch$annualized_vol), 1) else 0.15
 spy_regime_str <- if (spy_p_high_vol >= 0.50) sprintf("HIGH VOL (%.1f%% Prob)", spy_p_high_vol * 100) else sprintf("LOW VOL (%.1f%% Prob)", (1 - spy_p_high_vol) * 100)
 
+DEFENSIVE_REGIME_ACTIVE <- FALSE
+
 # Multi-Factor Macro Sizing Policy
 # VIX Crisis or MS-GARCH Market High-Vol spike must be checked FIRST
 if (vix_info$close > 28 || spy_p_high_vol >= 0.80) {
   EFFECTIVE_MAX_POS       <- min(1, MAX_POSITIONS)
   EFFECTIVE_P_LONG        <- 0.68
+  DEFENSIVE_REGIME_ACTIVE <- TRUE
   EFFECTIVE_SAFETY_FACTOR <- 0.15
   macro_note <- sprintf("Crisis Volatility (VIX: %.1f, MS-GARCH P(High): %.1f%%): Capital preservation mode, 1 position max, Safe f = 0.15",
                         vix_info$close, spy_p_high_vol * 100)
 } else if (MACRO_GATE && !macro_info$is_bullish) {
   EFFECTIVE_MAX_POS       <- min(2, MAX_POSITIONS)
   EFFECTIVE_P_LONG        <- 0.65
+  DEFENSIVE_REGIME_ACTIVE <- TRUE
   EFFECTIVE_SAFETY_FACTOR <- min(SAFETY_FACTOR, 0.30)
-  macro_note <- "QQQ Trend Deficit: Capping positions at 2, raising P(Up) >= 65%"
+  macro_note <- "QQQ Trend Deficit: Capping positions at 2, Asymmetric Hybrid Gate (60.0% for RS > +5.0%, 65.0% baseline)"
 } else if (vix_info$close >= 20 || spy_p_high_vol >= 0.50) {
   EFFECTIVE_MAX_POS       <- min(3, MAX_POSITIONS)
   EFFECTIVE_P_LONG        <- 0.60
+  DEFENSIVE_REGIME_ACTIVE <- FALSE
   EFFECTIVE_SAFETY_FACTOR <- min(SAFETY_FACTOR, 0.30)
   macro_note <- sprintf("Elevated Volatility (VIX: %.1f, MS-GARCH Regime: %s): Caution scaling to 3 positions, Safe f = 0.30",
                         vix_info$close, spy_regime_str)
 } else {
   EFFECTIVE_MAX_POS       <- MAX_POSITIONS
   EFFECTIVE_P_LONG        <- P_LONG
+  DEFENSIVE_REGIME_ACTIVE <- FALSE
   EFFECTIVE_SAFETY_FACTOR <- SAFETY_FACTOR
   macro_note <- "Full Risk-On Allocation: 5 positions, Safe f = 0.50, P(Up) >= 58.0%"
 }
@@ -324,8 +330,9 @@ cat(sprintf("   GLD Gold Close: $%.2f | 50D lmMA Fit: $%.2f | Slope: %+.3f (%s)\
 cat(sprintf("   SPY Benchmark Close: $%.2f | MS-GARCH Ann Vol: %.1f%% | P(High Vol Regime): %.1f%%\n",
             spy_px, spy_ann_vol * 100, spy_p_high_vol * 100))
 cat(sprintf("   CBOE VIX:  %.2f   | Volatility Regime: %s\n", vix_info$close, vix_info$regime))
-cat(sprintf("   -> Dynamic Policy: Max Positions = %d | Safe f = %.2f | Min P(Up) >= %.1f%%\n\n", 
-            EFFECTIVE_MAX_POS, EFFECTIVE_SAFETY_FACTOR, EFFECTIVE_P_LONG * 100))
+cat(sprintf("   -> Dynamic Policy: Max Positions = %d | Safe f = %.2f | Min P(Up) >= %.1f%%%s\n\n", 
+            EFFECTIVE_MAX_POS, EFFECTIVE_SAFETY_FACTOR, EFFECTIVE_P_LONG * 100,
+            ifelse(isTRUE(DEFENSIVE_REGIME_ACTIVE), " (Asymmetric Hybrid Gate: 60.0% for RS > +5%)", "")))
 
 # Sector Taxonomy Mapping & Cluster Risk Defense
 SECTOR_MAP <- if (file.exists("sector_map.json")) {
@@ -473,6 +480,13 @@ for (sym in SYMBOLS) {
     stop_loss_price <- round(latest_close * (1 - 2.0 * curr_daily_vol), 2)
     take_profit_price <- round(latest_close * (1 + 3.0 * curr_daily_vol), 2)
 
+    # Asymmetric Hybrid Gate: In defensive regimes, reward top Relative Strength leaders (RS_20 >= +5.0%)
+    # with an earlier momentum entry hurdle (60.0%), while enforcing strict 65.0% on neutral/lagging assets
+    cand_p_long <- EFFECTIVE_P_LONG
+    if (isTRUE(DEFENSIVE_REGIME_ACTIVE) && !is.na(latest_rs_20) && latest_rs_20 >= 0.05) {
+      cand_p_long <- 0.60
+    }
+
     # Signal Assignment with Multi-Timeframe, RS Leader, Extension Filter, Liquidity & Earnings Gate
     signal_status <- "HOLD"
     gate_note <- "Normal"
@@ -483,7 +497,7 @@ for (sym in SYMBOLS) {
     } else if (is_illiquid) {
       signal_status <- "ILLIQUID"
       gate_note <- sprintf("Low ADDV ($%.1fM < $5M)", addv_20 / 1e6)
-    } else if (pred_prob >= EFFECTIVE_P_LONG) {
+    } else if (pred_prob >= cand_p_long) {
       if (is_earnings_blackout) {
         signal_status <- "BLACKOUT"
         gate_note <- sprintf("Earnings in %dd (%s)", as.integer(days_to_earn), earn_date)
@@ -501,11 +515,12 @@ for (sym in SYMBOLS) {
         gate_note <- sprintf("No Model Signal (0/%d coefs)", length(feat_names))
       } else {
         signal_status <- "BUY"
-        gate_note <- sprintf("Leader (%s)", top_feature_str)
+        hybrid_tag <- if (cand_p_long < EFFECTIVE_P_LONG) " [Hybrid 60%]" else ""
+        gate_note <- sprintf("Leader (%s)%s", top_feature_str, hybrid_tag)
       }
     } else {
       signal_status <- "HOLD"
-      gate_note <- if (is_intercept_only) sprintf("BaseRateOnly (0/%d coefs)", length(feat_names)) else sprintf("Below %.0f%% Cutoff", EFFECTIVE_P_LONG * 100)
+      gate_note <- if (is_intercept_only) sprintf("BaseRateOnly (0/%d coefs)", length(feat_names)) else sprintf("Below %.0f%% Cutoff", cand_p_long * 100)
     }
     
     data.frame(
@@ -513,6 +528,7 @@ for (sym in SYMBOLS) {
       Date = latest_date,
       Close = latest_close,
       Prob_Up = pred_prob,
+      Req_P_Up = cand_p_long,
       Signal = signal_status,
       Gate_Note = gate_note,
       Weekly_Slope = weekly_slope_pct,
@@ -558,7 +574,7 @@ df_scan <- do.call(rbind, scan_results)
 # Candidates with positive Sector Spread (sector ETF outperforming SPY) and positive Asymmetric Vol Ratio receive boost
 sector_boost <- pmax(0, df_scan$Sector_Spread)
 asym_boost   <- pmax(0, df_scan$Asym_Vol * 0.1)
-df_scan$Quality_Score <- ifelse(df_scan$Signal == "BUY" & df_scan$Prob_Up >= EFFECTIVE_P_LONG & df_scan$RS_20 > 0,
+df_scan$Quality_Score <- ifelse(df_scan$Signal == "BUY" & df_scan$Prob_Up >= df_scan$Req_P_Up & df_scan$RS_20 > 0,
                                 df_scan$Prob_Up * (1 + df_scan$RS_20 + 0.5 * sector_boost + asym_boost),
                                 0.0)
 df_scan <- df_scan[order(-df_scan$Quality_Score, -df_scan$Prob_Up), ]
@@ -567,8 +583,9 @@ rownames(df_scan) <- 1:nrow(df_scan)
 # Formatted Leaderboard
 cat("\n========================================================================================\n")
 cat("               MULTI-ASSET SWING TRADING OPPORTUNITY LEADERBOARD\n")
-cat(sprintf(" Macro Gate: %s | Max Positions: %d | Buy Threshold: P(Up) >= %.1f%%\n",
-            macro_info$regime, EFFECTIVE_MAX_POS, EFFECTIVE_P_LONG * 100))
+cat(sprintf(" Macro Gate: %s | Max Positions: %d | Buy Threshold: P(Up) >= %.1f%%%s\n",
+            macro_info$regime, EFFECTIVE_MAX_POS, EFFECTIVE_P_LONG * 100,
+            ifelse(isTRUE(DEFENSIVE_REGIME_ACTIVE), " (Hybrid: 60.0% for RS > +5.0%)", "")))
 cat("========================================================================================\n")
 
 summary_table <- data.frame(
@@ -1222,8 +1239,9 @@ if (isTRUE(IS_FRIDAY)) {
         broadcast_alert(title = "📈 New Weekly Swing Signals", body = alert_body, level = "SUCCESS")
       }
     } else {
-      cat(sprintf(" No unowned symbols currently meet all BUY criteria (P(Up) >= %.1f%%, Weekly Bullish, RS Leader, Sector Cap).\n",
-                  EFFECTIVE_P_LONG * 100))
+      cat(sprintf(" No unowned symbols currently meet all BUY criteria (P(Up) >= %.1f%%%s, Weekly Bullish, RS Leader, Sector Cap).\n",
+                  EFFECTIVE_P_LONG * 100,
+                  ifelse(isTRUE(DEFENSIVE_REGIME_ACTIVE), " [Hybrid RS Leader: 60.0%]", "")))
       
       # When 0 swing setups qualify, deploy 100% idle cash into dynamic cash / hedge engine
       if (cash_available >= 100 || length(port_state$hedge_positions) > 0) {
