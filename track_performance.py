@@ -21,6 +21,7 @@ import json
 import time
 import datetime
 import argparse
+import urllib.request
 from typing import Dict, List, Any
 
 # Check matplotlib availability
@@ -41,6 +42,51 @@ HTML_FILE = os.path.join(OUTPUT_DIR, "performance_dashboard.html")
 
 os.makedirs("data", exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+
+def fetch_live_quote(symbol: str) -> float:
+    """Fetches real-time / latest market price via Yahoo Finance HTTP chart endpoint."""
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol.upper()}?interval=1d&range=1d"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
+    try:
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            data = json.loads(resp.read().decode())
+            meta = data["chart"]["result"][0]["meta"]
+            px = meta.get("regularMarketPrice")
+            if px and float(px) > 0:
+                return round(float(px), 2)
+    except Exception:
+        pass
+    return 0.0
+
+
+def refresh_open_position_prices(portfolio: Dict[str, Any], filepath: str = PORTFOLIO_FILE) -> bool:
+    """Updates active swing and hedge positions with current market quotes."""
+    updated = False
+    all_positions = portfolio.get("positions", []) + portfolio.get("hedge_positions", [])
+    if not all_positions:
+        return False
+
+    print("[Price Refresh] Fetching latest market quotes for open positions...")
+    for p in all_positions:
+        sym = p.get("symbol")
+        if not sym:
+            continue
+        live_px = fetch_live_quote(sym)
+        if live_px > 0:
+            old_px = p.get("current_price")
+            p["current_price"] = live_px
+            if old_px != live_px:
+                updated = True
+                print(f"  -> {sym}: ${old_px} -> ${live_px}")
+
+    if updated and os.path.exists(filepath):
+        try:
+            with open(filepath, "w") as f:
+                json.dump(portfolio, f, indent=2)
+        except Exception:
+            pass
+    return updated
 
 
 def load_portfolio(filepath: str = PORTFOLIO_FILE) -> Dict[str, Any]:
@@ -89,6 +135,12 @@ def update_equity_history(portfolio: Dict[str, Any]) -> List[Dict[str, Any]]:
     total_eq = float(portfolio.get("total_capital", 10000.0))
     cash_bal = float(portfolio.get("cash_balance", 10000.0))
     n_pos = len(portfolio.get("positions", []))
+
+    # Dynamically compute live liquidation equity if active positions exist
+    total_invested = sum(float(p.get("shares", 0)) * float(p.get("current_price", p.get("entry_price", 0))) for p in portfolio.get("positions", []) + portfolio.get("hedge_positions", []))
+    if total_invested > 0:
+        total_eq = round(cash_bal + total_invested, 2)
+        portfolio["total_capital"] = total_eq
 
     # Calculate current unrealized P&L if open positions exist
     unrealized = sum(float(p.get("shares", 0)) * (float(p.get("current_price", p.get("entry_price", 0))) - float(p.get("entry_price", 0))) for p in portfolio.get("positions", []))
@@ -611,6 +663,7 @@ def main():
         os.system("python3 execute_broker.py --broker=schwab --sync --dry_run=false 2>/dev/null || true")
 
     portfolio = load_portfolio(PORTFOLIO_FILE)
+    refresh_open_position_prices(portfolio)
     history = update_equity_history(portfolio)
     metrics = compute_metrics(portfolio, history)
 

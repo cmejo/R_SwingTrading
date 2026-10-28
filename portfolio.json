@@ -2,7 +2,7 @@
   "total_capital": 8230,
   "cash_balance": 8230,
   "max_positions": 5,
-  "last_updated": "2026-10-25 12:42:09.845473",
+  "last_updated": "2026-10-27 14:15:23.432052",
   "positions": [],
   "closed_trades": [
     {
@@ -106,7 +106,7 @@
   "hedge_state": {
     "regime": "DUAL_BEAR_HEDGE",
     "entry_date": "2026-10-25",
-    "days_held": 1,
+    "days_held": 3,
     "entry_fngd_px": 28.15,
     "entry_sqqq_px": 39.68,
     "peak_ratio": 1,
