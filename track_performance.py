@@ -227,7 +227,9 @@ def compute_metrics(portfolio: Dict[str, Any], history: List[Dict[str, Any]]) ->
         "avg_win": avg_win,
         "avg_loss": avg_loss,
         "expectancy": expectancy,
-        "open_positions": len(portfolio.get("positions", [])),
+        "open_positions": len(portfolio.get("positions", [])) + len(portfolio.get("hedge_positions", [])),
+        "open_swings": len(portfolio.get("positions", [])),
+        "open_hedges": len(portfolio.get("hedge_positions", [])),
         "cash_balance": float(portfolio.get("cash_balance", current_equity))
     }
 
@@ -285,18 +287,27 @@ def generate_charts(history: List[Dict[str, Any]], portfolio: Dict[str, Any], me
     ax3 = axes[1, 0]
     ax3.set_facecolor("#FFFFFF")
     positions = portfolio.get("positions", [])
+    hedge_positions = portfolio.get("hedge_positions", [])
     cash = float(portfolio.get("cash_balance", 10000.0))
     alloc_labels = ["Unallocated Cash"]
     alloc_values = [cash]
     colors = ["#10B981"]
 
-    pos_colors = ["#3B82F6", "#8B5CF6", "#F59E0B", "#EC4899", "#14B8A6"]
+    pos_colors = ["#3B82F6", "#8B5CF6", "#06B6D4", "#EC4899", "#14B8A6"]
     for i, p in enumerate(positions):
         sym = p.get("symbol", "Stock")
-        mv = float(p.get("cost_basis", float(p.get("shares", 0)) * float(p.get("entry_price", 0))))
+        mv = float(p.get("shares", 0)) * float(p.get("current_price", p.get("entry_price", 0)))
         alloc_labels.append(f"{sym} (${mv:,.0f})")
         alloc_values.append(mv)
         colors.append(pos_colors[i % len(pos_colors)])
+
+    hedge_colors = ["#DC2626", "#EA580C", "#D97706"]
+    for j, hp in enumerate(hedge_positions):
+        hsym = hp.get("symbol", "Hedge")
+        hmv = float(hp.get("shares", 0)) * float(hp.get("current_price", hp.get("entry_price", 0)))
+        alloc_labels.append(f"{hsym} [Hedge] (${hmv:,.0f})")
+        alloc_values.append(hmv)
+        colors.append(hedge_colors[j % len(hedge_colors)])
 
     wedges, texts, autotexts = ax3.pie(
         alloc_values,
@@ -360,13 +371,20 @@ def generate_charts(history: List[Dict[str, Any]], portfolio: Dict[str, Any], me
 def generate_html_dashboard(history: List[Dict[str, Any]], portfolio: Dict[str, Any], metrics: Dict[str, Any]) -> str:
     """Creates a standalone interactive responsive HTML dashboard accessible in any browser."""
     positions = portfolio.get("positions", [])
+    hedge_positions = portfolio.get("hedge_positions", [])
     closed = portfolio.get("closed_trades", [])
 
+    all_active = []
+    for p in positions:
+        all_active.append((p, "SWING"))
+    for hp in hedge_positions:
+        all_active.append((hp, "HEDGE"))
+
     pos_rows = ""
-    if not positions:
+    if not all_active:
         pos_rows = "<tr><td colspan='8' style='text-align:center; color:#64748b; padding:1.5rem;'>Portfolio is currently 100% in CASH. No active positions open.</td></tr>"
     else:
-        for p in positions:
+        for p, p_type in all_active:
             sym = p.get("symbol", "")
             shs = float(p.get("shares", 0))
             ent = float(p.get("entry_price", 0))
@@ -375,15 +393,18 @@ def generate_html_dashboard(history: List[Dict[str, Any]], portfolio: Dict[str, 
             pnl_d = (cur - ent) * shs
             pnl_p = ((cur / ent) - 1.0) * 100 if ent > 0 else 0
             badge = "color:#10b981;" if pnl_d >= 0 else "color:#ef4444;"
+            type_tag = "<span style='background:#1e3a8a; color:#93c5fd; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:600; margin-left:6px;'>SWING</span>" if p_type == "SWING" else "<span style='background:#7c2d12; color:#fed7aa; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:600; margin-left:6px;'>HEDGE</span>"
+            targets_str = f"${p.get('tier1_target', 0):.2f} / ${p.get('tier2_target', 0):.2f}" if p_type == "SWING" else "Regime Rotation"
+            stop_str = f"${p.get('stop_loss', 0):.2f}" if p.get('stop_loss') else "15-Day / -10%"
             pos_rows += f"""
             <tr>
-              <td><strong>{sym}</strong></td>
+              <td><strong>{sym}</strong>{type_tag}</td>
               <td>{shs:.3f}</td>
               <td>${ent:.2f}</td>
               <td>${cur:.2f}</td>
               <td>${mv:.2f}</td>
-              <td>${p.get('stop_loss', 0):.2f}</td>
-              <td>${p.get('tier1_target', 0):.2f} / ${p.get('tier2_target', 0):.2f}</td>
+              <td>{stop_str}</td>
+              <td>{targets_str}</td>
               <td style='{badge} font-weight:bold;'>{pnl_d:+.2f} ({pnl_p:+.2f}%)</td>
             </tr>
             """
@@ -594,7 +615,7 @@ def generate_html_dashboard(history: List[Dict[str, Any]], portfolio: Dict[str, 
     <!-- Active Positions Table -->
     <div class="table-container">
       <div class="table-title">
-        <span>Active Portfolio Holdings ({len(positions)} of {portfolio.get('max_positions', 3)} Slots)</span>
+        <span>Active Portfolio Holdings ({len(positions)} Swings + {len(hedge_positions)} Hedge)</span>
         <span style="font-size:0.85rem; color:var(--text-muted);">Protected by 2.0x ATR GTC Brackets</span>
       </div>
       <table>
