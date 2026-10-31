@@ -247,9 +247,11 @@ train_swing_model <- function(X_train,
   pred_probs_vec <- numeric(0)
   pred_class <- numeric(0)
   
-  alpha_sub_cols <- c("VolSqueeze", "SqueezeRelease", "CLV_5D", "IntradayVsGap_10D",
-                      "PEAD_Catalyst", "PullbackInUptrend", "BreakoutWithVolume")
-  has_alpha_sub  <- all(alpha_sub_cols %in% colnames(X_train))
+  base_alpha_cols <- c("VolSqueeze", "SqueezeRelease", "CLV_5D", "IntradayVsGap_10D",
+                       "PEAD_Catalyst", "PullbackInUptrend", "BreakoutWithVolume",
+                       "Prox52WHigh", "IdioAlpha_20D", "RangeToCloseVol_20D", "LowerWickDemand_10D")
+  alpha_sub_cols  <- intersect(base_alpha_cols, colnames(X_train))
+  has_alpha_sub   <- (length(alpha_sub_cols) >= 7)
   alpha_sub_fit  <- NULL
   if (has_alpha_sub && nrow(X_train) >= 80 && length(unique(y_train)) >= 2) {
     alpha_sub_fit <- tryCatch(

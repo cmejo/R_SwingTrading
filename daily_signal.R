@@ -456,6 +456,8 @@ for (sym in SYMBOLS) {
     curr_ann_vol         <- pipeline_out$latest_ann_vol
     latest_prob_high_vol <- pipeline_out$latest_prob_high_vol
     latest_trend_quality <- if (!is.null(pipeline_out$latest_trend_quality)) pipeline_out$latest_trend_quality else 0.50
+    latest_idio_alpha    <- if (!is.null(pipeline_out$latest_idio_alpha)) pipeline_out$latest_idio_alpha else 0.0
+    latest_prox_52w      <- if (!is.null(pipeline_out$latest_prox_52w)) pipeline_out$latest_prox_52w else 0.0
     latest_rs_20         <- pipeline_out$latest_rs_20
     latest_atr_ext       <- pipeline_out$latest_atr_ext
     latest_sec_spread    <- pipeline_out$latest_sector_spread
@@ -534,6 +536,8 @@ for (sym in SYMBOLS) {
       Gate_Note = gate_note,
       Weekly_Slope = weekly_slope_pct,
       Trend_Quality = latest_trend_quality,
+      Idio_Alpha = latest_idio_alpha,
+      Prox_52W = latest_prox_52w,
       RS_20 = latest_rs_20,
       ATRExt = latest_atr_ext,
       Sector_Spread = latest_sec_spread,
@@ -572,12 +576,14 @@ if (sector_map_dirty) {
 
 df_scan <- do.call(rbind, scan_results)
 
-# Cross-Sectional Quality Score incorporating Sector Momentum Tailwind and Asymmetric Volatility:
-# Candidates with positive Sector Spread (sector ETF outperforming SPY) and positive Asymmetric Vol Ratio receive boost
+# Cross-Sectional Quality Score incorporating Sector Momentum Tailwind, Asymmetric Volatility,
+# Trend Quality (R^2 > 0.50), and Beta-Adjusted Idiosyncratic Alpha (IdioAlpha_20D):
 sector_boost <- pmax(0, df_scan$Sector_Spread)
 asym_boost   <- pmax(0, df_scan$Asym_Vol * 0.1)
+tq_boost     <- pmax(0, (df_scan$Trend_Quality - 0.50) * 0.25)
+idio_boost   <- pmax(0, df_scan$Idio_Alpha * 0.08)
 df_scan$Quality_Score <- ifelse(df_scan$Signal == "BUY" & df_scan$Prob_Up >= df_scan$Req_P_Up & df_scan$RS_20 > 0,
-                                df_scan$Prob_Up * (1 + df_scan$RS_20 + 0.5 * sector_boost + asym_boost),
+                                df_scan$Prob_Up * (1 + df_scan$RS_20 + 0.5 * sector_boost + asym_boost + tq_boost + idio_boost),
                                 0.0)
 df_scan <- df_scan[order(-df_scan$Quality_Score, -df_scan$Prob_Up), ]
 rownames(df_scan) <- 1:nrow(df_scan)

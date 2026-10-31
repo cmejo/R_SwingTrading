@@ -344,6 +344,81 @@ build_feature_dataset <- function(ohlcv,
   colnames(feat_pullback_up) <- "PullbackInUptrend"
   colnames(feat_breakout_vol) <- "BreakoutWithVolume"
 
+  # 6l. Four Orthogonal Alpha & Microstructure Geometry Features:
+  #     - Prox52WHigh:         Proximity to 252-day (52-week) high (overhead supply anchor)
+  #     - IdioAlpha_20D:       20-day beta-adjusted residual Information Ratio vs SPY
+  #     - RangeToCloseVol_20D: Parkinson High-Low intraday vol / Close-to-Close vol (stop-hunt guard)
+  #     - LowerWickDemand_10D: 10-day ATR-normalized lower-shadow institutional dip-buying absorption
+  feat_prox_52w    <- xts(rep(-0.05, nrow(price)), order.by = index(price))
+  feat_idio_alpha  <- xts(rep(0.0,   nrow(price)), order.by = index(price))
+  feat_range_close <- xts(rep(1.0,   nrow(price)), order.by = index(price))
+  feat_lower_wick  <- xts(rep(0.3,   nrow(price)), order.by = index(price))
+  tryCatch({
+    op_v <- as.numeric(Op(ohlcv))
+    hi_v <- as.numeric(Hi(ohlcv))
+    lo_v <- as.numeric(Lo(ohlcv))
+    cl_v <- as.numeric(price)
+    ret_1d <- c(0, diff(log(pmax(cl_v, 1e-4))))
+    ret_1d[is.na(ret_1d)] <- 0
+
+    # (i) Prox52WHigh
+    w_52 <- min(252L, max(20L, as.integer(floor(n_rows * 0.40))))
+    hi_max <- as.numeric(TTR::runMax(hi_v, n = w_52))
+    prox_vec <- (cl_v - hi_max) / (hi_max + 1e-4)
+    prox_vec[is.na(prox_vec)] <- -0.05
+    prox_vec <- pmin(pmax(prox_vec, -0.60), 0.0)
+    feat_prox_52w <- xts(prox_vec, order.by = index(price))
+
+    # (ii) IdioAlpha_20D (Beta-Adjusted Residual Information Ratio vs Benchmark)
+    bmk_ret_1d <- rep(0, n_rows)
+    if (!is.null(benchmark_ohlcv)) {
+      m_b <- merge(price, Cl(benchmark_ohlcv))
+      m_b <- na.locf(m_b, na.rm = FALSE)
+      b_cl <- as.numeric(m_b[index(price), 2])
+      bmk_ret_1d <- c(0, diff(log(pmax(b_cl, 1e-4))))
+      bmk_ret_1d[is.na(bmk_ret_1d)] <- 0
+    }
+    w_beta <- min(60L, max(15L, as.integer(floor(n_rows * 0.35))))
+    if (sd(bmk_ret_1d, na.rm = TRUE) > 1e-6) {
+      cov_b <- as.numeric(TTR::runCov(ret_1d, bmk_ret_1d, n = w_beta))
+      var_b <- as.numeric(TTR::runVar(bmk_ret_1d, n = w_beta))
+      beta_v <- pmin(pmax(cov_b / (var_b + 1e-6), 0.2), 2.5)
+      beta_v[is.na(beta_v)] <- 1.0
+    } else {
+      beta_v <- rep(1.0, n_rows)
+    }
+    resid_1d <- ret_1d - beta_v * bmk_ret_1d
+    r_mean <- as.numeric(TTR::runMean(resid_1d, n = fast_n))
+    r_sd   <- as.numeric(TTR::runSD(resid_1d, n = fast_n))
+    idio_v <- (r_mean / (r_sd + 1e-5)) * sqrt(fast_n)
+    idio_v[is.na(idio_v)] <- 0.0
+    idio_v <- pmin(pmax(idio_v, -4.0), 4.0)
+    feat_idio_alpha <- xts(idio_v, order.by = index(price))
+
+    # (iii) RangeToCloseVol_20D (Parkinson High-Low Vol / Close-to-Close Vol)
+    hl_log2 <- (log(pmax(hi_v, 1e-4) / pmax(lo_v, 1e-4)))^2
+    park_vol <- sqrt(as.numeric(TTR::runMean(hl_log2, n = fast_n)) / (4 * log(2)))
+    cc_vol   <- as.numeric(TTR::runSD(ret_1d, n = fast_n))
+    rc_vec   <- park_vol / (cc_vol + 1e-5)
+    rc_vec[is.na(rc_vec)] <- 1.0
+    rc_vec   <- pmin(pmax(rc_vec, 0.4), 2.5)
+    feat_range_close <- xts(rc_vec, order.by = index(price))
+
+    # (iv) LowerWickDemand_10D (10D ATR-normalized lower-shadow demand absorption)
+    atr_14_v <- as.numeric(TTR::ATR(HLC(ohlcv), n = 14)$atr)
+    bad_atr  <- is.na(atr_14_v) | atr_14_v <= 0
+    atr_14_v[bad_atr] <- cl_v[bad_atr] * 0.02
+    body_low <- pmin(op_v, cl_v)
+    lw_raw   <- pmax(0, body_low - lo_v) / (atr_14_v + 1e-5)
+    lw_10    <- as.numeric(TTR::runMean(lw_raw, n = 10))
+    lw_10[is.na(lw_10)] <- 0.3
+    feat_lower_wick <- xts(pmin(lw_10, 3.0), order.by = index(price))
+  }, error = function(e) NULL)
+  colnames(feat_prox_52w)    <- "Prox52WHigh"
+  colnames(feat_idio_alpha)  <- "IdioAlpha_20D"
+  colnames(feat_range_close) <- "RangeToCloseVol_20D"
+  colnames(feat_lower_wick)  <- "LowerWickDemand_10D"
+
   # 7. Forward Target & Path-Dependent Triple-Barrier Label (Look-Ahead k Days)
   # Upper Profit Barrier: +1.5R (+3.0 * sigma_daily)
   # Lower Stop Barrier:   -1.0R (-2.0 * sigma_daily)
@@ -413,23 +488,29 @@ build_feature_dataset <- function(ohlcv,
     SqueezeRelease     = feat_squeeze_rel,
     CLV_5D             = feat_clv_5d,
     IntradayVsGap_10D  = feat_intra_vs_gap,
-    PEAD_Catalyst      = feat_pead,
-    PullbackInUptrend  = feat_pullback_up,
-    BreakoutWithVolume = feat_breakout_vol
+    PEAD_Catalyst       = feat_pead,
+    PullbackInUptrend   = feat_pullback_up,
+    BreakoutWithVolume  = feat_breakout_vol,
+    Prox52WHigh         = feat_prox_52w,
+    IdioAlpha_20D       = feat_idio_alpha,
+    RangeToCloseVol_20D = feat_range_close,
+    LowerWickDemand_10D = feat_lower_wick
   )
   
-  # Orthogonalized 22-Feature Predictor Set for ElasticNet:
-  # Prunes the 4 near-duplicate / zero-selection collinear features:
-  #   - SlopeWeeklyPct (r = 0.986 with SlopeSlow; retained as top-down gate in latest_weekly_slope_pct)
-  #   - ATRExt         (r = 0.953 with ZScore; retained as overextension gate in latest_atr_ext)
-  #   - BB_PctB        (r = 0.891 with RSI_14; 0.8% selection rate)
-  #   - GARCH_Shock    (r = 0.600 with ZScore; 0.0% selection rate)
+  # Orthogonalized 26-Feature Predictor Set for ElasticNet:
+  # Prunes the 4 near-duplicate / zero-selection collinear features (SlopeWeeklyPct, ATRExt, BB_PctB, GARCH_Shock)
+  # and replaces them with 4 high-IC orthogonal alpha & wick-geometry predictors:
+  #   - Prox52WHigh         (252-day high proximity / overhead supply anchor)
+  #   - IdioAlpha_20D       (20-day beta-adjusted residual Information Ratio vs SPY)
+  #   - RangeToCloseVol_20D (Parkinson High-Low vol / Close-to-Close vol stop-hunt guard)
+  #   - LowerWickDemand_10D (10-day ATR-normalized lower-shadow institutional dip-buying absorption)
   feature_names <- c("SlopeFast", "SlopeSlow", "TrendQuality", "DistPct", 
                      "ZScore", "GARCH_Vol", "GARCH_VolPct", "MSGARCH_ProbHighVol",
                      "VolumeRatio", "OBV_Slope", "RSI_14", "MACD_Hist", "RS_20", 
                      "SectorSpread", "AsymVolRatio",
                      "VolSqueeze", "SqueezeRelease", "CLV_5D", "IntradayVsGap_10D",
-                     "PEAD_Catalyst", "PullbackInUptrend", "BreakoutWithVolume")
+                     "PEAD_Catalyst", "PullbackInUptrend", "BreakoutWithVolume",
+                     "Prox52WHigh", "IdioAlpha_20D", "RangeToCloseVol_20D", "LowerWickDemand_10D")
   
   # Clean warm-up NAs across features
   clean_feats_xts <- na.omit(features_xts)
@@ -458,35 +539,39 @@ build_feature_dataset <- function(ohlcv,
   
   # Convert to standard data.frame for model training
   df_model <- data.frame(
-    Date               = dates,
-    TargetRet          = as.numeric(clean_model_xts[, "TargetRet"]),
-    TargetBinary       = as.numeric(clean_model_xts[, "TargetBinary"]),
-    SlopeFast          = as.numeric(clean_model_xts[, "SlopeFast"]),
-    SlopeSlow          = as.numeric(clean_model_xts[, "SlopeSlow"]),
-    SlopeWeeklyPct     = as.numeric(clean_model_xts[, "SlopeWeeklyPct"]),
-    TrendQuality       = as.numeric(clean_model_xts[, "TrendQuality"]),
-    DistPct            = as.numeric(clean_model_xts[, "DistPct"]),
-    ZScore             = as.numeric(clean_model_xts[, "ZScore"]),
-    GARCH_Vol          = as.numeric(clean_model_xts[, "GARCH_Vol"]),
-    GARCH_Shock        = as.numeric(clean_model_xts[, "GARCH_Shock"]),
-    GARCH_VolPct       = as.numeric(clean_model_xts[, "GARCH_VolPct"]),
-    MSGARCH_ProbHighVol= as.numeric(clean_model_xts[, "MSGARCH_ProbHighVol"]),
-    VolumeRatio        = as.numeric(clean_model_xts[, "VolumeRatio"]),
-    OBV_Slope          = as.numeric(clean_model_xts[, "OBV_Slope"]),
-    RSI_14             = as.numeric(clean_model_xts[, "RSI_14"]),
-    MACD_Hist          = as.numeric(clean_model_xts[, "MACD_Hist"]),
-    BB_PctB            = as.numeric(clean_model_xts[, "BB_PctB"]),
-    RS_20              = as.numeric(clean_model_xts[, "RS_20"]),
-    ATRExt             = as.numeric(clean_model_xts[, "ATRExt"]),
-    SectorSpread       = as.numeric(clean_model_xts[, "SectorSpread"]),
-    AsymVolRatio       = as.numeric(clean_model_xts[, "AsymVolRatio"]),
-    VolSqueeze         = as.numeric(clean_model_xts[, "VolSqueeze"]),
-    SqueezeRelease     = as.numeric(clean_model_xts[, "SqueezeRelease"]),
-    CLV_5D             = as.numeric(clean_model_xts[, "CLV_5D"]),
-    IntradayVsGap_10D  = as.numeric(clean_model_xts[, "IntradayVsGap_10D"]),
-    PEAD_Catalyst      = as.numeric(clean_model_xts[, "PEAD_Catalyst"]),
-    PullbackInUptrend  = as.numeric(clean_model_xts[, "PullbackInUptrend"]),
-    BreakoutWithVolume = as.numeric(clean_model_xts[, "BreakoutWithVolume"])
+    Date                = dates,
+    TargetRet           = as.numeric(clean_model_xts[, "TargetRet"]),
+    TargetBinary        = as.numeric(clean_model_xts[, "TargetBinary"]),
+    SlopeFast           = as.numeric(clean_model_xts[, "SlopeFast"]),
+    SlopeSlow           = as.numeric(clean_model_xts[, "SlopeSlow"]),
+    SlopeWeeklyPct      = as.numeric(clean_model_xts[, "SlopeWeeklyPct"]),
+    TrendQuality        = as.numeric(clean_model_xts[, "TrendQuality"]),
+    DistPct             = as.numeric(clean_model_xts[, "DistPct"]),
+    ZScore              = as.numeric(clean_model_xts[, "ZScore"]),
+    GARCH_Vol           = as.numeric(clean_model_xts[, "GARCH_Vol"]),
+    GARCH_Shock         = as.numeric(clean_model_xts[, "GARCH_Shock"]),
+    GARCH_VolPct        = as.numeric(clean_model_xts[, "GARCH_VolPct"]),
+    MSGARCH_ProbHighVol = as.numeric(clean_model_xts[, "MSGARCH_ProbHighVol"]),
+    VolumeRatio         = as.numeric(clean_model_xts[, "VolumeRatio"]),
+    OBV_Slope           = as.numeric(clean_model_xts[, "OBV_Slope"]),
+    RSI_14              = as.numeric(clean_model_xts[, "RSI_14"]),
+    MACD_Hist           = as.numeric(clean_model_xts[, "MACD_Hist"]),
+    BB_PctB             = as.numeric(clean_model_xts[, "BB_PctB"]),
+    RS_20               = as.numeric(clean_model_xts[, "RS_20"]),
+    ATRExt              = as.numeric(clean_model_xts[, "ATRExt"]),
+    SectorSpread        = as.numeric(clean_model_xts[, "SectorSpread"]),
+    AsymVolRatio        = as.numeric(clean_model_xts[, "AsymVolRatio"]),
+    VolSqueeze          = as.numeric(clean_model_xts[, "VolSqueeze"]),
+    SqueezeRelease      = as.numeric(clean_model_xts[, "SqueezeRelease"]),
+    CLV_5D              = as.numeric(clean_model_xts[, "CLV_5D"]),
+    IntradayVsGap_10D   = as.numeric(clean_model_xts[, "IntradayVsGap_10D"]),
+    PEAD_Catalyst       = as.numeric(clean_model_xts[, "PEAD_Catalyst"]),
+    PullbackInUptrend   = as.numeric(clean_model_xts[, "PullbackInUptrend"]),
+    BreakoutWithVolume  = as.numeric(clean_model_xts[, "BreakoutWithVolume"]),
+    Prox52WHigh         = as.numeric(clean_model_xts[, "Prox52WHigh"]),
+    IdioAlpha_20D       = as.numeric(clean_model_xts[, "IdioAlpha_20D"]),
+    RangeToCloseVol_20D = as.numeric(clean_model_xts[, "RangeToCloseVol_20D"]),
+    LowerWickDemand_10D = as.numeric(clean_model_xts[, "LowerWickDemand_10D"])
   )
   
   cat(sprintf("[Pipeline] Complete. Result: %d valid observation rows across %d features.\n",
@@ -506,6 +591,8 @@ build_feature_dataset <- function(ohlcv,
     low_regime_idx          = if (!is.null(garch_out)) garch_out$low_regime_idx else NULL,
     latest_weekly_slope_pct = as.numeric(tail(feat_slope_weekly, 1)),
     latest_trend_quality    = as.numeric(tail(feat_rsq_fast, 1)),
+    latest_idio_alpha       = as.numeric(tail(feat_idio_alpha, 1)),
+    latest_prox_52w         = as.numeric(tail(feat_prox_52w, 1)),
     latest_rs_20            = as.numeric(tail(feat_rs_20, 1)),
     latest_atr_ext          = as.numeric(tail(feat_atr_ext, 1)),
     latest_sector_spread    = as.numeric(tail(feat_sector_spread, 1)),
