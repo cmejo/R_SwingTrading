@@ -359,6 +359,7 @@ build_feature_dataset <- function(ohlcv,
   feat_idio_alpha  <- xts(rep(0.0,   nrow(price)), order.by = index(price))
   feat_range_close <- xts(rep(1.0,   nrow(price)), order.by = index(price))
   feat_lower_wick  <- xts(rep(0.3,   nrow(price)), order.by = index(price))
+  feat_net_wick    <- xts(rep(0.0,   nrow(price)), order.by = index(price))
   feat_cmf_20      <- xts(rep(0.0,   nrow(price)), order.by = index(price))
   feat_rs_60       <- xts(rep(0.0,   nrow(price)), order.by = index(price))
   feat_eff_ratio   <- xts(rep(0.3,   nrow(price)), order.by = index(price))
@@ -427,11 +428,18 @@ build_feature_dataset <- function(ohlcv,
     atr_14_v  <- as.numeric(atr_obj_v$atr)
     bad_atr   <- is.na(atr_14_v) | atr_14_v <= 0
     atr_14_v[bad_atr] <- cl_v[bad_atr] * 0.02
-    body_low <- pmin(op_v, cl_v)
-    lw_raw   <- pmax(0, body_low - lo_v) / (atr_14_v + 1e-5)
-    lw_10    <- as.numeric(TTR::runMean(lw_raw, n = 10))
+    body_low  <- pmin(op_v, cl_v)
+    body_high <- pmax(op_v, cl_v)
+    lw_raw    <- pmax(0, body_low - lo_v) / (atr_14_v + 1e-5)
+    uw_raw    <- pmax(0, hi_v - body_high) / (atr_14_v + 1e-5)
+    lw_10     <- as.numeric(TTR::runMean(lw_raw, n = 10))
     lw_10[is.na(lw_10)] <- 0.3
     feat_lower_wick <- xts(pmin(lw_10, 3.0), order.by = index(price))
+
+    # (iv-b) NetWickDemand_10D (10D ATR-normalized net absorption: lower wick demand minus upper wick supply)
+    net_wick_10 <- as.numeric(TTR::runMean(lw_raw - uw_raw, n = 10))
+    net_wick_10[is.na(net_wick_10)] <- 0.0
+    feat_net_wick <- xts(pmin(pmax(net_wick_10, -2.5), 2.5), order.by = index(price))
 
     # (v) CMF_20D (20-Day Chaikin Money Flow: volume-weighted Close Location Value)
     hl_rng  <- pmax(hi_v - lo_v, 1e-4)
@@ -494,6 +502,7 @@ build_feature_dataset <- function(ohlcv,
   colnames(feat_idio_alpha)  <- "IdioAlpha_20D"
   colnames(feat_range_close) <- "RangeToCloseVol_20D"
   colnames(feat_lower_wick)  <- "LowerWickDemand_10D"
+  colnames(feat_net_wick)    <- "NetWickDemand_10D"
   colnames(feat_cmf_20)      <- "CMF_20D"
   colnames(feat_rs_60)       <- "RS_60"
   colnames(feat_eff_ratio)   <- "EfficiencyRatio_20D"
@@ -546,11 +555,27 @@ build_feature_dataset <- function(ohlcv,
   }
   target_tb <- xts(tb_labels, order.by = index(price))
   colnames(target_tb) <- "TargetBinary"
+
+  # Non-Linear Normalization (Weakness 2 Solution):
+  # Transform SlopeSlow and RS_60 using an asymmetric saturation / bell curve dampener.
+  # Moderate, emerging momentum receives the highest score, while parabolic overextensions (> 3.0 x ATR)
+  # are smoothly penalized before hitting the GLM to prevent chasing extended exhaustion breakouts.
+  atr_ext_raw <- as.numeric(feat_atr_ext)
+  ext_damp <- exp(-pmax(0, atr_ext_raw - 1.8)^2 / (2 * 1.2^2))
+  ext_damp[is.na(ext_damp)] <- 1.0
+
+  feat_slope_slow_raw  <- feat_slope_slow
+  feat_slope_slow_norm <- xts(tanh(as.numeric(feat_slope_slow) / 0.25) * ext_damp, order.by = index(price))
+  colnames(feat_slope_slow_norm) <- "SlopeSlow"
+
+  feat_rs_60_raw  <- feat_rs_60
+  feat_rs_60_norm <- xts(tanh(as.numeric(feat_rs_60) / 0.15) * ext_damp, order.by = index(price))
+  colnames(feat_rs_60_norm) <- "RS_60"
   
-  # 8. Merge all 26 predictor features (including MS-GARCH & High-Alpha Microstructure/Squeeze Features)
+  # 8. Merge all predictor features (including MS-GARCH, High-Alpha Microstructure, & Net Wick Demand)
   features_xts <- merge(
     SlopeFast          = feat_slope_fast,
-    SlopeSlow          = feat_slope_slow,
+    SlopeSlow          = feat_slope_slow_norm,
     SlopeWeeklyPct     = feat_slope_weekly,
     TrendQuality       = feat_rsq_fast,
     DistPct            = feat_dist_pct,
@@ -579,8 +604,9 @@ build_feature_dataset <- function(ohlcv,
     IdioAlpha_20D       = feat_idio_alpha,
     RangeToCloseVol_20D = feat_range_close,
     LowerWickDemand_10D = feat_lower_wick,
+    NetWickDemand_10D   = feat_net_wick,
     CMF_20D             = feat_cmf_20,
-    RS_60               = feat_rs_60,
+    RS_60               = feat_rs_60_norm,
     EfficiencyRatio_20D = feat_eff_ratio,
     ATR_Comp_5v20       = feat_atr_comp,
     VolumeExp_5v20      = feat_vol_5v20,
@@ -591,15 +617,18 @@ build_feature_dataset <- function(ohlcv,
   
   # Orthogonalized 26-Feature Continuous Predictor Set for ElasticNet:
   # Prunes collinear duplicates (SlopeWeeklyPct, ATRExt, BB_PctB, GARCH_Shock, DistPct, RSI_14, MACD_Hist),
-  # noisy 1-day/cumulative volume outliers (VolumeRatio, OBV_Slope), and step-function flags,
-  # replacing them with 12 orthogonal continuous alpha, microstructure, path-efficiency & tail-risk predictors:
+  # noisy 1-day/cumulative volume outliers (VolumeRatio, OBV_Slope), and step-function flags.
+  # Weakness 1 Resolution: Replaces collinear SortinoMom_20D in the GLM with NetWickDemand_10D
+  # (net institutional shadow demand absorption, r < 0.22 vs r = 0.87 collinear cluster),
+  # while SortinoMom_20D remains unconstrained in the Quality_Score ranker and Ralph Vince sizing engine.
+  # Weakness 2 Resolution: Non-linearly normalized SlopeSlow and RS_60 penalize parabolic overextensions > 3.0x ATR.
   feature_names <- c("SlopeFast", "SlopeSlow", "TrendQuality",
                      "ZScore", "GARCH_Vol", "GARCH_VolPct", "MSGARCH_ProbHighVol",
                      "RS_20", "SectorSpread", "AsymVolRatio",
                      "VolSqueeze", "SqueezeRelease", "CLV_5D", "IntradayVsGap_10D",
                      "Prox52WHigh", "IdioAlpha_20D", "RangeToCloseVol_20D", "LowerWickDemand_10D",
                      "CMF_20D", "RS_60", "EfficiencyRatio_20D",
-                     "ATR_Comp_5v20", "VolumeExp_5v20", "UpDownVolRatio_20D", "SortinoMom_20D", "LeftTailShock_20D")
+                     "ATR_Comp_5v20", "VolumeExp_5v20", "UpDownVolRatio_20D", "NetWickDemand_10D", "LeftTailShock_20D")
   
   # Clean warm-up NAs across features
   clean_feats_xts <- na.omit(features_xts)
@@ -661,6 +690,7 @@ build_feature_dataset <- function(ohlcv,
     IdioAlpha_20D       = as.numeric(clean_model_xts[, "IdioAlpha_20D"]),
     RangeToCloseVol_20D = as.numeric(clean_model_xts[, "RangeToCloseVol_20D"]),
     LowerWickDemand_10D = as.numeric(clean_model_xts[, "LowerWickDemand_10D"]),
+    NetWickDemand_10D   = as.numeric(clean_model_xts[, "NetWickDemand_10D"]),
     CMF_20D             = as.numeric(clean_model_xts[, "CMF_20D"]),
     RS_60               = as.numeric(clean_model_xts[, "RS_60"]),
     EfficiencyRatio_20D = as.numeric(clean_model_xts[, "EfficiencyRatio_20D"]),
@@ -691,12 +721,16 @@ build_feature_dataset <- function(ohlcv,
     latest_idio_alpha       = as.numeric(tail(feat_idio_alpha, 1)),
     latest_prox_52w         = as.numeric(tail(feat_prox_52w, 1)),
     latest_cmf_20           = as.numeric(tail(feat_cmf_20, 1)),
-    latest_rs_60            = as.numeric(tail(feat_rs_60, 1)),
+    latest_rs_60            = as.numeric(tail(feat_rs_60_raw, 1)),
+    latest_rs_60_norm       = as.numeric(tail(feat_rs_60_norm, 1)),
+    latest_slope_slow_raw   = as.numeric(tail(feat_slope_slow_raw, 1)),
+    latest_slope_slow       = as.numeric(tail(feat_slope_slow_norm, 1)),
     latest_eff_ratio        = as.numeric(tail(feat_eff_ratio, 1)),
     latest_atr_comp         = as.numeric(tail(feat_atr_comp, 1)),
     latest_vol_5v20         = as.numeric(tail(feat_vol_5v20, 1)),
     latest_ud_vol           = as.numeric(tail(feat_ud_vol_20, 1)),
     latest_sortino_mom      = as.numeric(tail(feat_sortino_20, 1)),
+    latest_net_wick         = as.numeric(tail(feat_net_wick, 1)),
     latest_left_tail        = as.numeric(tail(feat_tail_shk_20, 1)),
     latest_rs_20            = as.numeric(tail(feat_rs_20, 1)),
     latest_atr_ext          = as.numeric(tail(feat_atr_ext, 1)),

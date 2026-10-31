@@ -250,7 +250,7 @@ train_swing_model <- function(X_train,
   base_alpha_cols <- c("VolSqueeze", "SqueezeRelease", "CLV_5D", "IntradayVsGap_10D",
                        "Prox52WHigh", "IdioAlpha_20D", "RangeToCloseVol_20D", "LowerWickDemand_10D",
                        "CMF_20D", "RS_60", "EfficiencyRatio_20D",
-                       "ATR_Comp_5v20", "VolumeExp_5v20", "UpDownVolRatio_20D", "SortinoMom_20D", "LeftTailShock_20D")
+                       "ATR_Comp_5v20", "VolumeExp_5v20", "UpDownVolRatio_20D", "NetWickDemand_10D", "LeftTailShock_20D")
   alpha_sub_cols  <- intersect(base_alpha_cols, colnames(X_train))
   has_alpha_sub   <- (length(alpha_sub_cols) >= 7)
   alpha_sub_fit  <- NULL
@@ -293,9 +293,9 @@ train_swing_model <- function(X_train,
       cmf_v    <- get_col_or(X_test, "CMF_20D", 0.0)
       rs60_v   <- get_col_or(X_test, "RS_60", 0.0)
       er20_v   <- get_col_or(X_test, "EfficiencyRatio_20D", 0.3)
-      v5v20_v  <- get_col_or(X_test, "VolumeExp_5v20", 1.0)
-      udvol_v  <- get_col_or(X_test, "UpDownVolRatio_20D", 0.0)
-      smom_v   <- get_col_or(X_test, "SortinoMom_20D", 0.0)
+      v5v20_v   <- get_col_or(X_test, "VolumeExp_5v20", 1.0)
+      udvol_v   <- get_col_or(X_test, "UpDownVolRatio_20D", 0.0)
+      netwick_v <- get_col_or(X_test, "NetWickDemand_10D", 0.0)
 
       conv_tilt <- pmin(0.075, pmax(-0.040,
         0.015 * pmin(sq_rel_v, 2.0) +
@@ -309,7 +309,7 @@ train_swing_model <- function(X_train,
         0.012 * cmf_v +
         0.008 * pmax(0, v5v20_v - 1.05) +
         0.006 * pmax(0, udvol_v) +
-        0.006 * pmax(0, smom_v - 1.0)
+        0.008 * pmin(pmax(netwick_v, -1.0), 1.5)
       ))
       pred_probs_vec <- pmin(0.999, pmax(0.001, 0.80 * pred_probs_vec + 0.20 * p_alpha_sub + conv_tilt))
     }

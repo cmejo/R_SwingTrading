@@ -169,10 +169,10 @@ assert_true("Active Signal Accuracy" %in% m_fit$metrics$Metric, "B1: Active Sign
 assert_true(!is.null(m_fit$feature_importance), "M2: Feature importance data frame generated")
 assert_equal(nrow(m_fit$feature_importance), length(pipe_res$feature_names), "M2: All features ranked in importance")
 assert_equal(length(pipe_res$feature_names), 26, "M2: Orthogonalized 26-feature continuous predictor set active")
-assert_true(all(c("Prox52WHigh", "IdioAlpha_20D", "RangeToCloseVol_20D", "LowerWickDemand_10D", "CMF_20D", "RS_60", "EfficiencyRatio_20D", "ATR_Comp_5v20", "VolumeExp_5v20", "UpDownVolRatio_20D", "SortinoMom_20D", "LeftTailShock_20D") %in% pipe_res$feature_names), "M2: All 12 Stage-1/2/3 orthogonal alpha features present in feature_names")
+assert_true(all(c("Prox52WHigh", "IdioAlpha_20D", "RangeToCloseVol_20D", "LowerWickDemand_10D", "CMF_20D", "RS_60", "EfficiencyRatio_20D", "ATR_Comp_5v20", "VolumeExp_5v20", "UpDownVolRatio_20D", "NetWickDemand_10D", "LeftTailShock_20D") %in% pipe_res$feature_names), "M2: All 12 Stage-1/2/3 orthogonal alpha features present in feature_names")
 assert_true("StdBeta" %in% colnames(m_fit$feature_importance), "M2: Scale-invariant StdBeta column present in feature_importance")
 assert_true(!is.null(pipe_res$latest_trend_quality), "M2: latest_trend_quality exposed for Adaptive 20D Runner Horizon")
-assert_true(!is.null(pipe_res$latest_idio_alpha) && !is.null(pipe_res$latest_rs_60) && !is.null(pipe_res$latest_eff_ratio) && !is.null(pipe_res$latest_sortino_mom), "M2: latest_idio_alpha, latest_rs_60, latest_eff_ratio, and latest_sortino_mom exposed for Quality_Score & Sizing")
+assert_true(!is.null(pipe_res$latest_idio_alpha) && !is.null(pipe_res$latest_rs_60) && !is.null(pipe_res$latest_eff_ratio) && !is.null(pipe_res$latest_sortino_mom) && !is.null(pipe_res$latest_net_wick), "M2: latest_idio_alpha, latest_rs_60, latest_eff_ratio, latest_sortino_mom, and latest_net_wick exposed for Quality_Score & Sizing")
 
 # ------------------------------------------------------------------------------
 # TEST GROUP 5: Backtest Engine & Realistic Execution (B3, L2)

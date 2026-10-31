@@ -479,6 +479,7 @@ for (sym in SYMBOLS) {
     latest_vol_5v20      <- if (!is.null(pipeline_out$latest_vol_5v20)) pipeline_out$latest_vol_5v20 else 1.0
     latest_ud_vol        <- if (!is.null(pipeline_out$latest_ud_vol)) pipeline_out$latest_ud_vol else 0.0
     latest_sortino_mom   <- if (!is.null(pipeline_out$latest_sortino_mom)) pipeline_out$latest_sortino_mom else 0.0
+    latest_net_wick      <- if (!is.null(pipeline_out$latest_net_wick)) pipeline_out$latest_net_wick else 0.0
     latest_left_tail     <- if (!is.null(pipeline_out$latest_left_tail)) pipeline_out$latest_left_tail else -1.5
     latest_rs_20         <- pipeline_out$latest_rs_20
     latest_atr_ext       <- pipeline_out$latest_atr_ext
@@ -579,6 +580,7 @@ for (sym in SYMBOLS) {
       Vol_5v20 = latest_vol_5v20,
       UD_Vol = latest_ud_vol,
       Sortino_Mom = latest_sortino_mom,
+      Net_Wick = latest_net_wick,
       Left_Tail = latest_left_tail,
       RS_20 = latest_rs_20,
       ATRExt = latest_atr_ext,
