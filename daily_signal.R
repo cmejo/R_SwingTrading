@@ -344,25 +344,32 @@ SECTOR_MAP <- if (file.exists("sector_map.json")) {
 }
 
 sector_etf_map <- list(
-  Semiconductors      = "SMH",
-  MegaCap_Tech        = "QQQ",
-  Enterprise_Software = "XLK",
-  Software_Cloud      = "XLK",
-  Cybersecurity       = "XLK",
-  Hardware_Tech       = "XLK",
-  Fintech_Financials  = "XLF",
-  Fintech_Crypto      = "XLF",
-  Financials          = "XLF",
-  Power_Industrial    = "XLI",
-  Industrials         = "XLI",
-  Energy_Power        = "XLE",
-  Energy              = "XLE",
-  HealthCare          = "XLV",
-  Biotech             = "XLV",
-  Materials           = "XLB",
-  Communication       = "XLC",
-  Consumer            = "XLY",
-  Index_ETF           = "SPY"
+  Semiconductors           = "SMH",
+  MegaCap_Tech             = "QQQ",
+  Enterprise_Software      = "XLK",
+  Software_Cloud           = "XLK",
+  Cybersecurity            = "XLK",
+  Cybersecurity_Networking = "XLK",
+  Hardware_Tech            = "XLK",
+  Hardware_EmergingTech    = "XLK",
+  General_Tech             = "XLK",
+  Fintech_Financials       = "XLF",
+  Fintech_Crypto           = "XLF",
+  Financials               = "XLF",
+  Power_Industrial         = "XLI",
+  Aerospace_Defense        = "XLI",
+  Industrials              = "XLI",
+  Energy_Power             = "XLE",
+  Energy                   = "XLE",
+  HealthCare               = "XLV",
+  Healthcare_Biotech       = "XLV",
+  Biotech                  = "XLV",
+  Materials                = "XLB",
+  Communication            = "XLC",
+  Media_Communication      = "XLC",
+  Consumer                 = "XLY",
+  Consumer_Discretionary   = "XLY",
+  Index_ETF                = "SPY"
 )
 
 sector_map_dirty <- FALSE
@@ -458,11 +465,14 @@ for (sym in SYMBOLS) {
     latest_trend_quality <- if (!is.null(pipeline_out$latest_trend_quality)) pipeline_out$latest_trend_quality else 0.50
     latest_idio_alpha    <- if (!is.null(pipeline_out$latest_idio_alpha)) pipeline_out$latest_idio_alpha else 0.0
     latest_prox_52w      <- if (!is.null(pipeline_out$latest_prox_52w)) pipeline_out$latest_prox_52w else 0.0
+    latest_cmf_20        <- if (!is.null(pipeline_out$latest_cmf_20)) pipeline_out$latest_cmf_20 else 0.0
+    latest_rs_60         <- if (!is.null(pipeline_out$latest_rs_60)) pipeline_out$latest_rs_60 else 0.0
+    latest_eff_ratio     <- if (!is.null(pipeline_out$latest_eff_ratio)) pipeline_out$latest_eff_ratio else 0.30
     latest_rs_20         <- pipeline_out$latest_rs_20
     latest_atr_ext       <- pipeline_out$latest_atr_ext
     latest_sec_spread    <- pipeline_out$latest_sector_spread
     latest_asym_vol      <- pipeline_out$latest_asym_vol
-    is_rs_leader         <- (!is.na(latest_rs_20) && latest_rs_20 >= 0)
+    is_rs_leader         <- (!is.na(latest_rs_20) && latest_rs_20 >= 0 && (is.na(latest_rs_60) || latest_rs_60 > -0.05))
     is_overextended      <- (!is.na(latest_atr_ext) && latest_atr_ext > 3.0) # Feature 1: Mean-Reversion Guard
 
     # 20-day Average Daily Volume & Dollar Volume (L3 Market Impact Guard)
@@ -538,6 +548,9 @@ for (sym in SYMBOLS) {
       Trend_Quality = latest_trend_quality,
       Idio_Alpha = latest_idio_alpha,
       Prox_52W = latest_prox_52w,
+      CMF_20 = latest_cmf_20,
+      RS_60 = latest_rs_60,
+      Eff_Ratio = latest_eff_ratio,
       RS_20 = latest_rs_20,
       ATRExt = latest_atr_ext,
       Sector_Spread = latest_sec_spread,
@@ -577,13 +590,16 @@ if (sector_map_dirty) {
 df_scan <- do.call(rbind, scan_results)
 
 # Cross-Sectional Quality Score incorporating Sector Momentum Tailwind, Asymmetric Volatility,
-# Trend Quality (R^2 > 0.50), and Beta-Adjusted Idiosyncratic Alpha (IdioAlpha_20D):
+# Trend Quality (R^2 > 0.50), Beta-Adjusted Idiosyncratic Alpha (IdioAlpha_20D),
+# Quarterly Structural RS (RS_60), and Kaufman Path Efficiency Ratio (Eff_Ratio):
 sector_boost <- pmax(0, df_scan$Sector_Spread)
 asym_boost   <- pmax(0, df_scan$Asym_Vol * 0.1)
 tq_boost     <- pmax(0, (df_scan$Trend_Quality - 0.50) * 0.25)
 idio_boost   <- pmax(0, df_scan$Idio_Alpha * 0.08)
+rs60_boost   <- pmax(0, df_scan$RS_60 * 0.20)
+er_boost     <- pmax(0, (df_scan$Eff_Ratio - 0.30) * 0.20)
 df_scan$Quality_Score <- ifelse(df_scan$Signal == "BUY" & df_scan$Prob_Up >= df_scan$Req_P_Up & df_scan$RS_20 > 0,
-                                df_scan$Prob_Up * (1 + df_scan$RS_20 + 0.5 * sector_boost + asym_boost + tq_boost + idio_boost),
+                                df_scan$Prob_Up * (1 + df_scan$RS_20 + 0.5 * sector_boost + asym_boost + tq_boost + idio_boost + rs60_boost + er_boost),
                                 0.0)
 df_scan <- df_scan[order(-df_scan$Quality_Score, -df_scan$Prob_Up), ]
 rownames(df_scan) <- 1:nrow(df_scan)

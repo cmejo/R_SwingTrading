@@ -99,12 +99,18 @@ build_feature_dataset <- function(ohlcv,
     feat_garch_pct      <- garch_out$vol_percentile
     feat_prob_high_vol  <- garch_out$prob_high_vol
   } else {
-    # Simple rolling volatility fallback
+    # Simple rolling volatility fallback with smooth logistic high-vol regime probability
     rets <- na.omit(diff(log(price)))
     feat_garch_vol      <- TTR::runSD(rets, n = 20) * sqrt(252)
     feat_garch_shock    <- rets / (feat_garch_vol / sqrt(252))
     feat_garch_pct      <- runPercentRank(feat_garch_vol, n = 50)
-    feat_prob_high_vol  <- xts(rep(0.5, length(feat_garch_vol)), order.by = index(feat_garch_vol))
+    w_base <- min(100L, max(20L, as.integer(floor(length(feat_garch_vol) * 0.45))))
+    vol_base <- as.numeric(TTR::runMean(feat_garch_vol, n = w_base))
+    vol_base[is.na(vol_base) | vol_base <= 0] <- 0.25
+    z_hv <- (as.numeric(feat_garch_vol) - vol_base) / (0.25 * vol_base + 1e-4)
+    p_hv <- 1.0 / (1.0 + exp(-pmin(pmax(z_hv, -6.0), 6.0)))
+    p_hv[is.na(p_hv)] <- 0.5
+    feat_prob_high_vol  <- xts(p_hv, order.by = index(feat_garch_vol))
   }
   
   colnames(feat_garch_vol)     <- "GARCH_Vol"
@@ -353,11 +359,16 @@ build_feature_dataset <- function(ohlcv,
   feat_idio_alpha  <- xts(rep(0.0,   nrow(price)), order.by = index(price))
   feat_range_close <- xts(rep(1.0,   nrow(price)), order.by = index(price))
   feat_lower_wick  <- xts(rep(0.3,   nrow(price)), order.by = index(price))
+  feat_cmf_20      <- xts(rep(0.0,   nrow(price)), order.by = index(price))
+  feat_rs_60       <- xts(rep(0.0,   nrow(price)), order.by = index(price))
+  feat_eff_ratio   <- xts(rep(0.3,   nrow(price)), order.by = index(price))
   tryCatch({
     op_v <- as.numeric(Op(ohlcv))
     hi_v <- as.numeric(Hi(ohlcv))
     lo_v <- as.numeric(Lo(ohlcv))
     cl_v <- as.numeric(price)
+    vo_v <- tryCatch(as.numeric(Vo(ohlcv)), error = function(e) rep(1e6, n_rows))
+    vo_v[is.na(vo_v) | vo_v <= 0] <- 1e6
     ret_1d <- c(0, diff(log(pmax(cl_v, 1e-4))))
     ret_1d[is.na(ret_1d)] <- 0
 
@@ -371,10 +382,12 @@ build_feature_dataset <- function(ohlcv,
 
     # (ii) IdioAlpha_20D (Beta-Adjusted Residual Information Ratio vs Benchmark)
     bmk_ret_1d <- rep(0, n_rows)
+    b_cl <- cl_v
     if (!is.null(benchmark_ohlcv)) {
       m_b <- merge(price, Cl(benchmark_ohlcv))
       m_b <- na.locf(m_b, na.rm = FALSE)
       b_cl <- as.numeric(m_b[index(price), 2])
+      b_cl[is.na(b_cl) | b_cl <= 0] <- cl_v[is.na(b_cl) | b_cl <= 0]
       bmk_ret_1d <- c(0, diff(log(pmax(b_cl, 1e-4))))
       bmk_ret_1d[is.na(bmk_ret_1d)] <- 0
     }
@@ -413,11 +426,38 @@ build_feature_dataset <- function(ohlcv,
     lw_10    <- as.numeric(TTR::runMean(lw_raw, n = 10))
     lw_10[is.na(lw_10)] <- 0.3
     feat_lower_wick <- xts(pmin(lw_10, 3.0), order.by = index(price))
+
+    # (v) CMF_20D (20-Day Chaikin Money Flow: volume-weighted Close Location Value)
+    hl_rng  <- pmax(hi_v - lo_v, 1e-4)
+    clv_1d  <- ((cl_v - lo_v) - (hi_v - cl_v)) / hl_rng
+    clv_1d[is.na(clv_1d)] <- 0
+    cmf_v   <- as.numeric(TTR::runSum(clv_1d * vo_v, n = fast_n)) / (as.numeric(TTR::runSum(vo_v, n = fast_n)) + 1e-4)
+    cmf_v[is.na(cmf_v)] <- 0.0
+    feat_cmf_20 <- xts(pmin(pmax(cmf_v, -1.0), 1.0), order.by = index(price))
+
+    # (vi) RS_60 (60-Day Quarterly Structural Relative Strength vs Benchmark)
+    w_60 <- min(60L, max(15L, as.integer(floor(n_rows * 0.35))))
+    ret_60_s <- (cl_v / as.numeric(lag.xts(price, k = w_60))) - 1.0
+    ret_60_b <- (b_cl / as.numeric(lag.xts(xts(b_cl, order.by = index(price)), k = w_60))) - 1.0
+    rs60_v   <- ret_60_s - ret_60_b
+    rs60_v[is.na(rs60_v)] <- 0.0
+    feat_rs_60 <- xts(pmin(pmax(rs60_v, -1.0), 1.5), order.by = index(price))
+
+    # (vii) EfficiencyRatio_20D (Kaufman 20-Day Path Efficiency Ratio)
+    abs_d1  <- c(0, abs(diff(cl_v)))
+    net_m20 <- abs(cl_v - as.numeric(lag.xts(price, k = fast_n)))
+    path_20 <- as.numeric(TTR::runSum(abs_d1, n = fast_n))
+    er_v    <- net_m20 / (path_20 + 1e-4)
+    er_v[is.na(er_v)] <- 0.30
+    feat_eff_ratio <- xts(pmin(pmax(er_v, 0.0), 1.0), order.by = index(price))
   }, error = function(e) NULL)
   colnames(feat_prox_52w)    <- "Prox52WHigh"
   colnames(feat_idio_alpha)  <- "IdioAlpha_20D"
   colnames(feat_range_close) <- "RangeToCloseVol_20D"
   colnames(feat_lower_wick)  <- "LowerWickDemand_10D"
+  colnames(feat_cmf_20)      <- "CMF_20D"
+  colnames(feat_rs_60)       <- "RS_60"
+  colnames(feat_eff_ratio)   <- "EfficiencyRatio_20D"
 
   # 7. Forward Target & Path-Dependent Triple-Barrier Label (Look-Ahead k Days)
   # Upper Profit Barrier: +1.5R (+3.0 * sigma_daily)
@@ -494,23 +534,30 @@ build_feature_dataset <- function(ohlcv,
     Prox52WHigh         = feat_prox_52w,
     IdioAlpha_20D       = feat_idio_alpha,
     RangeToCloseVol_20D = feat_range_close,
-    LowerWickDemand_10D = feat_lower_wick
+    LowerWickDemand_10D = feat_lower_wick,
+    CMF_20D             = feat_cmf_20,
+    RS_60               = feat_rs_60,
+    EfficiencyRatio_20D = feat_eff_ratio
   )
   
-  # Orthogonalized 26-Feature Predictor Set for ElasticNet:
-  # Prunes the 4 near-duplicate / zero-selection collinear features (SlopeWeeklyPct, ATRExt, BB_PctB, GARCH_Shock)
-  # and replaces them with 4 high-IC orthogonal alpha & wick-geometry predictors:
+  # Orthogonalized 26-Feature Continuous Predictor Set for ElasticNet:
+  # Prunes the 4 collinear duplicates (SlopeWeeklyPct, ATRExt, BB_PctB, GARCH_Shock) and the
+  # 3 lowest-selection (<2.1%) binary step-function interaction flags (PEAD_Catalyst, PullbackInUptrend, BreakoutWithVolume),
+  # replacing them with 7 orthogonal continuous alpha, microstructure & path-efficiency predictors:
   #   - Prox52WHigh         (252-day high proximity / overhead supply anchor)
   #   - IdioAlpha_20D       (20-day beta-adjusted residual Information Ratio vs SPY)
   #   - RangeToCloseVol_20D (Parkinson High-Low vol / Close-to-Close vol stop-hunt guard)
   #   - LowerWickDemand_10D (10-day ATR-normalized lower-shadow institutional dip-buying absorption)
+  #   - CMF_20D             (20-day Chaikin Money Flow volume-weighted CLV pullback washout)
+  #   - RS_60               (60-day quarterly structural Relative Strength vs SPY)
+  #   - EfficiencyRatio_20D (20-day Kaufman net-move to path-length efficiency ratio)
   feature_names <- c("SlopeFast", "SlopeSlow", "TrendQuality", "DistPct", 
                      "ZScore", "GARCH_Vol", "GARCH_VolPct", "MSGARCH_ProbHighVol",
                      "VolumeRatio", "OBV_Slope", "RSI_14", "MACD_Hist", "RS_20", 
                      "SectorSpread", "AsymVolRatio",
                      "VolSqueeze", "SqueezeRelease", "CLV_5D", "IntradayVsGap_10D",
-                     "PEAD_Catalyst", "PullbackInUptrend", "BreakoutWithVolume",
-                     "Prox52WHigh", "IdioAlpha_20D", "RangeToCloseVol_20D", "LowerWickDemand_10D")
+                     "Prox52WHigh", "IdioAlpha_20D", "RangeToCloseVol_20D", "LowerWickDemand_10D",
+                     "CMF_20D", "RS_60", "EfficiencyRatio_20D")
   
   # Clean warm-up NAs across features
   clean_feats_xts <- na.omit(features_xts)
@@ -571,7 +618,10 @@ build_feature_dataset <- function(ohlcv,
     Prox52WHigh         = as.numeric(clean_model_xts[, "Prox52WHigh"]),
     IdioAlpha_20D       = as.numeric(clean_model_xts[, "IdioAlpha_20D"]),
     RangeToCloseVol_20D = as.numeric(clean_model_xts[, "RangeToCloseVol_20D"]),
-    LowerWickDemand_10D = as.numeric(clean_model_xts[, "LowerWickDemand_10D"])
+    LowerWickDemand_10D = as.numeric(clean_model_xts[, "LowerWickDemand_10D"]),
+    CMF_20D             = as.numeric(clean_model_xts[, "CMF_20D"]),
+    RS_60               = as.numeric(clean_model_xts[, "RS_60"]),
+    EfficiencyRatio_20D = as.numeric(clean_model_xts[, "EfficiencyRatio_20D"])
   )
   
   cat(sprintf("[Pipeline] Complete. Result: %d valid observation rows across %d features.\n",
@@ -593,6 +643,9 @@ build_feature_dataset <- function(ohlcv,
     latest_trend_quality    = as.numeric(tail(feat_rsq_fast, 1)),
     latest_idio_alpha       = as.numeric(tail(feat_idio_alpha, 1)),
     latest_prox_52w         = as.numeric(tail(feat_prox_52w, 1)),
+    latest_cmf_20           = as.numeric(tail(feat_cmf_20, 1)),
+    latest_rs_60            = as.numeric(tail(feat_rs_60, 1)),
+    latest_eff_ratio        = as.numeric(tail(feat_eff_ratio, 1)),
     latest_rs_20            = as.numeric(tail(feat_rs_20, 1)),
     latest_atr_ext          = as.numeric(tail(feat_atr_ext, 1)),
     latest_sector_spread    = as.numeric(tail(feat_sector_spread, 1)),

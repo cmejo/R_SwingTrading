@@ -342,14 +342,14 @@
   <!-- Headline Audited KPIs -->
   <div class="kpi-strip">
     <div class="kpi-card emerald">
-      <div class="val">+178.5%</div>
+      <div class="val">+192.0%</div>
       <div class="lbl">10-Yr Swing Sleeve CAGR</div>
-      <div class="sub">Unlevered Equity + SGOV (2.67 SR)</div>
+      <div class="sub">Unlevered Equity + SGOV (2.79 SR)</div>
     </div>
     <div class="kpi-card emerald">
-      <div class="val">+254.0%</div>
+      <div class="val">+270.1%</div>
       <div class="lbl">10-Yr Full Core-Sat CAGR</div>
-      <div class="sub">With Dual-Bear Hedge (3.26 SR)</div>
+      <div class="sub">With Dual-Bear Hedge (3.37 SR)</div>
     </div>
     <div class="kpi-card">
       <div class="val">+110.9%</div>
@@ -362,12 +362,12 @@
       <div class="sub">TTS (28%) / NYC (51% Tax)</div>
     </div>
     <div class="kpi-card">
-      <div class="val">3.26 / 6.02</div>
+      <div class="val">3.37 / 6.31</div>
       <div class="lbl">10-Yr Sharpe / Sortino</div>
-      <div class="sub">Equity-Only: 2.67 / 4.74</div>
+      <div class="sub">Equity-Only: 2.79 / 5.01</div>
     </div>
     <div class="kpi-card amber">
-      <div class="val">-25.3% / -31.6%</div>
+      <div class="val">-23.6% / -31.6%</div>
       <div class="lbl">Max Drawdown (10Y / 40Y)</div>
       <div class="sub">vs. QQQ -83.0% Max DD</div>
     </div>
@@ -401,7 +401,7 @@
     <div class="pipe-step">
       <div class="step-num">Stage 2 &bull; Features</div>
       <div class="step-title">26 Orthogonal Factors</div>
-      <div class="step-desc">Computes Trend <em>R</em><sup>2</sup>, MS-GARCH Vol, Squeeze Release, <code>Prox52WHigh</code>, <code>IdioAlpha_20D</code>, <code>RangeToCloseVol_20D</code>, and <code>LowerWickDemand_10D</code>.</div>
+      <div class="step-desc">Computes <code>CMF_20D</code>, <code>RS_60</code>, <code>EfficiencyRatio_20D</code>, <code>Prox52WHigh</code>, <code>IdioAlpha_20D</code>, <code>RangeToCloseVol_20D</code>, &amp; <code>LowerWickDemand_10D</code>.</div>
     </div>
     <div class="pipe-step">
       <div class="step-num">Stage 3 &bull; Regime</div>
@@ -460,16 +460,16 @@
           </tr>
         </tbody>
       </table>
-      <p style="font-size: 6.8pt; color: #475569;"><strong>Upgraded Cross-Sectional Ranker:</strong> Qualifying <code>BUY</code> candidates are ranked by <code>Quality_Score = P(Up) &times; (1 + RS<sub>20</sub> + 0.5&middot;SecSpread + AsymBoost + 0.25&middot;max(0, R<sup>2</sup>&minus;0.50) + 0.08&middot;max(0, IdioAlpha<sub>20D</sub>))</code>.</p>
+      <p style="font-size: 6.8pt; color: #475569;"><strong>Upgraded Cross-Sectional Ranker:</strong> Qualifying <code>BUY</code> candidates (with <code>RS<sub>20</sub> &ge; 0</code> &amp; <code>RS<sub>60</sub> &gt; -5%</code>) are ranked by <code>Quality_Score = P(Up) &times; (1 + RS<sub>20</sub> + 0.20&middot;RS<sub>60</sub> + 0.5&middot;SecSpread + AsymBoost + 0.25&middot;(R<sup>2</sup>&minus;0.50) + 0.20&middot;(ER<sub>20</sub>&minus;0.30) + 0.08&middot;IdioAlpha<sub>20D</sub>)</code>.</p>
     </div>
 
     <div class="box">
-      <h3>26-Feature Orthogonal Factor Taxonomy (4 Collinear Pruned + 4 Orthogonal Added)</h3>
+      <h3>26-Feature Orthogonal Continuous Factor Taxonomy (7 Collinear/Step Flags Replaced)</h3>
       <ul>
-        <li><strong>Trend Linearity &amp; Breakout Proximity (6 features):</strong> <code>TrendQuality</code> (#1 standardized |&beta;&#771;| = 0.0187, 20d <code>lmMA</code> <em>R</em><sup>2</sup>), <code>SlopeFast</code>, <code>SlopeSlow</code>, <code>ADX_14</code>, <code>BreakoutWithVolume</code>, and <strong><code>Prox52WHigh</code></strong> (#3 |&beta;&#771;| = 0.0074, log-distance to 252-day high).</li>
-        <li><strong>Regime Volatility &amp; Contraction (6 features):</strong> <code>GARCH_Vol</code> (#2 |&beta;&#771;| = 0.0139), <code>GARCH_VolPct</code>, <code>MSGARCH_ProbHighVol</code>, <code>AsymVolRatio</code>, <code>VolSqueeze</code>, and <code>SqueezeRelease</code> (#3 live |&beta;&#771;| = 0.0136).</li>
-        <li><strong>Microstructure &amp; Demand Absorption (7 features):</strong> <strong><code>RangeToCloseVol_20D</code></strong> (Parkinson High-Low / Close-to-Close vol ratio; penalizes stop-hunt wicks), <strong><code>LowerWickDemand_10D</code></strong> (10d ATR-normalized lower-shadow buying), <code>CLV_5D</code>, <code>IntradayVsGap_10D</code>, <code>VolumeRatio</code>, <code>OBV_Slope</code>, and <code>PEAD_Catalyst</code>.</li>
-        <li><strong>Benchmark Residual Alpha &amp; Mean-Reversion (7 features):</strong> <strong><code>IdioAlpha_20D</code></strong> (#1 binary IC = +0.0139; 20d beta-adjusted residual Information Ratio vs. SPY), <code>RS_20</code>, <code>SectorSpread</code>, <code>DistPct</code>, <code>ZScore</code>, <code>RSI_14</code>, and <code>MACD_Hist</code>.</li>
+        <li><strong>Trend Linearity, Path Efficiency &amp; Breakout Proximity (6 features):</strong> <code>TrendQuality</code> (20d <code>lmMA</code> <em>R</em><sup>2</sup>), <strong><code>EfficiencyRatio_20D</code></strong> (Kaufman net-move / path-length ratio; IC = +0.0186), <strong><code>Prox52WHigh</code></strong> (252-day high proximity; 114.4 bps spread), <code>SlopeFast</code>, <code>SlopeSlow</code>, and <code>ADX_14</code>.</li>
+        <li><strong>Regime Volatility &amp; Contraction (6 features):</strong> <code>GARCH_Vol</code>, <code>GARCH_VolPct</code>, <code>MSGARCH_ProbHighVol</code> (2-state Markov-Switching GARCH + logistic regime fallback), <code>AsymVolRatio</code>, <code>VolSqueeze</code>, and <code>SqueezeRelease</code>.</li>
+        <li><strong>Microstructure, Chaikin Money Flow &amp; Wick Geometry (7 features):</strong> <strong><code>CMF_20D</code></strong> (#1 overall |&beta;&#771;| = 0.0102; 20d volume-weighted CLV pullback washout, 132.1 bps spread), <strong><code>LowerWickDemand_10D</code></strong> (10d ATR-normalized lower-shadow buying), <strong><code>RangeToCloseVol_20D</code></strong> (Parkinson High-Low / Close-to-Close stop-hunt guard), <code>CLV_5D</code>, <code>IntradayVsGap_10D</code>, <code>VolumeRatio</code>, and <code>OBV_Slope</code>.</li>
+        <li><strong>Multi-Horizon Relative Strength &amp; Residual Alpha (7 features):</strong> <strong><code>IdioAlpha_20D</code></strong> (20d beta-adjusted residual Information Ratio vs. SPY), <strong><code>RS_60</code></strong> (60d quarterly structural RS vs. SPY; +58.1 bps spread), <code>RS_20</code>, <code>SectorSpread</code> (13-sector ETF mapped), <code>DistPct</code>, <code>ZScore</code>, <code>RSI_14</code>, and <code>MACD_Hist</code>.</li>
       </ul>
     </div>
   </div>
@@ -590,26 +590,26 @@
         <td class="num">55.50%</td>
       </tr>
       <tr class="highlight-blue">
-        <td><strong>4. + 4 Orthogonal Features &amp; Pruned Collinear (161 Stocks)</strong></td>
-        <td class="num pos">+154.81%</td>
-        <td class="num">-33.88%</td>
-        <td class="num">2.42 / 4.17</td>
-        <td class="num">4.57</td>
-        <td class="num pos">+233.88%</td>
-        <td class="num">3.06 / 5.55</td>
-        <td class="num">7.95</td>
-        <td class="num">56.04%</td>
+        <td><strong>4. + Stage-1 Upgrades (4 Orthogonal Feats + 20D Runner, 161 Stocks)</strong></td>
+        <td class="num pos">+178.53%</td>
+        <td class="num">-25.31%</td>
+        <td class="num">2.67 / 4.74</td>
+        <td class="num">7.05</td>
+        <td class="num pos">+254.04%</td>
+        <td class="num">3.26 / 6.02</td>
+        <td class="num">8.15</td>
+        <td class="num">56.36%</td>
       </tr>
       <tr class="highlight">
-        <td><strong>5. LATEST Full System (+ Adaptive Runner + Ranker, 161 Stocks)</strong></td>
-        <td class="num pos">+178.53%</td>
-        <td class="num pos">-25.31%</td>
-        <td class="num"><strong>2.67 / 4.74</strong></td>
-        <td class="num"><strong>7.05</strong></td>
-        <td class="num pos">+254.04%</td>
-        <td class="num"><strong>3.26 / 6.02</strong></td>
-        <td class="num"><strong>8.15</strong></td>
-        <td class="num"><strong>56.36%</strong></td>
+        <td><strong>5. LATEST Stage-2 System (+ CMF<sub>20</sub>, RS<sub>60</sub>, ER<sub>20</sub> &amp; Sector Fix)</strong></td>
+        <td class="num pos">+192.02%</td>
+        <td class="num pos">-23.61%</td>
+        <td class="num"><strong>2.79 / 5.01</strong></td>
+        <td class="num"><strong>8.13</strong></td>
+        <td class="num pos">+270.12%</td>
+        <td class="num"><strong>3.37 / 6.31</strong></td>
+        <td class="num"><strong>8.66</strong></td>
+        <td class="num"><strong>56.32%</strong></td>
       </tr>
     </tbody>
   </table>

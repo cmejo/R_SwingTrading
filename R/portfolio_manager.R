@@ -391,8 +391,9 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
           model_scan_df[model_scan_df$Symbol == sym, ]
         } else NULL
         tq_val <- if (!is.null(sym_row_r) && "Trend_Quality" %in% colnames(sym_row_r)) as.numeric(sym_row_r$Trend_Quality[1]) else 0.65
+        er_val <- if (!is.null(sym_row_r) && "Eff_Ratio" %in% colnames(sym_row_r)) as.numeric(sym_row_r$Eff_Ratio[1]) else 0.45
         rs_val <- if (!is.null(sym_row_r) && "RS_20" %in% colnames(sym_row_r)) as.numeric(sym_row_r$RS_20[1]) else 0.06
-        is_high_r2_leader <- (!is.na(tq_val) && tq_val > 0.60) || (!is.na(rs_val) && rs_val >= 0.05)
+        is_high_r2_leader <- (!is.na(tq_val) && tq_val > 0.60) || (!is.na(er_val) && er_val >= 0.45) || (!is.na(rs_val) && rs_val >= 0.05)
         max_runner_days   <- if (is_high_r2_leader) 20L else 15L
         
         if (days_held >= max_runner_days) {
