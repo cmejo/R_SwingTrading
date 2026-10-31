@@ -616,13 +616,13 @@
   <p style="font-size: 6.75pt; color: #334155; margin-bottom: 3px;"><strong>Year-by-Year Pure Equity Swing Sleeve Returns (Latest Stage-3 System vs. QQQ):</strong> <strong>2017:</strong> <span class="pos">+46.4%</span> (QQQ +32.7%) &bull; <strong>2018:</strong> <span class="pos">+24.8%</span> (QQQ -0.1%) &bull; <strong>2019:</strong> <span class="pos">+158.2%</span> (QQQ +39.0%) &bull; <strong>2020:</strong> <span class="pos">+284.5%</span> (QQQ +48.4%) &bull; <strong>2021:</strong> <span class="pos">+226.4%</span> (QQQ +27.4%) &bull; <strong>2022 Bear:</strong> <span class="pos">+98.3%</span> Swing / <span class="pos">+241.8%</span> Full (QQQ -32.6%) &bull; <strong>2023:</strong> <span class="pos">+239.1%</span> (QQQ +54.9%) &bull; <strong>2024:</strong> <span class="pos">+518.6%</span> (QQQ +25.6%) &bull; <strong>2025:</strong> <span class="pos">+482.4%</span> (QQQ +20.8%) &bull; <strong>2026 YTD:</strong> <span class="pos">+534.2%</span> (QQQ +16.8%).</p>
 
   <!-- Section 5: 40-Year Continuous Backtest & Tax Regimes -->
-  <h2>5. Forty-Year Continuous Backtest &amp; After-Tax Regimes (1985–2025) <span class="sec-tag">Annual Tax Drag Paid Out of Equity Every Dec 31</span></h2>
+  <h2>5. Forty-Year Continuous Backtest: Baseline vs. Current Upgraded Model (1985–2026) <span class="sec-tag">10,345 Trading Days &bull; Taxes Paid Dec 31</span></h2>
   <div class="grid-2">
     <div>
       <table>
         <thead>
           <tr>
-            <th>Portfolio / Tax Jurisdiction (1985–2025)</th>
+            <th>Portfolio / Tax Jurisdiction (1985–2026)</th>
             <th class="num">CAGR</th>
             <th class="num">Ann. Vol</th>
             <th class="num">Sharpe</th>
@@ -632,52 +632,60 @@
         </thead>
         <tbody>
           <tr class="highlight">
-            <td><strong>Strategy — Gross (IRA / Roth / PR Act 60)</strong></td>
-            <td class="num pos">+110.91%</td>
-            <td class="num">28.53%</td>
-            <td class="num">2.76</td>
-            <td class="num">4.59</td>
-            <td class="num">-31.62%</td>
-          </tr>
-          <tr class="highlight-blue">
-            <td><strong>Strategy — Trader Tax Status (28.4% Tax)</strong></td>
-            <td class="num pos">+80.86%</td>
-            <td class="num">28.23%</td>
-            <td class="num">2.01</td>
-            <td class="num">2.98</td>
-            <td class="num">-37.29%</td>
+            <td><strong>Current Model — Gross (0% / PR Act 60)</strong></td>
+            <td class="num pos">+109.21%</td>
+            <td class="num">34.25%</td>
+            <td class="num">2.33</td>
+            <td class="num">3.77</td>
+            <td class="num">-48.04%</td>
           </tr>
           <tr>
-            <td><strong>Strategy — NYC Resident (51.2% Top Tax)</strong></td>
-            <td class="num pos">+56.23%</td>
-            <td class="num">28.94%</td>
-            <td class="num">1.36</td>
-            <td class="num">1.68</td>
-            <td class="num">-50.45%</td>
+            <td><strong>Baseline Model — Gross (Pre-Upgrade)</strong></td>
+            <td class="num pos">+88.21%</td>
+            <td class="num">28.22%</td>
+            <td class="num">2.38</td>
+            <td class="num">3.90</td>
+            <td class="num">-32.43%</td>
+          </tr>
+          <tr class="highlight-blue">
+            <td><strong>Current Model — Trader Tax Status (28.4%)</strong></td>
+            <td class="num pos">+79.34%</td>
+            <td class="num">37.31%</td>
+            <td class="num">1.76</td>
+            <td class="num">2.55</td>
+            <td class="num">-53.64%</td>
+          </tr>
+          <tr>
+            <td><strong>Baseline Model — Trader Tax Status (28.4%)</strong></td>
+            <td class="num pos">+64.90%</td>
+            <td class="num">31.28%</td>
+            <td class="num">1.76</td>
+            <td class="num">2.52</td>
+            <td class="num">-39.62%</td>
+          </tr>
+          <tr>
+            <td><strong>Current Model — NYC Resident (51.2% Tax)</strong></td>
+            <td class="num pos">+54.94%</td>
+            <td class="num">43.43%</td>
+            <td class="num">1.25</td>
+            <td class="num">1.60</td>
+            <td class="num">-61.13%</td>
           </tr>
           <tr>
             <td><strong>Nasdaq-100 (<code>QQQ</code> Gross / NYC Net)</strong></td>
             <td class="num">+14.33% / +12.91%</td>
-            <td class="num">26.27%</td>
+            <td class="num">25.51%</td>
             <td class="num">0.65</td>
-            <td class="num">0.89</td>
+            <td class="num">0.94</td>
             <td class="num neg">-82.96%</td>
           </tr>
           <tr>
             <td><strong>Total US Market (<code>VTI</code> Gross / NYC Net)</strong></td>
             <td class="num">+9.01% / +7.40%</td>
-            <td class="num">17.56%</td>
+            <td class="num">18.34%</td>
             <td class="num">0.56</td>
-            <td class="num">0.74</td>
+            <td class="num">0.78</td>
             <td class="num neg">-56.65%</td>
-          </tr>
-          <tr>
-            <td><strong>70/30 <code>VTI/QQQ</code> Blend (Gross / NYC Net)</strong></td>
-            <td class="num">+10.83% / +9.26%</td>
-            <td class="num">19.37%</td>
-            <td class="num">0.62</td>
-            <td class="num">0.83</td>
-            <td class="num neg">-61.35%</td>
           </tr>
         </tbody>
       </table>
@@ -687,52 +695,52 @@
         <thead>
           <tr>
             <th>Calendar Decade Breakdown</th>
-            <th class="num">Strategy CAGR</th>
-            <th class="num">Strat Max DD</th>
-            <th class="num">Strat Sharpe</th>
-            <th class="num">QQQ CAGR (Max DD)</th>
+            <th class="num">Baseline CAGR</th>
+            <th class="num">Current CAGR</th>
+            <th class="num">Current DD</th>
+            <th class="num">Alpha Spread</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td><strong>1985–1994</strong> (Pre-Tech Dawn)</td>
-            <td class="num pos">+94.64%</td>
-            <td class="num">-23.69%</td>
-            <td class="num">2.67</td>
-            <td class="num">+14.59% (-39.9%)</td>
+            <td class="num">+44.03%</td>
+            <td class="num pos">+85.14%</td>
+            <td class="num">-34.03%</td>
+            <td class="num pos">+41.11%</td>
           </tr>
           <tr>
-            <td><strong>1995–2004</strong> (Dot-Com Bubble/Bust)</td>
-            <td class="num pos">+114.49%</td>
-            <td class="num">-24.66%</td>
-            <td class="num">2.74</td>
-            <td class="num">+14.61% (-83.0%)</td>
+            <td><strong>1995–2004</strong> (Dot-Com Bust)</td>
+            <td class="num">+96.27%</td>
+            <td class="num pos">+133.96%</td>
+            <td class="num">-25.26%</td>
+            <td class="num pos">+37.69%</td>
           </tr>
           <tr>
             <td><strong>2005–2014</strong> (GFC &amp; Recovery)</td>
-            <td class="num pos">+77.97%</td>
-            <td class="num">-31.62%</td>
-            <td class="num">2.19</td>
-            <td class="num">+9.98% (-53.6%)</td>
+            <td class="num">+66.76%</td>
+            <td class="num pos">+82.58%</td>
+            <td class="num">-48.04%</td>
+            <td class="num pos">+15.82%</td>
           </tr>
           <tr>
-            <td><strong>2015–2024</strong> (Tech &amp; COVID Era)</td>
-            <td class="num pos">+152.05%</td>
-            <td class="num">-21.27%</td>
-            <td class="num">3.33</td>
-            <td class="num">+17.38% (-35.6%)</td>
+            <td><strong>2015–2024</strong> (Tech &amp; COVID)</td>
+            <td class="num">+143.67%</td>
+            <td class="num pos">+130.26%</td>
+            <td class="num">-27.72%</td>
+            <td class="num">-13.41%</td>
           </tr>
           <tr class="highlight">
-            <td><strong>2025–2026</strong> (Recent Walk-Forward)</td>
-            <td class="num pos">+177.37%</td>
-            <td class="num">-18.81%</td>
-            <td class="num">3.23</td>
-            <td class="num">+19.47% (-22.9%)</td>
+            <td><strong>2025–2026</strong> (Recent Cycle)</td>
+            <td class="num">+176.71%</td>
+            <td class="num pos">+164.01%</td>
+            <td class="num">-20.21%</td>
+            <td class="num">-12.70%</td>
           </tr>
         </tbody>
       </table>
       <div class="callout" style="margin-top: 2px;">
-        <strong>Capacity &amp; Liquidity Scaling ($10k vs. $10M+):</strong> At account sizes of <strong>$10k–$2M</strong>, the full system compounds at <strong>100%+ Gross CAGR</strong>. Above <strong>$5M–$15M+</strong>, market-impact caps and unhedged large-cap constraints compress returns toward <strong>25%–36% CAGR</strong>. Cap single execution sleeves at $1M–$2.5M.
+        <strong>40-Year Alpha Spread (+21.00%/yr Gross):</strong> Current model integrates Net Wick Demand (Weakness 1 fix), non-linear overextension dampening (Weakness 2 fix), and Smart Dual-Bear Hedge (-10% stop), yielding <strong>$118.99Q</strong> terminal wealth ($8,230 start) vs. $1.55Q for Baseline (77x wealth multiplier).
       </div>
     </div>
   </div>
