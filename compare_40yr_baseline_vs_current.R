@@ -435,7 +435,7 @@ for (t in 1:n_total) {
   cash_park_r <- if (is_bull) qqq_full[t] else rf_full[t]
   
   if (n_sel == 0) {
-    ret_baseline[t] <- cash_park_r * LEVERAGE - margin_fee
+    ret_baseline[t] <- cash_park_r
   } else {
     stock_alloc_total <- 0
     stock_pnl_total   <- 0
@@ -447,7 +447,10 @@ for (t in 1:n_total) {
     }
     unalloc_cash <- max(0, 1.0 - stock_alloc_total)
     cash_yield_pnl <- unalloc_cash * cash_park_r
-    ret_baseline[t] <- (stock_pnl_total + cash_yield_pnl) * LEVERAGE - margin_fee
+    # Leverage applied to equity swing positions, margin interest paid on borrowed capital
+    borrowed_pct <- max(0, (stock_alloc_total * LEVERAGE) - 1.0)
+    cur_margin_fee <- (0.070 / 252) * borrowed_pct
+    ret_baseline[t] <- (stock_pnl_total * LEVERAGE + cash_yield_pnl) - cur_margin_fee
   }
 }
 
@@ -536,7 +539,7 @@ for (t in 1:n_total) {
   n_sel <- length(top_idx)
   
   if (n_sel == 0) {
-    ret_current[t] <- cash_park_r * LEVERAGE - margin_fee
+    ret_current[t] <- cash_park_r
   } else {
     # Sortino & Path-Efficiency Adjusted Inverse-Vol Parity Sizing:
     cand_vols <- pmax(0.15, pmin(1.20, vols[top_idx]))
@@ -557,7 +560,10 @@ for (t in 1:n_total) {
     
     unalloc_cash <- max(0, 1.0 - stock_alloc_total)
     cash_yield_pnl <- unalloc_cash * cash_park_r
-    ret_current[t] <- (stock_pnl_total + cash_yield_pnl) * LEVERAGE - margin_fee
+    # Leverage applied to equity swing positions, margin interest paid on borrowed capital
+    borrowed_pct <- max(0, (stock_alloc_total * LEVERAGE) - 1.0)
+    cur_margin_fee <- (0.070 / 252) * borrowed_pct
+    ret_current[t] <- (stock_pnl_total * LEVERAGE + cash_yield_pnl) - cur_margin_fee
   }
 }
 
