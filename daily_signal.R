@@ -870,13 +870,13 @@ deploy_unallocated_cash <- function(unalloc_cash, port_state, macro_info, gld_in
     prev_peak <- if (!is.null(h_state$peak_ratio)) as.numeric(h_state$peak_ratio) else 1.0
     h_state$peak_ratio <- max(prev_peak, cur_ratio)
     
-    # Safety Stops: 15-Day Time Stop OR -8.0% Max Loss Stop
+    # Safety Stops: 15-Day Time Stop OR -10.0% Max Loss Stop
     if (h_state$days_held > 15) {
       h_state$rotated_to_sgov <- TRUE
       h_state$rotation_reason <- sprintf("15-Day Time Stop Reached (%d trading days held)", h_state$days_held)
-    } else if (hedge_cum_pnl <= -0.08) {
+    } else if (hedge_cum_pnl <= -0.10) {
       h_state$rotated_to_sgov <- TRUE
-      h_state$rotation_reason <- sprintf("-8.0%% Max Loss Triggered (Cumulative P&L: %+.1f%%)", hedge_cum_pnl * 100)
+      h_state$rotation_reason <- sprintf("-10.0%% Max Loss Triggered (Cumulative P&L: %+.1f%%)", hedge_cum_pnl * 100)
     }
     port_state$hedge_state <- h_state
     target_syms <- if (isTRUE(h_state$rotated_to_sgov)) c("SGOV") else c("FNGD", "SQQQ")

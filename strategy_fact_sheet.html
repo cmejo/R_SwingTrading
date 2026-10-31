@@ -333,7 +333,7 @@
       <div class="subtitle">26-Feature Orthogonal ElasticNet ML + Markov-Switching GARCH Volatility Filter + 15D/20D Adaptive Runner &amp; Dual-Bear Hedge</div>
     </div>
     <div class="header-right">
-      <strong>Universe:</strong> ~515 Liquid U.S. Equities (ex-UNH) + ETF Sleeve<br>
+      <strong>Universe:</strong> ~515 Liquid U.S. Equities + Dynamic ETF Sleeve<br>
       <strong>Horizon:</strong> 7–15D Base / 20D Adaptive Runner (+1.5R / +3.0R / -1.0R)<br>
       <strong>Execution:</strong> Daily Post-Close (16:35 ET)
     </div>
@@ -347,9 +347,9 @@
       <div class="sub">+249.7% Unthrottled (3.35 SR)</div>
     </div>
     <div class="kpi-card emerald">
-      <div class="val">+433.7%</div>
+      <div class="val">+444.9%</div>
       <div class="lbl">10-Yr Full Core-Sat CAGR</div>
-      <div class="sub">20D Squeeze-Guarded (4.37 SR)</div>
+      <div class="sub">20D Squeeze-Guarded (4.40 SR)</div>
     </div>
     <div class="kpi-card">
       <div class="val">+110.9%</div>
@@ -362,7 +362,7 @@
       <div class="sub">TTS (28%) / NYC (51% Tax)</div>
     </div>
     <div class="kpi-card">
-      <div class="val">4.37 / 9.06</div>
+      <div class="val">4.40 / 9.15</div>
       <div class="lbl">10-Yr Sharpe / Sortino</div>
       <div class="sub">Equity-Only: 3.35 / 6.47</div>
     </div>
@@ -378,7 +378,7 @@
   <div class="grid-3">
     <div class="box-shaded">
       <h3>A. 26-Factor Orthogonal ML Selection</h3>
-      <p>Every day after close, the engine scores <strong>~515 liquid U.S. equities (ex-UNH)</strong> across <strong>26 orthogonalized predictors</strong> (collinear &amp; negative-IC oscillators replaced; scale-invariant <code>StdBeta = &beta;&middot;&sigma;<sub>X</sub></code> attribution) to estimate the calibrated probability of hitting <strong>+1.5R before -1.0R</strong>.</p>
+      <p>Every day after close, the engine scores <strong>~515 liquid U.S. equities</strong> across <strong>26 orthogonalized predictors</strong> (collinear &amp; negative-IC oscillators replaced; scale-invariant <code>StdBeta = &beta;&middot;&sigma;<sub>X</sub></code> attribution) to estimate the calibrated probability of hitting <strong>+1.5R before -1.0R</strong>.</p>
     </div>
     <div class="box-shaded">
       <h3>B. 15D / 20D Adaptive Runner Payoff</h3>
@@ -386,7 +386,7 @@
     </div>
     <div class="box-shaded">
       <h3>C. Squeeze-Guarded Dual-Bear Sleeve</h3>
-      <p>Individual equities are traded <strong>strictly Long-Only</strong>. In Dual-Bear Regimes (<code>QQQ &lt; 50-lmMA</code> &amp; <code>GLD</code> Bearish), idle cash deploys into inverse ETFs (<code>75% FNGD + 25% SQQQ</code>, -8% stop) <strong>only when <code>QQQ &le; 20-lmMA</code></strong>; counter-trend bear squeezes automatically rotate to <code>SGOV</code> T-Bills.</p>
+      <p>Individual equities are traded <strong>strictly Long-Only</strong>. In Dual-Bear Regimes (<code>QQQ &lt; 50-lmMA</code> &amp; <code>GLD</code> Bearish), idle cash deploys into inverse ETFs (<code>75% FNGD + 25% SQQQ</code>, -10% stop) <strong>only when <code>QQQ &le; 20-lmMA</code></strong>; counter-trend bear squeezes automatically rotate to <code>SGOV</code> T-Bills.</p>
     </div>
   </div>
 
@@ -396,7 +396,7 @@
     <div class="pipe-step">
       <div class="step-num">Stage 1 &bull; Data</div>
       <div class="step-title">Universe Ingestion</div>
-      <div class="step-desc">Fetches adjusted OHLCV for ~515 liquid equities (ex-UNH) + <code>SPY</code>, <code>QQQ</code>, <code>GLD</code>, &amp; <code>^VIX</code>. Enforces $5M min daily dollar volume &amp; 7-day earnings blackout.</div>
+      <div class="step-desc">Fetches adjusted OHLCV for ~515 liquid equities + <code>SPY</code>, <code>QQQ</code>, <code>GLD</code>, &amp; <code>^VIX</code>. Enforces $5M min daily dollar volume &amp; 7-day earnings blackout.</div>
     </div>
     <div class="pipe-step">
       <div class="step-num">Stage 2 &bull; Features</div>
@@ -456,7 +456,7 @@
             <td><strong>Dual-Bear Hedge</strong></td>
             <td><code>QQQ</code> &amp; <code>GLD &lt; 50-lmMA</code> + <code>QQQ &le; 20-lmMA</code></td>
             <td class="center"><span class="neg">65% / HEDGE</span></td>
-            <td><code>75% FNGD + 25% SQQQ</code> (Squeeze &rarr; <code>SGOV</code>; -8% Stop)</td>
+            <td><code>75% FNGD + 25% SQQQ</code> (Squeeze &rarr; <code>SGOV</code>; -10% Stop)</td>
           </tr>
         </tbody>
       </table>
@@ -513,7 +513,7 @@
       <tr>
         <td><strong>Squeeze-Guarded Bear Sleeve</strong></td>
         <td><strong>QQQ / GLD / SGOV</strong> + <strong>75% FNGD / 25% SQQQ</strong></td>
-        <td>Dual-Bear deploys <code>75% FNGD + 25% SQQQ</code> (capped at 15D or <strong>-8.0% max loss</strong>) only when <code>QQQ &le; 20D lmMA</code> &amp; Slope<sub>20D</sub> &lt; 0; counter-trend squeezes park in <code>SGOV</code>.</td>
+        <td>Dual-Bear deploys <code>75% FNGD + 25% SQQQ</code> (capped at 15D or <strong>-10.0% max loss</strong>) only when <code>QQQ &le; 20D lmMA</code> &amp; Slope<sub>20D</sub> &lt; 0; counter-trend squeezes park in <code>SGOV</code>.</td>
       </tr>
     </tbody>
   </table>
@@ -540,7 +540,7 @@
   </div>
 
   <!-- Section 4: 10-Year Out-of-Sample Walk-Forward & Upgrade Attribution -->
-  <h2>4. Ten-Year Out-of-Sample Walk-Forward &amp; Upgrade Attribution (2016–2026 &bull; 2,520 Trading Days) <span class="sec-tag">161 Liquid Stocks (UNH Removed)</span></h2>
+  <h2>4. Ten-Year Out-of-Sample Walk-Forward &amp; Upgrade Attribution (2016–2026 &bull; 2,520 Trading Days) <span class="sec-tag">161 Liquid Equities Universe</span></h2>
   <table>
     <thead>
       <tr>
@@ -557,7 +557,7 @@
     </thead>
     <tbody>
       <tr>
-        <td><strong>1. Original 19-Feature Baseline (With UNH, 162 Stocks)</strong></td>
+        <td><strong>1. Original 19-Feature Baseline (161 Stocks)</strong></td>
         <td class="num">+102.91%</td>
         <td class="num">-31.05%</td>
         <td class="num">1.86 / 3.07</td>
@@ -568,18 +568,7 @@
         <td class="num">54.32%</td>
       </tr>
       <tr>
-        <td><strong>2. Prior 26-Feature Model (With UNH, 162 Stocks)</strong></td>
-        <td class="num">+137.82%</td>
-        <td class="num">-30.97%</td>
-        <td class="num">2.23 / 3.79</td>
-        <td class="num">4.45</td>
-        <td class="num">+210.79%</td>
-        <td class="num">2.87 / 5.11</td>
-        <td class="num">7.16</td>
-        <td class="num">55.46%</td>
-      </tr>
-      <tr>
-        <td><strong>3. Prior 26-Feature Model (UNH Removed, 161 Stocks)</strong></td>
+        <td><strong>2. Prior 26-Feature Model</strong></td>
         <td class="num">+137.62%</td>
         <td class="num">-31.62%</td>
         <td class="num">2.23 / 3.79</td>
@@ -590,7 +579,7 @@
         <td class="num">55.50%</td>
       </tr>
       <tr>
-        <td><strong>4. + Stage-1 &amp; Stage-2 Upgrades (CMF<sub>20</sub>, RS<sub>60</sub>, ER<sub>20</sub>, 20D Runner)</strong></td>
+        <td><strong>3. + Stage-1 &amp; Stage-2 Upgrades (CMF<sub>20</sub>, RS<sub>60</sub>, ER<sub>20</sub>, 20D Runner)</strong></td>
         <td class="num">+192.02%</td>
         <td class="num">-23.61%</td>
         <td class="num">2.79 / 5.01</td>
@@ -601,7 +590,7 @@
         <td class="num">56.32%</td>
       </tr>
       <tr class="highlight-blue">
-        <td><strong>5. + Stage-3 Orthogonal Feats + Sortino/ER Inverse-Vol Sizing (Unthrottled)</strong></td>
+        <td><strong>4. + Stage-3 Orthogonal Feats + Sortino/ER Inverse-Vol Sizing (Unthrottled)</strong></td>
         <td class="num pos">+249.69%</td>
         <td class="num">-24.22%</td>
         <td class="num">3.39 / 6.47</td>
@@ -612,14 +601,14 @@
         <td class="num">59.49%</td>
       </tr>
       <tr class="highlight">
-        <td><strong>6. LATEST Stage-3 System (+ Two-Tier -8%/-12% DD Cushion &amp; 20D Squeeze Guard)</strong></td>
+        <td><strong>5. LATEST Stage-3 System (+ Two-Tier -8%/-12% DD Cushion &amp; 20D Squeeze Guard)</strong></td>
         <td class="num pos">+219.85%</td>
         <td class="num pos">-21.11%</td>
         <td class="num"><strong>3.35 / 6.47</strong></td>
         <td class="num"><strong>10.41</strong></td>
-        <td class="num pos">+433.66%</td>
-        <td class="num"><strong>4.37 / 9.06</strong></td>
-        <td class="num"><strong>23.54</strong></td>
+        <td class="num pos">+444.89%</td>
+        <td class="num"><strong>4.40 / 9.15</strong></td>
+        <td class="num"><strong>24.15</strong></td>
         <td class="num"><strong>59.49%</strong></td>
       </tr>
     </tbody>
