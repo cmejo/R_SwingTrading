@@ -6,7 +6,7 @@
 <style>
   @page {
     size: letter portrait;
-    margin: 0.17in 0.30in;
+    margin: 0.14in 0.28in;
   }
   * {
     box-sizing: border-box;
@@ -17,8 +17,8 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     color: #0f172a;
     background: #ffffff;
-    font-size: 7.1pt;
-    line-height: 1.13;
+    font-size: 6.95pt;
+    line-height: 1.11;
     max-width: 100%;
     margin: 0 auto;
   }
@@ -851,7 +851,7 @@
   </div>
 
   <div class="callout-blue">
-    <strong>Important Risk Disclosure:</strong> Historical backtest and out-of-sample walk-forward results include 10 bps round-trip slippage and realistic borrow/ETF expenses, but do not guarantee future performance. Leveraged inverse ETFs/ETNs (<code>FNGD</code>, <code>SQQQ</code>) experience path-dependent volatility decay if held without time/loss stops; the strategy enforces a strict <strong>15-day time stop and -10.0% max-loss circuit into SGOV</strong>.
+    <strong>Important Risk Disclosure:</strong> Historical backtest and out-of-sample walk-forward results include 10 bps round-trip slippage and realistic borrow/ETF expenses, but do not guarantee future performance. Leveraged inverse ETFs/ETNs (<code>FNGD</code>, <code>SQQQ</code>) experience path-dependent volatility decay if held without time/loss stops; the strategy enforces a strict <strong>20D counter-trend squeeze guard, 15-day time stop, and -8.0% max-loss circuit into SGOV</strong>.
   </div>
 
   <div class="footer">
