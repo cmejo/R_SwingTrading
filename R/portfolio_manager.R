@@ -516,9 +516,21 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
   peak_equity <- if (!is.null(portfolio$peak_equity)) max(as.numeric(portfolio$peak_equity), total_account_value) else total_account_value
   drawdown_pct <- round(((total_account_value - peak_equity) / max(1.0, peak_equity)) * 100, 2)
   circuit_breaker_active <- if (isTRUE(enable_circuit_breaker)) (drawdown_pct <= circuit_breaker_threshold) else FALSE
+  soft_cb_active <- if (isTRUE(enable_circuit_breaker)) (!circuit_breaker_active && drawdown_pct <= -8.0) else FALSE
+  cb_multiplier  <- if (!isTRUE(enable_circuit_breaker)) {
+    1.0
+  } else if (circuit_breaker_active) {
+    0.45
+  } else if (soft_cb_active) {
+    0.72
+  } else {
+    1.0
+  }
   
   if (circuit_breaker_active) {
-    alerts <- c(alerts, sprintf("[CIRCUIT BREAKER ACTIVE] Account Drawdown %+.2f%% exceeds %.1f%% ceiling! Safe f throttled by 50%%.", drawdown_pct, circuit_breaker_threshold))
+    alerts <- c(alerts, sprintf("[HARD CIRCUIT BREAKER ACTIVE] Account Drawdown %+.2f%% exceeds %.1f%% ceiling! Safe f throttled to 45%%.", drawdown_pct, circuit_breaker_threshold))
+  } else if (soft_cb_active) {
+    alerts <- c(alerts, sprintf("[SOFT DRAWDOWN CUSHION ACTIVE] Account Drawdown %+.2f%% exceeds -8.0%% soft threshold! Safe f throttled to 72%%.", drawdown_pct))
   }
   
   available_slots <- max(0, portfolio$max_positions - nrow(pos_df))
@@ -538,6 +550,8 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
     peak_equity            = peak_equity,
     drawdown_pct           = drawdown_pct,
     circuit_breaker_active = circuit_breaker_active,
+    soft_cb_active         = soft_cb_active,
+    cb_multiplier          = cb_multiplier,
     available_slots        = available_slots,
     active_count           = nrow(pos_df),
     alerts                 = alerts,

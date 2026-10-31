@@ -249,7 +249,8 @@ train_swing_model <- function(X_train,
   
   base_alpha_cols <- c("VolSqueeze", "SqueezeRelease", "CLV_5D", "IntradayVsGap_10D",
                        "Prox52WHigh", "IdioAlpha_20D", "RangeToCloseVol_20D", "LowerWickDemand_10D",
-                       "CMF_20D", "RS_60", "EfficiencyRatio_20D")
+                       "CMF_20D", "RS_60", "EfficiencyRatio_20D",
+                       "ATR_Comp_5v20", "VolumeExp_5v20", "UpDownVolRatio_20D", "SortinoMom_20D", "LeftTailShock_20D")
   alpha_sub_cols  <- intersect(base_alpha_cols, colnames(X_train))
   has_alpha_sub   <- (length(alpha_sub_cols) >= 7)
   alpha_sub_fit  <- NULL
@@ -274,7 +275,7 @@ train_swing_model <- function(X_train,
       pred_probs_vec <- raw_probs
     }
     
-    # Apply Stacked Ensemble Blend (80% Core + 20% Orthogonal 11-Feature Alpha Sub-Model + Conviction Tilt)
+    # Apply Stacked Ensemble Blend (80% Core + 20% Orthogonal 16-Feature Alpha Sub-Model + Conviction Tilt)
     if (active_feats_count > 0 && has_alpha_sub && !is.null(alpha_sub_fit) && all(alpha_sub_cols %in% colnames(X_test))) {
       p_alpha_sub <- tryCatch(
         as.numeric(predict(alpha_sub_fit, newx = X_test[, alpha_sub_cols, drop = FALSE], type = "response")),
@@ -292,8 +293,11 @@ train_swing_model <- function(X_train,
       cmf_v    <- get_col_or(X_test, "CMF_20D", 0.0)
       rs60_v   <- get_col_or(X_test, "RS_60", 0.0)
       er20_v   <- get_col_or(X_test, "EfficiencyRatio_20D", 0.3)
+      v5v20_v  <- get_col_or(X_test, "VolumeExp_5v20", 1.0)
+      udvol_v  <- get_col_or(X_test, "UpDownVolRatio_20D", 0.0)
+      smom_v   <- get_col_or(X_test, "SortinoMom_20D", 0.0)
 
-      conv_tilt <- pmin(0.065, pmax(-0.035,
+      conv_tilt <- pmin(0.075, pmax(-0.040,
         0.015 * pmin(sq_rel_v, 2.0) +
         0.020 * clv_v +
         0.012 * pmax(0, 1.0 + prox_v * 3.0) +
@@ -302,7 +306,10 @@ train_swing_model <- function(X_train,
         0.008 * pmin(lw_v, 1.5) +
         0.012 * pmax(0, er20_v - 0.30) +
         0.010 * pmin(pmax(rs60_v, -0.20), 0.50) -
-        0.012 * cmf_v
+        0.012 * cmf_v +
+        0.008 * pmax(0, v5v20_v - 1.05) +
+        0.006 * pmax(0, udvol_v) +
+        0.006 * pmax(0, smom_v - 1.0)
       ))
       pred_probs_vec <- pmin(0.999, pmax(0.001, 0.80 * pred_probs_vec + 0.20 * p_alpha_sub + conv_tilt))
     }

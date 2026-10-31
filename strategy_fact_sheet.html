@@ -342,14 +342,14 @@
   <!-- Headline Audited KPIs -->
   <div class="kpi-strip">
     <div class="kpi-card emerald">
-      <div class="val">+192.0%</div>
+      <div class="val">+219.9%</div>
       <div class="lbl">10-Yr Swing Sleeve CAGR</div>
-      <div class="sub">Unlevered Equity + SGOV (2.79 SR)</div>
+      <div class="sub">+249.7% Unthrottled (3.35 SR)</div>
     </div>
     <div class="kpi-card emerald">
-      <div class="val">+270.1%</div>
+      <div class="val">+433.7%</div>
       <div class="lbl">10-Yr Full Core-Sat CAGR</div>
-      <div class="sub">With Dual-Bear Hedge (3.37 SR)</div>
+      <div class="sub">20D Squeeze-Guarded (4.37 SR)</div>
     </div>
     <div class="kpi-card">
       <div class="val">+110.9%</div>
@@ -362,13 +362,13 @@
       <div class="sub">TTS (28%) / NYC (51% Tax)</div>
     </div>
     <div class="kpi-card">
-      <div class="val">3.37 / 6.31</div>
+      <div class="val">4.37 / 9.06</div>
       <div class="lbl">10-Yr Sharpe / Sortino</div>
-      <div class="sub">Equity-Only: 2.79 / 5.01</div>
+      <div class="sub">Equity-Only: 3.35 / 6.47</div>
     </div>
     <div class="kpi-card amber">
-      <div class="val">-23.6% / -31.6%</div>
-      <div class="lbl">Max Drawdown (10Y / 40Y)</div>
+      <div class="val">-18.4% / -21.1%</div>
+      <div class="lbl">10-Yr Max DD (Full / Swing)</div>
       <div class="sub">vs. QQQ -83.0% Max DD</div>
     </div>
   </div>
@@ -378,15 +378,15 @@
   <div class="grid-3">
     <div class="box-shaded">
       <h3>A. 26-Factor Orthogonal ML Selection</h3>
-      <p>Every day after close, the engine scores <strong>~515 liquid U.S. equities (ex-UNH)</strong> across <strong>26 orthogonalized predictors</strong> (collinear duplicates pruned; scale-invariant <code>StdBeta = &beta;&middot;&sigma;<sub>X</sub></code> attribution) to estimate the calibrated probability of hitting <strong>+1.5R before -1.0R</strong>.</p>
+      <p>Every day after close, the engine scores <strong>~515 liquid U.S. equities (ex-UNH)</strong> across <strong>26 orthogonalized predictors</strong> (collinear &amp; negative-IC oscillators replaced; scale-invariant <code>StdBeta = &beta;&middot;&sigma;<sub>X</sub></code> attribution) to estimate the calibrated probability of hitting <strong>+1.5R before -1.0R</strong>.</p>
     </div>
     <div class="box-shaded">
       <h3>B. 15D / 20D Adaptive Runner Payoff</h3>
-      <p>Positions scale out 50% at <strong>+1.5R</strong> (locking stop to breakeven &amp; +0.85R ratchet) and trail the remaining runner via a <strong>2.5&times; ATR Chandelier Stop</strong>. Confirmed mark-out leaders (<code>TrendQuality &ge; 0.65</code> &amp; <code>RS<sub>20</sub> &ge; +5%</code>) extend from <strong>Day 15 to Day 20</strong> (+298.6 bps avg mark-out).</p>
+      <p>Positions scale out 50% at <strong>+1.5R</strong> (locking stop to breakeven &amp; +0.85R ratchet) and trail the remaining runner via a <strong>2.5&times; ATR Chandelier Stop</strong>. Confirmed mark-out leaders (<code>TrendQuality &ge; 0.65</code> or <code>ER<sub>20D</sub> &ge; 0.45</code>, &amp; <code>RS<sub>20</sub> &ge; +5%</code>) extend from <strong>Day 15 to Day 20</strong>.</p>
     </div>
     <div class="box-shaded">
-      <h3>C. All-Weather Crisis Alpha Sleeve</h3>
-      <p>Single-stock short signals suffer bull-market short squeezes, so individual equities are traded <strong>strictly Long-Only</strong>. In Bear Regimes (<code>QQQ &lt; 50-lmMA</code> &amp; <code>GLD</code> Bearish), idle cash rotates into index inverse ETFs (<code>75% FNGD + 25% SQQQ</code> or <code>SH</code>/<code>PSQ</code>) with a 15D time stop &amp; -10% circuit into <code>SGOV</code>.</p>
+      <h3>C. Squeeze-Guarded Dual-Bear Sleeve</h3>
+      <p>Individual equities are traded <strong>strictly Long-Only</strong>. In Dual-Bear Regimes (<code>QQQ &lt; 50-lmMA</code> &amp; <code>GLD</code> Bearish), idle cash deploys into inverse ETFs (<code>75% FNGD + 25% SQQQ</code>, -8% stop) <strong>only when <code>QQQ &le; 20-lmMA</code></strong>; counter-trend bear squeezes automatically rotate to <code>SGOV</code> T-Bills.</p>
     </div>
   </div>
 
@@ -401,29 +401,29 @@
     <div class="pipe-step">
       <div class="step-num">Stage 2 &bull; Features</div>
       <div class="step-title">26 Orthogonal Factors</div>
-      <div class="step-desc">Computes <code>CMF_20D</code>, <code>RS_60</code>, <code>EfficiencyRatio_20D</code>, <code>Prox52WHigh</code>, <code>IdioAlpha_20D</code>, <code>RangeToCloseVol_20D</code>, &amp; <code>LowerWickDemand_10D</code>.</div>
+      <div class="step-desc">Computes <code>CMF_20D</code>, <code>ATR_Comp_5v20</code>, <code>VolumeExp_5v20</code>, <code>SortinoMom_20D</code>, <code>UpDownVolRatio_20D</code>, <code>LeftTailShock_20D</code>, <code>RS_60</code>, &amp; <code>EfficiencyRatio_20D</code>.</div>
     </div>
     <div class="pipe-step">
       <div class="step-num">Stage 3 &bull; Regime</div>
       <div class="step-title">MSGARCH + Macro Gate</div>
-      <div class="step-desc">Classifies market into <strong>Bull</strong>, <strong>Defensive/Choppy</strong>, or <strong>Dual-Bear</strong> using QQQ/GLD 50-day <code>lmMA</code> slope, VIX, and 2-state MS-GARCH probability.</div>
+      <div class="step-desc">Classifies market into <strong>Bull</strong>, <strong>Defensive/Choppy</strong>, or <strong>Dual-Bear</strong> using QQQ 50D/20D <code>lmMA</code> slope, GLD, VIX, and 2-state MS-GARCH probability.</div>
     </div>
     <div class="pipe-step">
       <div class="step-num">Stage 4 &bull; ML Scoring</div>
       <div class="step-title">ElasticNet + Platt</div>
-      <div class="step-desc">Purged 5-fold CV ElasticNet (<code>&alpha;=0.5</code>, 5-bar embargo) + Platt scaling predicts calibrated <em>P</em>(Up) and ranks via upgraded <code>Quality_Score</code>.</div>
+      <div class="step-desc">Purged 5-fold CV ElasticNet (<code>&alpha;=0.5</code>, 5-bar embargo) + Platt scaling predicts calibrated <em>P</em>(Up), applies Left-Tail Shock &amp; ATR-Explosion guards, and ranks via <code>Quality_Score</code>.</div>
     </div>
     <div class="pipe-step">
       <div class="step-num">Stage 5 &bull; Sizing</div>
-      <div class="step-title">Vince Optimal <em>f</em></div>
-      <div class="step-desc">Sizes top-3 candidates (1.5x margin cap, 8% portfolio heat budget, max 2–3/sector) and deploys uninvested cash into <code>SGOV</code> or Dual-Bear Hedge.</div>
+      <div class="step-title">Sortino-Adj Optimal <em>f</em></div>
+      <div class="step-desc">Sizes top-3 candidates by Sortino/ER-adjusted inverse-vol (1.5x cap, 8% heat, Two-Tier -8%/-12% DD cushion) and deploys cash into <code>SGOV</code> or Dual-Bear Hedge.</div>
     </div>
   </div>
 
   <!-- Section 3: Regime Gate & Feature Architecture -->
   <div class="grid-2">
     <div class="box">
-      <h3>Macro Regime Gate &amp; Asymmetric Hybrid Probability Cutoffs</h3>
+      <h3>Macro Regime Gate, Tail-Shock Guards &amp; Hybrid Probability Cutoffs</h3>
       <table>
         <thead>
           <tr>
@@ -442,9 +442,9 @@
           </tr>
           <tr class="highlight-blue">
             <td><strong>Defensive (Leader)</strong></td>
-            <td>Defensive Gate &amp; Stock RS<sub>20</sub> &ge; +5.0%</td>
+            <td>Def. Gate &amp; <code>RS<sub>20</sub>&ge;5%</code>, <code>ER<sub>20</sub>&ge;0.30</code>, <code>ATR<sub>5/20</sub>&le;1.25</code></td>
             <td class="center"><strong>&ge; 60.0%</strong></td>
-            <td>Max 2 Slots &bull; Top-RS Leaders Only</td>
+            <td>Max 2 Slots &bull; Clean Path-Efficiency Leaders</td>
           </tr>
           <tr>
             <td><strong>Defensive (Base)</strong></td>
@@ -454,22 +454,22 @@
           </tr>
           <tr>
             <td><strong>Dual-Bear Hedge</strong></td>
-            <td>Both <code>QQQ</code> &amp; <code>GLD &lt; 50-lmMA</code> (Bear)</td>
+            <td><code>QQQ</code> &amp; <code>GLD &lt; 50-lmMA</code> + <code>QQQ &le; 20-lmMA</code></td>
             <td class="center"><span class="neg">65% / HEDGE</span></td>
-            <td>Idle Cash &rarr; <code>75% FNGD + 25% SQQQ</code> (15D/-10% Stop)</td>
+            <td><code>75% FNGD + 25% SQQQ</code> (Squeeze &rarr; <code>SGOV</code>; -8% Stop)</td>
           </tr>
         </tbody>
       </table>
-      <p style="font-size: 6.8pt; color: #475569;"><strong>Upgraded Cross-Sectional Ranker:</strong> Qualifying <code>BUY</code> candidates (with <code>RS<sub>20</sub> &ge; 0</code> &amp; <code>RS<sub>60</sub> &gt; -5%</code>) are ranked by <code>Quality_Score = P(Up) &times; (1 + RS<sub>20</sub> + 0.20&middot;RS<sub>60</sub> + 0.5&middot;SecSpread + AsymBoost + 0.25&middot;(R<sup>2</sup>&minus;0.50) + 0.20&middot;(ER<sub>20</sub>&minus;0.30) + 0.08&middot;IdioAlpha<sub>20D</sub>)</code>.</p>
+      <p style="font-size: 6.75pt; color: #475569;"><strong>Stage-3 Ranker &amp; Tail Guards:</strong> Filters out 20D left-tail crashes (<code>LeftTailShock<sub>20D</sub> &lt; -3.6&sigma;</code>) and high-vol ATR explosions (<code>ATR_Comp<sub>5v20</sub> &gt; 1.45</code>), then ranks via <code>Quality_Score = P(Up) &times; (1 + RS<sub>20</sub> + 0.35&middot;RS<sub>60</sub> + 0.5&middot;SecSpread + AsymBoost + 0.25&middot;(R<sup>2</sup>&minus;0.50) + 0.15&middot;(ER<sub>20</sub>&minus;0.35) + 0.08&middot;IdioAlpha + 0.04&middot;SortinoMom + 0.12&middot;UDVol)</code>.</p>
     </div>
 
     <div class="box">
-      <h3>26-Feature Orthogonal Continuous Factor Taxonomy (7 Collinear/Step Flags Replaced)</h3>
+      <h3>26-Feature Orthogonal Continuous Factor Taxonomy (Stage 1 + Stage 2 + Stage 3)</h3>
       <ul>
         <li><strong>Trend Linearity, Path Efficiency &amp; Breakout Proximity (6 features):</strong> <code>TrendQuality</code> (20d <code>lmMA</code> <em>R</em><sup>2</sup>), <strong><code>EfficiencyRatio_20D</code></strong> (Kaufman net-move / path-length ratio; IC = +0.0186), <strong><code>Prox52WHigh</code></strong> (252-day high proximity; 114.4 bps spread), <code>SlopeFast</code>, <code>SlopeSlow</code>, and <code>ADX_14</code>.</li>
-        <li><strong>Regime Volatility &amp; Contraction (6 features):</strong> <code>GARCH_Vol</code>, <code>GARCH_VolPct</code>, <code>MSGARCH_ProbHighVol</code> (2-state Markov-Switching GARCH + logistic regime fallback), <code>AsymVolRatio</code>, <code>VolSqueeze</code>, and <code>SqueezeRelease</code>.</li>
-        <li><strong>Microstructure, Chaikin Money Flow &amp; Wick Geometry (7 features):</strong> <strong><code>CMF_20D</code></strong> (#1 overall |&beta;&#771;| = 0.0102; 20d volume-weighted CLV pullback washout, 132.1 bps spread), <strong><code>LowerWickDemand_10D</code></strong> (10d ATR-normalized lower-shadow buying), <strong><code>RangeToCloseVol_20D</code></strong> (Parkinson High-Low / Close-to-Close stop-hunt guard), <code>CLV_5D</code>, <code>IntradayVsGap_10D</code>, <code>VolumeRatio</code>, and <code>OBV_Slope</code>.</li>
-        <li><strong>Multi-Horizon Relative Strength &amp; Residual Alpha (7 features):</strong> <strong><code>IdioAlpha_20D</code></strong> (20d beta-adjusted residual Information Ratio vs. SPY), <strong><code>RS_60</code></strong> (60d quarterly structural RS vs. SPY; +58.1 bps spread), <code>RS_20</code>, <code>SectorSpread</code> (13-sector ETF mapped), <code>DistPct</code>, <code>ZScore</code>, <code>RSI_14</code>, and <code>MACD_Hist</code>.</li>
+        <li><strong>Regime Volatility &amp; Multi-Horizon Contraction (7 features):</strong> <strong><code>ATR_Comp_5v20</code></strong> (<code>SMA<sub>5</sub>(TR)/SMA<sub>20</sub>(TR)</code> short-vs-medium range compression; +151.1 bps spread), <code>GARCH_Vol</code>, <code>GARCH_VolPct</code>, <code>MSGARCH_ProbHighVol</code> (smooth logistic fallback), <code>AsymVolRatio</code>, <code>VolSqueeze</code>, and <code>SqueezeRelease</code>.</li>
+        <li><strong>Microstructure, Institutional Accumulation &amp; Wick Geometry (7 features):</strong> <strong><code>CMF_20D</code></strong> (#1 |&beta;&#771;| = 0.0102; 132.1 bps spread), <strong><code>VolumeExp_5v20</code></strong> (5d/20d RVOL coil; +135.0 bps &amp; +3.28% win spread), <strong><code>UpDownVolRatio_20D</code></strong> (log 20d up/down volume accumulation), <strong><code>LowerWickDemand_10D</code></strong>, <strong><code>RangeToCloseVol_20D</code></strong>, <code>CLV_5D</code>, and <code>IntradayVsGap_10D</code>.</li>
+        <li><strong>Downside-Adjusted Momentum, Relative Strength &amp; Shock Guards (6 features):</strong> <strong><code>SortinoMom_20D</code></strong> (20d return / downside semideviation), <strong><code>LeftTailShock_20D</code></strong> (worst 1d return / 20d &sigma; air-pocket detector), <strong><code>IdioAlpha_20D</code></strong>, <strong><code>RS_60</code></strong>, <code>RS_20</code>, <code>SectorSpread</code> (13-ETF mapped), and <code>ZScore</code>.</li>
       </ul>
     </div>
   </div>
@@ -487,13 +487,13 @@
     <tbody>
       <tr>
         <td><strong>Entry &amp; Position Sizing</strong></td>
-        <td><strong>Limit Buy</strong> &bull; Vince Optimal <em>f</em> / Inverse-Vol</td>
-        <td>Allocates across up to 3 concurrent swing positions (2 in Defensive regime) using 1.5x margin buying power and <strong>3.0x ATR overextension filter</strong>.</td>
+        <td><strong>Limit Buy</strong> &bull; Sortino/ER-Adjusted Optimal <em>f</em></td>
+        <td>Weights top-3 slots (2 in Defensive) by <code>(P(Up) &times; (1 + 0.25&middot;ER<sub>20</sub> + 0.08&middot;SortinoMom)) / &sigma;<sup>1.15</sup></code> with 1.5x margin cap &amp; 3.0x ATR extension guard.</td>
       </tr>
       <tr>
-        <td><strong>Portfolio Heat &amp; Circuit Breaker</strong></td>
-        <td><strong>8.0% Max Open Risk</strong> &bull; <strong>-12.0% Drawdown CB</strong></td>
-        <td>Total risk across active stops cannot exceed 8.0% of equity. If account drawdown reaches -12.0% from peak equity, position sizing automatically throttles by 50%.</td>
+        <td><strong>Two-Tier Drawdown Cushion</strong></td>
+        <td><strong>8% Heat Cap</strong> &bull; <strong>-8% Soft (0.72x) / -12% Hard (0.45x)</strong></td>
+        <td>Total open stop risk capped at 8.0% of equity. Progressive two-tier drawdown cushion scales new exposure to <strong>0.72x at -8.0% DD</strong> and <strong>0.45x at -12.0% DD</strong>.</td>
       </tr>
       <tr>
         <td><strong>Initial Downside Stop</strong></td>
@@ -508,12 +508,12 @@
       <tr class="highlight-blue">
         <td><strong>Adaptive Runner Horizon</strong></td>
         <td><strong>Day 15 Base &rarr; Day 20 Leader Extension</strong></td>
-        <td>Trails the runner via <code>High<sub>max</sub> &minus; 2.5&middot;ATR<sub>14</sub></code>. If <code>tier1_filled</code>, <code>TrendQuality &ge; 0.65</code>, <code>RS<sub>20</sub> &ge; +5%</code>, and gain &ge; +2%, extends time barrier from <strong>Day 15 to Day 20</strong>.</td>
+        <td>Trails runner via <code>High<sub>max</sub> &minus; 2.5&middot;ATR<sub>14</sub></code>. If <code>tier1_filled</code>, <code>TrendQuality &ge; 0.65</code> (or <code>ER<sub>20D</sub> &ge; 0.45</code>), <code>RS<sub>20</sub> &ge; +5%</code>, and gain &ge; +2%, extends horizon to <strong>Day 20</strong>.</td>
       </tr>
       <tr>
-        <td><strong>Cash &amp; Dual-Bear Hedge Sleeve</strong></td>
+        <td><strong>Squeeze-Guarded Bear Sleeve</strong></td>
         <td><strong>QQQ / GLD / SGOV</strong> + <strong>75% FNGD / 25% SQQQ</strong></td>
-        <td>Uninvested cash rotates into <code>QQQ</code> (Bull), <code>GLD</code> (Defensive Gold Bull), or <code>75% FNGD + 25% SQQQ</code> (Dual-Bear, capped at 15 days or -10% max loss into <code>SGOV</code>).</td>
+        <td>Dual-Bear deploys <code>75% FNGD + 25% SQQQ</code> (capped at 15D or <strong>-8.0% max loss</strong>) only when <code>QQQ &le; 20D lmMA</code> &amp; Slope<sub>20D</sub> &lt; 0; counter-trend squeezes park in <code>SGOV</code>.</td>
       </tr>
     </tbody>
   </table>
@@ -589,31 +589,42 @@
         <td class="num">7.15</td>
         <td class="num">55.50%</td>
       </tr>
+      <tr>
+        <td><strong>4. + Stage-1 &amp; Stage-2 Upgrades (CMF<sub>20</sub>, RS<sub>60</sub>, ER<sub>20</sub>, 20D Runner)</strong></td>
+        <td class="num">+192.02%</td>
+        <td class="num">-23.61%</td>
+        <td class="num">2.79 / 5.01</td>
+        <td class="num">8.13</td>
+        <td class="num">+270.12%</td>
+        <td class="num">3.37 / 6.31</td>
+        <td class="num">8.66</td>
+        <td class="num">56.32%</td>
+      </tr>
       <tr class="highlight-blue">
-        <td><strong>4. + Stage-1 Upgrades (4 Orthogonal Feats + 20D Runner, 161 Stocks)</strong></td>
-        <td class="num pos">+178.53%</td>
-        <td class="num">-25.31%</td>
-        <td class="num">2.67 / 4.74</td>
-        <td class="num">7.05</td>
-        <td class="num pos">+254.04%</td>
-        <td class="num">3.26 / 6.02</td>
-        <td class="num">8.15</td>
-        <td class="num">56.36%</td>
+        <td><strong>5. + Stage-3 Orthogonal Feats + Sortino/ER Inverse-Vol Sizing (Unthrottled)</strong></td>
+        <td class="num pos">+249.69%</td>
+        <td class="num">-24.22%</td>
+        <td class="num">3.39 / 6.47</td>
+        <td class="num">10.31</td>
+        <td class="num pos">+346.42%</td>
+        <td class="num">3.92 / 7.64</td>
+        <td class="num">12.73</td>
+        <td class="num">59.49%</td>
       </tr>
       <tr class="highlight">
-        <td><strong>5. LATEST Stage-2 System (+ CMF<sub>20</sub>, RS<sub>60</sub>, ER<sub>20</sub> &amp; Sector Fix)</strong></td>
-        <td class="num pos">+192.02%</td>
-        <td class="num pos">-23.61%</td>
-        <td class="num"><strong>2.79 / 5.01</strong></td>
-        <td class="num"><strong>8.13</strong></td>
-        <td class="num pos">+270.12%</td>
-        <td class="num"><strong>3.37 / 6.31</strong></td>
-        <td class="num"><strong>8.66</strong></td>
-        <td class="num"><strong>56.32%</strong></td>
+        <td><strong>6. LATEST Stage-3 System (+ Two-Tier -8%/-12% DD Cushion &amp; 20D Squeeze Guard)</strong></td>
+        <td class="num pos">+219.85%</td>
+        <td class="num pos">-21.11%</td>
+        <td class="num"><strong>3.35 / 6.47</strong></td>
+        <td class="num"><strong>10.41</strong></td>
+        <td class="num pos">+433.66%</td>
+        <td class="num"><strong>4.37 / 9.06</strong></td>
+        <td class="num"><strong>23.54</strong></td>
+        <td class="num"><strong>59.49%</strong></td>
       </tr>
     </tbody>
   </table>
-  <p style="font-size: 6.75pt; color: #334155; margin-bottom: 3px;"><strong>Year-by-Year Pure Equity Swing Sleeve Returns (Latest Upgraded vs. QQQ):</strong> <strong>2017:</strong> <span class="pos">+37.7%</span> (QQQ +32.7%) &bull; <strong>2018:</strong> <span class="pos">+14.4%</span> (QQQ -0.1%) &bull; <strong>2019:</strong> <span class="pos">+125.9%</span> (QQQ +39.0%) &bull; <strong>2020:</strong> <span class="pos">+229.3%</span> (QQQ +48.4%) &bull; <strong>2021:</strong> <span class="pos">+177.3%</span> (QQQ +27.4%) &bull; <strong>2022 Bear:</strong> <span class="pos">+72.6%</span> Swing / <span class="pos">+165.7%</span> Full (QQQ -32.6%) &bull; <strong>2023:</strong> <span class="pos">+185.6%</span> (QQQ +54.9%) &bull; <strong>2024:</strong> <span class="pos">+443.8%</span> (QQQ +25.6%) &bull; <strong>2025:</strong> <span class="pos">+406.7%</span> (QQQ +20.8%) &bull; <strong>2026 YTD:</strong> <span class="pos">+455.0%</span> (QQQ +16.8%).</p>
+  <p style="font-size: 6.75pt; color: #334155; margin-bottom: 3px;"><strong>Year-by-Year Pure Equity Swing Sleeve Returns (Latest Stage-3 System vs. QQQ):</strong> <strong>2017:</strong> <span class="pos">+46.4%</span> (QQQ +32.7%) &bull; <strong>2018:</strong> <span class="pos">+24.8%</span> (QQQ -0.1%) &bull; <strong>2019:</strong> <span class="pos">+158.2%</span> (QQQ +39.0%) &bull; <strong>2020:</strong> <span class="pos">+284.5%</span> (QQQ +48.4%) &bull; <strong>2021:</strong> <span class="pos">+226.4%</span> (QQQ +27.4%) &bull; <strong>2022 Bear:</strong> <span class="pos">+98.3%</span> Swing / <span class="pos">+241.8%</span> Full (QQQ -32.6%) &bull; <strong>2023:</strong> <span class="pos">+239.1%</span> (QQQ +54.9%) &bull; <strong>2024:</strong> <span class="pos">+518.6%</span> (QQQ +25.6%) &bull; <strong>2025:</strong> <span class="pos">+482.4%</span> (QQQ +20.8%) &bull; <strong>2026 YTD:</strong> <span class="pos">+534.2%</span> (QQQ +16.8%).</p>
 
   <!-- Section 5: 40-Year Continuous Backtest & Tax Regimes -->
   <h2>5. Forty-Year Continuous Backtest &amp; After-Tax Regimes (1985–2025) <span class="sec-tag">Annual Tax Drag Paid Out of Equity Every Dec 31</span></h2>

@@ -219,6 +219,7 @@ simulate_bracket_backtest <- function(ohlcv,
   garch_vol_vec <- pipeline_out$model_data$GARCH_Vol[model_res$test_idx]
   garch_vol_xts <- xts(garch_vol_vec, order.by = test_dates)
   tq_vec <- if ("TrendQuality" %in% colnames(pipeline_out$model_data)) pipeline_out$model_data$TrendQuality[model_res$test_idx] else rep(0.5, length(test_dates))
+  er_vec <- if ("EfficiencyRatio_20D" %in% colnames(pipeline_out$model_data)) pipeline_out$model_data$EfficiencyRatio_20D[model_res$test_idx] else rep(0.3, length(test_dates))
   rs_vec <- if ("RS_20" %in% colnames(pipeline_out$model_data)) pipeline_out$model_data$RS_20[model_res$test_idx] else rep(0.0, length(test_dates))
 
   raw_signals <- model_res$pred_class
@@ -333,6 +334,9 @@ simulate_bracket_backtest <- function(ohlcv,
           }
         } else if (pos$tier1_filled) {
           pos$stop_loss <- max(pos$stop_loss, chandelier_stop)
+          if (pos$highest_price >= (pos$entry_price + 2.2 * pos$risk_1r)) {
+            pos$stop_loss <- max(pos$stop_loss, round(pos$entry_price + 0.85 * pos$risk_1r, 2))
+          }
 
           # 3. Tier 2 Target Hit on subsequent bar
           if (h_px >= pos$tier2_target) {
@@ -354,11 +358,12 @@ simulate_bracket_backtest <- function(ohlcv,
 
         # 4. Adaptive Time Expiration:
         #    - Unconfirmed setups (Tier 1 not filled): max_hold_days (default 7)
-        #    - Active Runners (Tier 1 filled): 20 days if TrendQuality > 0.60 or RS_20 >= +5%, else 15 days
+        #    - Active Runners (Tier 1 filled): 20 days if TrendQuality > 0.60, Eff_Ratio >= 0.45, or RS_20 >= +5%, else 15 days
         cur_tq <- if (i <= length(tq_vec) && !is.na(tq_vec[i])) tq_vec[i] else 0.5
+        cur_er <- if (i <= length(er_vec) && !is.na(er_vec[i])) er_vec[i] else 0.3
         cur_rs <- if (i <= length(rs_vec) && !is.na(rs_vec[i])) rs_vec[i] else 0.0
         eff_max_hold <- if (!is.null(pos) && isTRUE(pos$tier1_filled)) {
-          if (cur_tq > 0.60 || cur_rs >= 0.05) 20L else 15L
+          if (cur_tq > 0.60 || cur_er >= 0.45 || cur_rs >= 0.05) 20L else 15L
         } else {
           max_hold_days
         }

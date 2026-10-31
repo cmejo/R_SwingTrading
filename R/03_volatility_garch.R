@@ -198,10 +198,15 @@ compute_msgarch_volatility <- function(price_xts, train_idx = NULL) {
         p_high_vec
       }
     } else {
-      # Fallback neutral probabilities
-      p_high_vec <- rep(0.5, n)
-      p_low_vec  <- rep(0.5, n)
-      smooth_high_vec <- rep(0.5, n)
+      # Fallback smooth logistic high-vol probabilities based on sigma_vec
+      w_b <- min(100L, max(20L, as.integer(floor(n * 0.45))))
+      v_base <- as.numeric(TTR::runMean(sigma_vec, n = w_b))
+      v_base[is.na(v_base) | v_base <= 0] <- mean(sigma_vec, na.rm = TRUE)
+      z_hv <- (sigma_vec - v_base) / (0.25 * v_base + 1e-5)
+      p_high_vec <- 1.0 / (1.0 + exp(-pmin(pmax(z_hv, -6.0), 6.0)))
+      p_high_vec[is.na(p_high_vec)] <- 0.5
+      p_low_vec  <- 1.0 - p_high_vec
+      smooth_high_vec <- p_high_vec
     }
     
     regime_params_bundle <- list(
@@ -213,7 +218,7 @@ compute_msgarch_volatility <- function(price_xts, train_idx = NULL) {
     )
     
   } else {
-    # ROBUST FALLBACK: Rolling 20-day standard deviation
+    # ROBUST FALLBACK: Rolling 20-day standard deviation with smooth logistic regime probability
     cat("[MS-GARCH] Notice: Utilizing rolling empirical standard deviation fallback.\n")
     sd_fallback <- sd(rets_vec, na.rm = TRUE)
     if (is.na(sd_fallback) || sd_fallback <= 0) sd_fallback <- 0.02
@@ -225,9 +230,14 @@ compute_msgarch_volatility <- function(price_xts, train_idx = NULL) {
     high_regime_idx <- 2
     low_regime_idx  <- 1
     
-    p_high_vec <- rep(0.5, n)
-    p_low_vec  <- rep(0.5, n)
-    smooth_high_vec <- rep(0.5, n)
+    w_b <- min(100L, max(20L, as.integer(floor(n * 0.45))))
+    v_base <- as.numeric(TTR::runMean(sigma_vec, n = w_b))
+    v_base[is.na(v_base) | v_base <= 0] <- sd_fallback
+    z_hv <- (sigma_vec - v_base) / (0.25 * v_base + 1e-5)
+    p_high_vec <- 1.0 / (1.0 + exp(-pmin(pmax(z_hv, -6.0), 6.0)))
+    p_high_vec[is.na(p_high_vec)] <- 0.5
+    p_low_vec  <- 1.0 - p_high_vec
+    smooth_high_vec <- p_high_vec
     
     regime_params_bundle <- list(
       high_vol = list(regime_index = 2, alpha0 = NA, alpha1 = NA, beta = NA, persistence = NA, unc_variance = NA, unc_ann_vol = sd_fallback * sqrt(252)),

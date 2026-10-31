@@ -362,6 +362,11 @@ build_feature_dataset <- function(ohlcv,
   feat_cmf_20      <- xts(rep(0.0,   nrow(price)), order.by = index(price))
   feat_rs_60       <- xts(rep(0.0,   nrow(price)), order.by = index(price))
   feat_eff_ratio   <- xts(rep(0.3,   nrow(price)), order.by = index(price))
+  feat_atr_comp    <- xts(rep(1.0,   nrow(price)), order.by = index(price))
+  feat_vol_5v20    <- xts(rep(1.0,   nrow(price)), order.by = index(price))
+  feat_ud_vol_20   <- xts(rep(0.0,   nrow(price)), order.by = index(price))
+  feat_sortino_20  <- xts(rep(0.0,   nrow(price)), order.by = index(price))
+  feat_tail_shk_20 <- xts(rep(-1.5,  nrow(price)), order.by = index(price))
   tryCatch({
     op_v <- as.numeric(Op(ohlcv))
     hi_v <- as.numeric(Hi(ohlcv))
@@ -418,8 +423,9 @@ build_feature_dataset <- function(ohlcv,
     feat_range_close <- xts(rc_vec, order.by = index(price))
 
     # (iv) LowerWickDemand_10D (10D ATR-normalized lower-shadow demand absorption)
-    atr_14_v <- as.numeric(TTR::ATR(HLC(ohlcv), n = 14)$atr)
-    bad_atr  <- is.na(atr_14_v) | atr_14_v <= 0
+    atr_obj_v <- TTR::ATR(HLC(ohlcv), n = 14)
+    atr_14_v  <- as.numeric(atr_obj_v$atr)
+    bad_atr   <- is.na(atr_14_v) | atr_14_v <= 0
     atr_14_v[bad_atr] <- cl_v[bad_atr] * 0.02
     body_low <- pmin(op_v, cl_v)
     lw_raw   <- pmax(0, body_low - lo_v) / (atr_14_v + 1e-5)
@@ -450,6 +456,39 @@ build_feature_dataset <- function(ohlcv,
     er_v    <- net_m20 / (path_20 + 1e-4)
     er_v[is.na(er_v)] <- 0.30
     feat_eff_ratio <- xts(pmin(pmax(er_v, 0.0), 1.0), order.by = index(price))
+
+    # (viii) ATR_Comp_5v20 (5-Day / 20-Day True Range VCP Volatility Compression Ratio)
+    tr_v <- as.numeric(atr_obj_v$tr)
+    tr_v[is.na(tr_v) | tr_v <= 0] <- cl_v[is.na(tr_v) | tr_v <= 0] * 0.02
+    ac_v <- as.numeric(TTR::runMean(tr_v, n = 5)) / (as.numeric(TTR::runMean(tr_v, n = fast_n)) + 1e-5)
+    ac_v[is.na(ac_v)] <- 1.0
+    feat_atr_comp <- xts(pmin(pmax(ac_v, 0.3), 2.5), order.by = index(price))
+
+    # (ix) VolumeExp_5v20 (5-Day / 20-Day Sustained Institutional Volume Expansion Ratio)
+    v5_v <- as.numeric(TTR::runMean(vo_v, n = 5)) / (as.numeric(TTR::runMean(vo_v, n = fast_n)) + 1e-2)
+    v5_v[is.na(v5_v)] <- 1.0
+    feat_vol_5v20 <- xts(pmin(pmax(v5_v, 0.2), 3.0), order.by = index(price))
+
+    # (x) UpDownVolRatio_20D (20-Day Log Up-Day Volume to Down-Day Volume Accumulation Ratio)
+    up_vo <- ifelse(ret_1d > 0, vo_v, 0)
+    dn_vo <- ifelse(ret_1d < 0, vo_v, 0)
+    ud_v  <- log((as.numeric(TTR::runSum(up_vo, n = fast_n)) + 1e3) / (as.numeric(TTR::runSum(dn_vo, n = fast_n)) + 1e3))
+    ud_v[is.na(ud_v)] <- 0.0
+    feat_ud_vol_20 <- xts(pmin(pmax(ud_v, -2.5), 2.5), order.by = index(price))
+
+    # (xi) SortinoMom_20D (20-Day Downside-Semi-Deviation-Adjusted Sortino Momentum)
+    ret_20_s <- (cl_v / as.numeric(lag.xts(price, k = fast_n))) - 1.0
+    neg_r2   <- pmin(0, ret_1d)^2
+    dn_sd20  <- sqrt(pmax(0, as.numeric(TTR::runMean(neg_r2, n = fast_n))) * fast_n)
+    sm_v     <- ret_20_s / (dn_sd20 + 0.01)
+    sm_v[is.na(sm_v)] <- 0.0
+    feat_sortino_20 <- xts(pmin(pmax(sm_v, -4.0), 6.0), order.by = index(price))
+
+    # (xii) LeftTailShock_20D (20-Day Worst 1-Day Return Standardized by 20-Day Volatility)
+    min_r20 <- -as.numeric(TTR::runMax(-ret_1d, n = fast_n))
+    tl_v    <- min_r20 / (cc_vol + 1e-4)
+    tl_v[is.na(tl_v)] <- -1.5
+    feat_tail_shk_20 <- xts(pmin(pmax(tl_v, -5.0), 0.0), order.by = index(price))
   }, error = function(e) NULL)
   colnames(feat_prox_52w)    <- "Prox52WHigh"
   colnames(feat_idio_alpha)  <- "IdioAlpha_20D"
@@ -458,6 +497,11 @@ build_feature_dataset <- function(ohlcv,
   colnames(feat_cmf_20)      <- "CMF_20D"
   colnames(feat_rs_60)       <- "RS_60"
   colnames(feat_eff_ratio)   <- "EfficiencyRatio_20D"
+  colnames(feat_atr_comp)    <- "ATR_Comp_5v20"
+  colnames(feat_vol_5v20)    <- "VolumeExp_5v20"
+  colnames(feat_ud_vol_20)   <- "UpDownVolRatio_20D"
+  colnames(feat_sortino_20)  <- "SortinoMom_20D"
+  colnames(feat_tail_shk_20) <- "LeftTailShock_20D"
 
   # 7. Forward Target & Path-Dependent Triple-Barrier Label (Look-Ahead k Days)
   # Upper Profit Barrier: +1.5R (+3.0 * sigma_daily)
@@ -537,27 +581,25 @@ build_feature_dataset <- function(ohlcv,
     LowerWickDemand_10D = feat_lower_wick,
     CMF_20D             = feat_cmf_20,
     RS_60               = feat_rs_60,
-    EfficiencyRatio_20D = feat_eff_ratio
+    EfficiencyRatio_20D = feat_eff_ratio,
+    ATR_Comp_5v20       = feat_atr_comp,
+    VolumeExp_5v20      = feat_vol_5v20,
+    UpDownVolRatio_20D  = feat_ud_vol_20,
+    SortinoMom_20D      = feat_sortino_20,
+    LeftTailShock_20D   = feat_tail_shk_20
   )
   
   # Orthogonalized 26-Feature Continuous Predictor Set for ElasticNet:
-  # Prunes the 4 collinear duplicates (SlopeWeeklyPct, ATRExt, BB_PctB, GARCH_Shock) and the
-  # 3 lowest-selection (<2.1%) binary step-function interaction flags (PEAD_Catalyst, PullbackInUptrend, BreakoutWithVolume),
-  # replacing them with 7 orthogonal continuous alpha, microstructure & path-efficiency predictors:
-  #   - Prox52WHigh         (252-day high proximity / overhead supply anchor)
-  #   - IdioAlpha_20D       (20-day beta-adjusted residual Information Ratio vs SPY)
-  #   - RangeToCloseVol_20D (Parkinson High-Low vol / Close-to-Close vol stop-hunt guard)
-  #   - LowerWickDemand_10D (10-day ATR-normalized lower-shadow institutional dip-buying absorption)
-  #   - CMF_20D             (20-day Chaikin Money Flow volume-weighted CLV pullback washout)
-  #   - RS_60               (60-day quarterly structural Relative Strength vs SPY)
-  #   - EfficiencyRatio_20D (20-day Kaufman net-move to path-length efficiency ratio)
-  feature_names <- c("SlopeFast", "SlopeSlow", "TrendQuality", "DistPct", 
+  # Prunes collinear duplicates (SlopeWeeklyPct, ATRExt, BB_PctB, GARCH_Shock, DistPct, RSI_14, MACD_Hist),
+  # noisy 1-day/cumulative volume outliers (VolumeRatio, OBV_Slope), and step-function flags,
+  # replacing them with 12 orthogonal continuous alpha, microstructure, path-efficiency & tail-risk predictors:
+  feature_names <- c("SlopeFast", "SlopeSlow", "TrendQuality",
                      "ZScore", "GARCH_Vol", "GARCH_VolPct", "MSGARCH_ProbHighVol",
-                     "VolumeRatio", "OBV_Slope", "RSI_14", "MACD_Hist", "RS_20", 
-                     "SectorSpread", "AsymVolRatio",
+                     "RS_20", "SectorSpread", "AsymVolRatio",
                      "VolSqueeze", "SqueezeRelease", "CLV_5D", "IntradayVsGap_10D",
                      "Prox52WHigh", "IdioAlpha_20D", "RangeToCloseVol_20D", "LowerWickDemand_10D",
-                     "CMF_20D", "RS_60", "EfficiencyRatio_20D")
+                     "CMF_20D", "RS_60", "EfficiencyRatio_20D",
+                     "ATR_Comp_5v20", "VolumeExp_5v20", "UpDownVolRatio_20D", "SortinoMom_20D", "LeftTailShock_20D")
   
   # Clean warm-up NAs across features
   clean_feats_xts <- na.omit(features_xts)
@@ -621,7 +663,12 @@ build_feature_dataset <- function(ohlcv,
     LowerWickDemand_10D = as.numeric(clean_model_xts[, "LowerWickDemand_10D"]),
     CMF_20D             = as.numeric(clean_model_xts[, "CMF_20D"]),
     RS_60               = as.numeric(clean_model_xts[, "RS_60"]),
-    EfficiencyRatio_20D = as.numeric(clean_model_xts[, "EfficiencyRatio_20D"])
+    EfficiencyRatio_20D = as.numeric(clean_model_xts[, "EfficiencyRatio_20D"]),
+    ATR_Comp_5v20       = as.numeric(clean_model_xts[, "ATR_Comp_5v20"]),
+    VolumeExp_5v20      = as.numeric(clean_model_xts[, "VolumeExp_5v20"]),
+    UpDownVolRatio_20D  = as.numeric(clean_model_xts[, "UpDownVolRatio_20D"]),
+    SortinoMom_20D      = as.numeric(clean_model_xts[, "SortinoMom_20D"]),
+    LeftTailShock_20D   = as.numeric(clean_model_xts[, "LeftTailShock_20D"])
   )
   
   cat(sprintf("[Pipeline] Complete. Result: %d valid observation rows across %d features.\n",
@@ -646,6 +693,11 @@ build_feature_dataset <- function(ohlcv,
     latest_cmf_20           = as.numeric(tail(feat_cmf_20, 1)),
     latest_rs_60            = as.numeric(tail(feat_rs_60, 1)),
     latest_eff_ratio        = as.numeric(tail(feat_eff_ratio, 1)),
+    latest_atr_comp         = as.numeric(tail(feat_atr_comp, 1)),
+    latest_vol_5v20         = as.numeric(tail(feat_vol_5v20, 1)),
+    latest_ud_vol           = as.numeric(tail(feat_ud_vol_20, 1)),
+    latest_sortino_mom      = as.numeric(tail(feat_sortino_20, 1)),
+    latest_left_tail        = as.numeric(tail(feat_tail_shk_20, 1)),
     latest_rs_20            = as.numeric(tail(feat_rs_20, 1)),
     latest_atr_ext          = as.numeric(tail(feat_atr_ext, 1)),
     latest_sector_spread    = as.numeric(tail(feat_sector_spread, 1)),

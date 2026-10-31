@@ -200,26 +200,33 @@ qqq_ohlcv <- tryCatch(load_stock_data("QQQ", force_refresh = FORCE_REFRESH), err
 macro_info <- if (!is.null(qqq_ohlcv)) {
   tryCatch({
     qqq_price <- Cl(qqq_ohlcv)
-    qqq_lm <- lmMA(qqq_price, n = 50)
+    qqq_lm    <- lmMA(qqq_price, n = 50)
+    qqq_lm20  <- lmMA(qqq_price, n = 20)
     latest_qqq_close <- as.numeric(last(qqq_price))
     latest_qqq_fit   <- as.numeric(last(qqq_lm$fit))
     latest_qqq_slope <- as.numeric(last(qqq_lm$slope))
+    latest_qqq_fit20 <- as.numeric(last(qqq_lm20$fit))
+    latest_qqq_slp20 <- as.numeric(last(qqq_lm20$slope))
     
-    is_bullish <- (latest_qqq_close >= latest_qqq_fit) && (latest_qqq_slope >= 0)
+    is_bullish   <- (latest_qqq_close >= latest_qqq_fit) && (latest_qqq_slope >= 0)
+    is_fast_bear <- (latest_qqq_close <= latest_qqq_fit20) && (latest_qqq_slp20 < 0)
     list(
-      close = latest_qqq_close,
-      fit = latest_qqq_fit,
-      slope = latest_qqq_slope,
-      is_bullish = is_bullish,
-      regime = if (is_bullish) "BULLISH (Risk-On)" else "DEFENSIVE (Risk-Off)"
+      close        = latest_qqq_close,
+      fit          = latest_qqq_fit,
+      slope        = latest_qqq_slope,
+      fit20        = latest_qqq_fit20,
+      slope20      = latest_qqq_slp20,
+      is_bullish   = is_bullish,
+      is_fast_bear = is_fast_bear,
+      regime       = if (is_bullish) "BULLISH (Risk-On)" else "DEFENSIVE (Risk-Off)"
     )
   }, error = function(e) {
     cat(sprintf("  -> Warning: Macro calculation failed (%s). Defaulting to Bullish.\n", e$message))
-    list(close = 0, fit = 0, slope = 0, is_bullish = TRUE, regime = "BULLISH (Default)")
+    list(close = 0, fit = 0, slope = 0, fit20 = 0, slope20 = 0, is_bullish = TRUE, is_fast_bear = FALSE, regime = "BULLISH (Default)")
   })
 } else {
   cat("  -> Warning: Macro fetch failed. Defaulting to Bullish.\n")
-  list(close = 0, fit = 0, slope = 0, is_bullish = TRUE, regime = "BULLISH (Default)")
+  list(close = 0, fit = 0, slope = 0, fit20 = 0, slope20 = 0, is_bullish = TRUE, is_fast_bear = FALSE, regime = "BULLISH (Default)")
 }
 
 # Benchmark (SPY) for Relative Strength
@@ -468,12 +475,20 @@ for (sym in SYMBOLS) {
     latest_cmf_20        <- if (!is.null(pipeline_out$latest_cmf_20)) pipeline_out$latest_cmf_20 else 0.0
     latest_rs_60         <- if (!is.null(pipeline_out$latest_rs_60)) pipeline_out$latest_rs_60 else 0.0
     latest_eff_ratio     <- if (!is.null(pipeline_out$latest_eff_ratio)) pipeline_out$latest_eff_ratio else 0.30
+    latest_atr_comp      <- if (!is.null(pipeline_out$latest_atr_comp)) pipeline_out$latest_atr_comp else 1.0
+    latest_vol_5v20      <- if (!is.null(pipeline_out$latest_vol_5v20)) pipeline_out$latest_vol_5v20 else 1.0
+    latest_ud_vol        <- if (!is.null(pipeline_out$latest_ud_vol)) pipeline_out$latest_ud_vol else 0.0
+    latest_sortino_mom   <- if (!is.null(pipeline_out$latest_sortino_mom)) pipeline_out$latest_sortino_mom else 0.0
+    latest_left_tail     <- if (!is.null(pipeline_out$latest_left_tail)) pipeline_out$latest_left_tail else -1.5
     latest_rs_20         <- pipeline_out$latest_rs_20
     latest_atr_ext       <- pipeline_out$latest_atr_ext
     latest_sec_spread    <- pipeline_out$latest_sector_spread
     latest_asym_vol      <- pipeline_out$latest_asym_vol
     is_rs_leader         <- (!is.na(latest_rs_20) && latest_rs_20 >= 0 && (is.na(latest_rs_60) || latest_rs_60 > -0.05))
     is_overextended      <- (!is.na(latest_atr_ext) && latest_atr_ext > 3.0) # Feature 1: Mean-Reversion Guard
+    is_tail_shocked      <- (!is.na(latest_left_tail) && latest_left_tail < -3.6) # Stage-3 Left-Tail Crash Air-Pocket Guard
+    is_bear_vol_exploded <- (isTRUE(DEFENSIVE_REGIME_ACTIVE) && (vix_info$close >= 25 || spy_ann_vol >= 0.28) &&
+                             ((!is.na(latest_atr_comp) && latest_atr_comp > 1.45) || curr_ann_vol > 0.85))
 
     # 20-day Average Daily Volume & Dollar Volume (L3 Market Impact Guard)
     vol_series <- tryCatch(Vo(ohlcv), error = function(e) xts(rep(1e6, nrow(price)), order.by = index(price)))
@@ -493,14 +508,17 @@ for (sym in SYMBOLS) {
     stop_loss_price <- round(latest_close * (1 - 2.0 * curr_daily_vol), 2)
     take_profit_price <- round(latest_close * (1 + 3.0 * curr_daily_vol), 2)
 
-    # Asymmetric Hybrid Gate: In defensive regimes, reward top Relative Strength leaders (RS_20 >= +5.0%)
-    # with an earlier momentum entry hurdle (60.0%), while enforcing strict 65.0% on neutral/lagging assets
+    # Asymmetric Hybrid Gate: In non-crisis defensive regimes, reward multi-horizon Relative Strength & Path Efficiency leaders
+    # (RS_20 >= +5.0%, RS_60 >= +2.0%, Eff_Ratio >= 0.35) with an earlier momentum entry hurdle (60.0%)
     cand_p_long <- EFFECTIVE_P_LONG
-    if (isTRUE(DEFENSIVE_REGIME_ACTIVE) && !is.na(latest_rs_20) && latest_rs_20 >= 0.05) {
+    if (isTRUE(DEFENSIVE_REGIME_ACTIVE) && vix_info$close < 30 &&
+        !is.na(latest_rs_20) && latest_rs_20 >= 0.05 &&
+        (is.na(latest_rs_60) || latest_rs_60 >= 0.02) &&
+        (is.na(latest_eff_ratio) || latest_eff_ratio >= 0.35)) {
       cand_p_long <- 0.60
     }
 
-    # Signal Assignment with Multi-Timeframe, RS Leader, Extension Filter, Liquidity & Earnings Gate
+    # Signal Assignment with Multi-Timeframe, RS Leader, Extension Filter, Tail-Shock Guard, Liquidity & Earnings Gate
     signal_status <- "HOLD"
     gate_note <- "Normal"
 
@@ -523,6 +541,12 @@ for (sym in SYMBOLS) {
       } else if (is_overextended) {
         signal_status <- "OVEREXTENDED"
         gate_note <- sprintf("Overextended (%.1fx ATR above trend)", latest_atr_ext)
+      } else if (is_tail_shocked) {
+        signal_status <- "TAIL_SHOCK"
+        gate_note <- sprintf("20D Crash Air-Pocket (%.1f sigma)", latest_left_tail)
+      } else if (is_bear_vol_exploded) {
+        signal_status <- "VOL_BRAKE"
+        gate_note <- sprintf("High-Vol Bear Brake (ATR_Comp %.2f)", latest_atr_comp)
       } else if (is_intercept_only) {
         signal_status <- "HOLD"
         gate_note <- sprintf("No Model Signal (0/%d coefs)", length(feat_names))
@@ -551,6 +575,11 @@ for (sym in SYMBOLS) {
       CMF_20 = latest_cmf_20,
       RS_60 = latest_rs_60,
       Eff_Ratio = latest_eff_ratio,
+      ATR_Comp = latest_atr_comp,
+      Vol_5v20 = latest_vol_5v20,
+      UD_Vol = latest_ud_vol,
+      Sortino_Mom = latest_sortino_mom,
+      Left_Tail = latest_left_tail,
       RS_20 = latest_rs_20,
       ATRExt = latest_atr_ext,
       Sector_Spread = latest_sec_spread,
@@ -591,15 +620,19 @@ df_scan <- do.call(rbind, scan_results)
 
 # Cross-Sectional Quality Score incorporating Sector Momentum Tailwind, Asymmetric Volatility,
 # Trend Quality (R^2 > 0.50), Beta-Adjusted Idiosyncratic Alpha (IdioAlpha_20D),
-# Quarterly Structural RS (RS_60), and Kaufman Path Efficiency Ratio (Eff_Ratio):
+# Quarterly Structural RS (RS_60), Kaufman Path Efficiency Ratio (Eff_Ratio),
+# 5D/20D Institutional Volume Expansion (Vol_5v20), Up/Down Volume Ratio (UD_Vol), and Sortino Momentum (Sortino_Mom):
 sector_boost <- pmax(0, df_scan$Sector_Spread)
 asym_boost   <- pmax(0, df_scan$Asym_Vol * 0.1)
 tq_boost     <- pmax(0, (df_scan$Trend_Quality - 0.50) * 0.25)
 idio_boost   <- pmax(0, df_scan$Idio_Alpha * 0.08)
 rs60_boost   <- pmax(0, df_scan$RS_60 * 0.20)
 er_boost     <- pmax(0, (df_scan$Eff_Ratio - 0.30) * 0.20)
+v5_boost     <- pmax(0, (df_scan$Vol_5v20 - 1.0) * 0.15)
+ud_boost     <- pmax(0, df_scan$UD_Vol * 0.08)
+sm_boost     <- pmax(0, (df_scan$Sortino_Mom - 0.80) * 0.06)
 df_scan$Quality_Score <- ifelse(df_scan$Signal == "BUY" & df_scan$Prob_Up >= df_scan$Req_P_Up & df_scan$RS_20 > 0,
-                                df_scan$Prob_Up * (1 + df_scan$RS_20 + 0.5 * sector_boost + asym_boost + tq_boost + idio_boost + rs60_boost + er_boost),
+                                df_scan$Prob_Up * (1 + df_scan$RS_20 + 0.5 * sector_boost + asym_boost + tq_boost + idio_boost + rs60_boost + er_boost + v5_boost + ud_boost + sm_boost),
                                 0.0)
 df_scan <- df_scan[order(-df_scan$Quality_Score, -df_scan$Prob_Up), ]
 rownames(df_scan) <- 1:nrow(df_scan)
@@ -704,11 +737,15 @@ if (LEVERAGE > 1.0) {
 }
 cat(sprintf(" AVAILABLE CASH SLOTS:   %d of %d (Regime Limit: %d)\n", empty_slots, EFFECTIVE_MAX_POS, EFFECTIVE_MAX_POS))
 
-# Account Drawdown Circuit Breaker Enforcement
+# Two-Tier Progressive Account Drawdown Circuit Breaker Enforcement (-8.0% Soft / -12.0% Hard)
 if (isTRUE(CIRCUIT_BREAKER) && isTRUE(sync_res$circuit_breaker_active)) {
-  EFFECTIVE_SAFETY_FACTOR <- EFFECTIVE_SAFETY_FACTOR * 0.50
-  cat(sprintf(" ⚠️  [CIRCUIT BREAKER ENGAGED] Account drawdown %+.2f%% <= %.1f%%! Throttling Safe f to %.2f\n", 
+  EFFECTIVE_SAFETY_FACTOR <- EFFECTIVE_SAFETY_FACTOR * 0.45
+  cat(sprintf(" ⚠️  [HARD CIRCUIT BREAKER ENGAGED] Account drawdown %+.2f%% <= %.1f%%! Throttling Safe f to %.2f (45%% scale)\n", 
               sync_res$drawdown_pct, CIRCUIT_BREAKER_THRESH, EFFECTIVE_SAFETY_FACTOR))
+} else if (isTRUE(CIRCUIT_BREAKER) && isTRUE(sync_res$soft_cb_active)) {
+  EFFECTIVE_SAFETY_FACTOR <- EFFECTIVE_SAFETY_FACTOR * 0.72
+  cat(sprintf(" 🛡️  [SOFT DRAWDOWN CUSHION ENGAGED] Account drawdown %+.2f%% <= -8.0%%! Throttling Safe f to %.2f (72%% scale)\n",
+              sync_res$drawdown_pct, EFFECTIVE_SAFETY_FACTOR))
 } else if (!isTRUE(CIRCUIT_BREAKER)) {
   cat(sprintf(" ℹ️  [CIRCUIT BREAKER DISABLED] Full sizing active (Safe f = %.2f).\n", EFFECTIVE_SAFETY_FACTOR))
 }
@@ -769,9 +806,22 @@ deploy_unallocated_cash <- function(unalloc_cash, port_state, macro_info, gld_in
     cat(sprintf(" Macro Gate Status:      %s | Gold Trend: BULLISH (GLD >= 50D lmMA)\n", macro_info$regime))
     port_state$hedge_state <- list(regime = "GLD_BULL", entry_date = today_str, days_held = 0L, rotated_to_sgov = FALSE, rotation_reason = "")
     target_syms <- c("GLD")
+  } else if (!isTRUE(macro_info$is_fast_bear)) {
+    # DUAL-BEAR 20D COUNTER-TREND SQUEEZE GUARD:
+    # QQQ < 50D lmMA & GLD < 50D lmMA, but QQQ's 20-day fast trend is rebounding upward -> Park in SGOV T-Bills!
+    cat(sprintf(" Macro Gate Status:      %s | Fast 20D QQQ Trend Rebounding (Counter-Trend Squeeze Guard -> SGOV)\n",
+                macro_info$regime))
+    port_state$hedge_state <- list(
+      regime = "DUAL_BEAR_SGOV_GUARD",
+      entry_date = today_str,
+      days_held = 0L,
+      rotated_to_sgov = TRUE,
+      rotation_reason = "20D QQQ Fast-Trend Counter-Rally Squeeze Guard Active"
+    )
+    target_syms <- c("SGOV")
   } else {
-    # DUAL BEAR REGIME: Both QQQ & GLD are Bearish
-    cat(sprintf(" Macro Gate Status:      %s | Gold Trend: %s (DUAL BEAR ACTIVE)\n", 
+    # DUAL BEAR REGIME: Both 50D & 20D QQQ Trends AND 50D GLD Trend are Bearish
+    cat(sprintf(" Macro Gate Status:      %s | Gold Trend: %s (CONFIRMED 50D+20D DUAL BEAR ACTIVE)\n", 
                 macro_info$regime, gld_info$regime))
     
     h_state <- port_state$hedge_state
@@ -820,13 +870,13 @@ deploy_unallocated_cash <- function(unalloc_cash, port_state, macro_info, gld_in
     prev_peak <- if (!is.null(h_state$peak_ratio)) as.numeric(h_state$peak_ratio) else 1.0
     h_state$peak_ratio <- max(prev_peak, cur_ratio)
     
-    # Safety Stops: 15-Day Time Stop OR -10.0% Max Loss Stop
+    # Safety Stops: 15-Day Time Stop OR -8.0% Max Loss Stop
     if (h_state$days_held > 15) {
       h_state$rotated_to_sgov <- TRUE
       h_state$rotation_reason <- sprintf("15-Day Time Stop Reached (%d trading days held)", h_state$days_held)
-    } else if (hedge_cum_pnl <= -0.10) {
+    } else if (hedge_cum_pnl <= -0.08) {
       h_state$rotated_to_sgov <- TRUE
-      h_state$rotation_reason <- sprintf("-10.0%% Max Loss Triggered (Cumulative P&L: %+.1f%%)", hedge_cum_pnl * 100)
+      h_state$rotation_reason <- sprintf("-8.0%% Max Loss Triggered (Cumulative P&L: %+.1f%%)", hedge_cum_pnl * 100)
     }
     port_state$hedge_state <- h_state
     target_syms <- if (isTRUE(h_state$rotated_to_sgov)) c("SGOV") else c("FNGD", "SQQQ")
@@ -1080,9 +1130,13 @@ if (isTRUE(IS_FRIDAY)) {
             vince_opt <- vince_optimal_f(sub_events, max_leverage = LEVERAGE, safety_factor = EFFECTIVE_SAFETY_FACTOR)
             cur_px_map <- setNames(actionable_df$Close[match(avail_syms, actionable_df$Symbol)], avail_syms)
             
-            # Inverse GARCH Volatility Parity Weights (1 / GARCH_AnnVol)
-            cand_vols <- pmax(0.15, pmin(1.20, actionable_df$GARCH_AnnVol[match(avail_syms, actionable_df$Symbol)]))
-            inv_vol_raw <- 1.0 / cand_vols
+            # Sortino & Path-Efficiency Adjusted Inverse GARCH Volatility Parity Weights:
+            cand_idx_m <- match(avail_syms, actionable_df$Symbol)
+            cand_vols  <- pmax(0.15, pmin(1.20, actionable_df$GARCH_AnnVol[cand_idx_m]))
+            cand_er    <- ifelse(is.na(actionable_df$Eff_Ratio[cand_idx_m]), 0.30, actionable_df$Eff_Ratio[cand_idx_m])
+            cand_sm    <- ifelse(is.na(actionable_df$Sortino_Mom[cand_idx_m]), 0.0, actionable_df$Sortino_Mom[cand_idx_m])
+            eff_vols   <- cand_vols / (1.0 + 0.20 * pmax(0, cand_er - 0.35) + 0.10 * pmax(0, cand_sm))
+            inv_vol_raw <- 1.0 / eff_vols
             inv_vol_w <- inv_vol_raw / sum(inv_vol_raw)
             names(inv_vol_w) <- avail_syms
             
@@ -1211,7 +1265,7 @@ if (isTRUE(IS_FRIDAY)) {
                     tier1_shares, tier1_target, tier1_gain, row$Close))
         cat(sprintf("    -> Tier 2 (25%% = %s shs): Target $%.2f (+3.0R) [Gain: $%.2f] -> Close 25%%\n",
                     tier2_shares, tier2_target, tier2_gain))
-        runner_horizon <- if ((!is.na(row$Trend_Quality) && row$Trend_Quality > 0.60) || (!is.na(row$RS_20) && row$RS_20 >= 0.05)) 20L else 15L
+        runner_horizon <- if ((!is.na(row$Trend_Quality) && row$Trend_Quality > 0.60) || (!is.na(row$Eff_Ratio) && row$Eff_Ratio >= 0.45) || (!is.na(row$RS_20) && row$RS_20 >= 0.05)) 20L else 15L
         cat(sprintf("    -> Runner Lot (25%% = %s shs): Chandelier Trailing Stop (Initial: $%.2f, Trails Highest High - 2.5 x ATR(14) $%.2f)\n",
                     runner_shares, row$Chandelier_Stop, row$ATR_14))
         cat(sprintf("       * Adaptive Runner Horizon: %d trading days (R^2 = %.2f | Mark-Out Extended for High-R^2 / RS Leaders)!\n\n",
