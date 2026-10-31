@@ -168,6 +168,9 @@ assert_true(!is.null(m_fit), "B1: fit_logistic_swing_model succeeds without acti
 assert_true("Active Signal Accuracy" %in% m_fit$metrics$Metric, "B1: Active Signal Accuracy metric present")
 assert_true(!is.null(m_fit$feature_importance), "M2: Feature importance data frame generated")
 assert_equal(nrow(m_fit$feature_importance), length(pipe_res$feature_names), "M2: All features ranked in importance")
+assert_equal(length(pipe_res$feature_names), 22, "M2: Orthogonalized 22-feature predictor set active (4 collinear duplicates pruned)")
+assert_true("StdBeta" %in% colnames(m_fit$feature_importance), "M2: Scale-invariant StdBeta column present in feature_importance")
+assert_true(!is.null(pipe_res$latest_trend_quality), "M2: latest_trend_quality exposed for Adaptive 20D Runner Horizon")
 
 # ------------------------------------------------------------------------------
 # TEST GROUP 5: Backtest Engine & Realistic Execution (B3, L2)

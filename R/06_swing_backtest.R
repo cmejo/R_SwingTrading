@@ -218,6 +218,8 @@ simulate_bracket_backtest <- function(ohlcv,
 
   garch_vol_vec <- pipeline_out$model_data$GARCH_Vol[model_res$test_idx]
   garch_vol_xts <- xts(garch_vol_vec, order.by = test_dates)
+  tq_vec <- if ("TrendQuality" %in% colnames(pipeline_out$model_data)) pipeline_out$model_data$TrendQuality[model_res$test_idx] else rep(0.5, length(test_dates))
+  rs_vec <- if ("RS_20" %in% colnames(pipeline_out$model_data)) pipeline_out$model_data$RS_20[model_res$test_idx] else rep(0.0, length(test_dates))
 
   raw_signals <- model_res$pred_class
   sig_xts <- xts(raw_signals, order.by = test_dates)
@@ -350,8 +352,17 @@ simulate_bracket_backtest <- function(ohlcv,
           }
         }
 
-        # 4. Time Expiration (max_hold_days Trading Days, default 7)
-        if (!is.null(pos) && pos$days_held >= max_hold_days) {
+        # 4. Adaptive Time Expiration:
+        #    - Unconfirmed setups (Tier 1 not filled): max_hold_days (default 7)
+        #    - Active Runners (Tier 1 filled): 20 days if TrendQuality > 0.60 or RS_20 >= +5%, else 15 days
+        cur_tq <- if (i <= length(tq_vec) && !is.na(tq_vec[i])) tq_vec[i] else 0.5
+        cur_rs <- if (i <= length(rs_vec) && !is.na(rs_vec[i])) rs_vec[i] else 0.0
+        eff_max_hold <- if (!is.null(pos) && isTRUE(pos$tier1_filled)) {
+          if (cur_tq > 0.60 || cur_rs >= 0.05) 20L else 15L
+        } else {
+          max_hold_days
+        }
+        if (!is.null(pos) && pos$days_held >= eff_max_hold) {
           shs_exit <- pos$shares
           exit_px <- c_px
           pnl <- (exit_px - pos$entry_price) * shs_exit - (shs_exit * exit_px * (cost_bps / 10000))
@@ -362,7 +373,8 @@ simulate_bracket_backtest <- function(ohlcv,
             ExitDate = as.character(cur_d), EntryPrice = pos$entry_price,
             ExitPrice = exit_px, Shares = shs_exit, PnL = pnl,
             ReturnPct = (exit_px / pos$entry_price - 1) * 100, R_Multiple = r_mult,
-            Reason = "TIME_EXPIRATION", DaysHeld = pos$days_held, stringsAsFactors = FALSE
+            Reason = if (isTRUE(pos$tier1_filled)) sprintf("RUNNER_TIME_EXPIRATION_%dD", eff_max_hold) else "TIME_EXPIRATION",
+            DaysHeld = pos$days_held, stringsAsFactors = FALSE
           )
           pos <- NULL
         }

@@ -206,17 +206,26 @@ train_swing_model <- function(X_train,
   colnames(coef_min) <- "ElasticNet_Coef"
   active_feats_count <- sum(coef_min[-1, 1] != 0)
   
-  # Feature Importance Attribution (M2)
+  # Scale-Invariant Standardized ElasticNet Feature Importance Attribution (M2)
+  # glmnet standardizes X_train internally during optimization, but coef() returns
+  # unstandardized coefficients in raw feature units. Multiplying by training column
+  # standard deviation (beta_j * sd(X_j)) recovers true standardized log-odds importance.
   feat_coefs <- coef_min[-1, 1]
+  feat_sds   <- apply(X_train, 2, sd, na.rm = TRUE)
+  feat_sds[is.na(feat_sds) | feat_sds == 0] <- 1.0
+  std_betas  <- as.numeric(feat_coefs) * as.numeric(feat_sds[names(feat_coefs)])
+  
   feat_importance <- data.frame(
-    Feature     = names(feat_coefs),
-    Coefficient = as.numeric(feat_coefs),
-    AbsWeight   = abs(as.numeric(feat_coefs)),
-    Direction   = ifelse(as.numeric(feat_coefs) > 0, "BULLISH",
-                         ifelse(as.numeric(feat_coefs) < 0, "BEARISH", "NEUTRAL")),
+    Feature      = names(feat_coefs),
+    Coefficient  = as.numeric(feat_coefs),
+    StdBeta      = std_betas,
+    AbsWeight    = abs(std_betas),
+    RawAbsWeight = abs(as.numeric(feat_coefs)),
+    Direction    = ifelse(std_betas > 0, "BULLISH",
+                          ifelse(std_betas < 0, "BEARISH", "NEUTRAL")),
     stringsAsFactors = FALSE
   )
-  feat_importance <- feat_importance[order(-feat_importance$AbsWeight), ]
+  feat_importance <- feat_importance[order(-feat_importance$AbsWeight, -feat_importance$RawAbsWeight), ]
   rownames(feat_importance) <- NULL
   
   # 4. Platt Scaling Probability Calibration on Causal Out-of-Fold Predictions (M1)

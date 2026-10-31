@@ -387,8 +387,24 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
         alerts <- c(alerts, sprintf("[TIER 2 HIT] %s hit +3.0R target ($%.2f). Sell %s shares. Retain 25%% RUNNER trailing on Chandelier Stop ($%.2f)!",
                                     sym, t2_tgt, ifelse(shs_to_exit %% 1 == 0, sprintf("%d", as.integer(shs_to_exit)), sprintf("%.3f", shs_to_exit)), chandelier_stop))
       } else if (isTRUE(p$is_runner) || isTRUE(p$tier2_hit)) {
-        action <- sprintf("HOLD RUNNER (Chandelier Trailing Stop: $%.2f | P&L: %+.2f%%)", chandelier_stop, pnl_pct)
-        status <- "RUNNER_ACTIVE"
+        sym_row_r <- if (!is.null(model_scan_df) && sym %in% model_scan_df$Symbol) {
+          model_scan_df[model_scan_df$Symbol == sym, ]
+        } else NULL
+        tq_val <- if (!is.null(sym_row_r) && "Trend_Quality" %in% colnames(sym_row_r)) as.numeric(sym_row_r$Trend_Quality[1]) else 0.65
+        rs_val <- if (!is.null(sym_row_r) && "RS_20" %in% colnames(sym_row_r)) as.numeric(sym_row_r$RS_20[1]) else 0.06
+        is_high_r2_leader <- (!is.na(tq_val) && tq_val > 0.60) || (!is.na(rs_val) && rs_val >= 0.05)
+        max_runner_days   <- if (is_high_r2_leader) 20L else 15L
+        
+        if (days_held >= max_runner_days) {
+          action <- sprintf("SELL RUNNER (MAX %d-DAY RUNNER HORIZON REACHED | P&L: %+.2f%%)", max_runner_days, pnl_pct)
+          status <- "RUNNER_TIME_EXIT"
+          alerts <- c(alerts, sprintf("[RUNNER TIME EXIT] %s runner reached %d-day mark-out horizon (P&L: %+.2f%%). Harvest runner gains.",
+                                      sym, max_runner_days, pnl_pct))
+        } else {
+          horizon_tag <- if (is_high_r2_leader) sprintf("Day %d/%d [20D High-R2 Leader]", days_held, max_runner_days) else sprintf("Day %d/%d", days_held, max_runner_days)
+          action <- sprintf("HOLD RUNNER (%s | Chandelier Stop: $%.2f | P&L: %+.2f%%)", horizon_tag, chandelier_stop, pnl_pct)
+          status <- "RUNNER_ACTIVE"
+        }
       } else if (days_held >= 7 && !isTRUE(p$tier2_hit)) {
         action <- "SELL (MAX 7-DAY TIME HORIZON)"
         status <- "TIME_EXIT_TRIGGERED"

@@ -418,10 +418,16 @@ build_feature_dataset <- function(ohlcv,
     BreakoutWithVolume = feat_breakout_vol
   )
   
-  feature_names <- c("SlopeFast", "SlopeSlow", "SlopeWeeklyPct", "TrendQuality", "DistPct", 
-                     "ZScore", "GARCH_Vol", "GARCH_Shock", "GARCH_VolPct", "MSGARCH_ProbHighVol",
-                     "VolumeRatio", "OBV_Slope", "RSI_14", "MACD_Hist", "BB_PctB", "RS_20", 
-                     "ATRExt", "SectorSpread", "AsymVolRatio",
+  # Orthogonalized 22-Feature Predictor Set for ElasticNet:
+  # Prunes the 4 near-duplicate / zero-selection collinear features:
+  #   - SlopeWeeklyPct (r = 0.986 with SlopeSlow; retained as top-down gate in latest_weekly_slope_pct)
+  #   - ATRExt         (r = 0.953 with ZScore; retained as overextension gate in latest_atr_ext)
+  #   - BB_PctB        (r = 0.891 with RSI_14; 0.8% selection rate)
+  #   - GARCH_Shock    (r = 0.600 with ZScore; 0.0% selection rate)
+  feature_names <- c("SlopeFast", "SlopeSlow", "TrendQuality", "DistPct", 
+                     "ZScore", "GARCH_Vol", "GARCH_VolPct", "MSGARCH_ProbHighVol",
+                     "VolumeRatio", "OBV_Slope", "RSI_14", "MACD_Hist", "RS_20", 
+                     "SectorSpread", "AsymVolRatio",
                      "VolSqueeze", "SqueezeRelease", "CLV_5D", "IntradayVsGap_10D",
                      "PEAD_Catalyst", "PullbackInUptrend", "BreakoutWithVolume")
   
@@ -430,7 +436,7 @@ build_feature_dataset <- function(ohlcv,
   
   # Latest available feature observation (unlabeled, up to latest price bar)
   latest_feat_row <- tail(clean_feats_xts, 1)
-  latest_feature_matrix <- matrix(as.numeric(latest_feat_row), nrow = 1)
+  latest_feature_matrix <- matrix(as.numeric(latest_feat_row[, feature_names]), nrow = 1)
   colnames(latest_feature_matrix) <- feature_names
   
   # Exact column indexing (prevent zoo partial name matching bug)
@@ -499,6 +505,7 @@ build_feature_dataset <- function(ohlcv,
     high_regime_idx         = if (!is.null(garch_out)) garch_out$high_regime_idx else NULL,
     low_regime_idx          = if (!is.null(garch_out)) garch_out$low_regime_idx else NULL,
     latest_weekly_slope_pct = as.numeric(tail(feat_slope_weekly, 1)),
+    latest_trend_quality    = as.numeric(tail(feat_rsq_fast, 1)),
     latest_rs_20            = as.numeric(tail(feat_rs_20, 1)),
     latest_atr_ext          = as.numeric(tail(feat_atr_ext, 1)),
     latest_sector_spread    = as.numeric(tail(feat_sector_spread, 1)),

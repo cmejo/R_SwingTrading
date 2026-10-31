@@ -455,6 +455,7 @@ for (sym in SYMBOLS) {
     # Single source of truth for features and volatility from pipeline_out
     curr_ann_vol         <- pipeline_out$latest_ann_vol
     latest_prob_high_vol <- pipeline_out$latest_prob_high_vol
+    latest_trend_quality <- if (!is.null(pipeline_out$latest_trend_quality)) pipeline_out$latest_trend_quality else 0.50
     latest_rs_20         <- pipeline_out$latest_rs_20
     latest_atr_ext       <- pipeline_out$latest_atr_ext
     latest_sec_spread    <- pipeline_out$latest_sector_spread
@@ -532,6 +533,7 @@ for (sym in SYMBOLS) {
       Signal = signal_status,
       Gate_Note = gate_note,
       Weekly_Slope = weekly_slope_pct,
+      Trend_Quality = latest_trend_quality,
       RS_20 = latest_rs_20,
       ATRExt = latest_atr_ext,
       Sector_Spread = latest_sec_spread,
@@ -1187,9 +1189,11 @@ if (isTRUE(IS_FRIDAY)) {
                     tier1_shares, tier1_target, tier1_gain, row$Close))
         cat(sprintf("    -> Tier 2 (25%% = %s shs): Target $%.2f (+3.0R) [Gain: $%.2f] -> Close 25%%\n",
                     tier2_shares, tier2_target, tier2_gain))
+        runner_horizon <- if ((!is.na(row$Trend_Quality) && row$Trend_Quality > 0.60) || (!is.na(row$RS_20) && row$RS_20 >= 0.05)) 20L else 15L
         cat(sprintf("    -> Runner Lot (25%% = %s shs): Chandelier Trailing Stop (Initial: $%.2f, Trails Highest High - 2.5 x ATR(14) $%.2f)\n",
                     runner_shares, row$Chandelier_Stop, row$ATR_14))
-        cat("       * EXEMPT from 7-day expiration window to capture multi-month momentum blowoffs!\n\n")
+        cat(sprintf("       * Adaptive Runner Horizon: %d trading days (R^2 = %.2f | Mark-Out Extended for High-R^2 / RS Leaders)!\n\n",
+                    runner_horizon, ifelse(is.na(row$Trend_Quality), 0.50, row$Trend_Quality)))
         
         alert_tickets <- c(alert_tickets, sprintf(
           "• *%s* (%s): BUY %s shs @ ~$%.2f\n  - Stop: $%.2f | T1 (50%%): $%.2f (+1.5R) | T2 (25%%): $%.2f (+3.0R)\n  - Runner (25%%): Chandelier Stop $%.2f | RS vs SPY: %+.1f%%",
