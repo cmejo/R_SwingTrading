@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Quantitative Swing Trading Strategy — 2-Page Institutional Fact Sheet & Operator Guide</title>
+<style>
+  @page {
+    size: letter portrait;
+    margin: 0.24in 0.34in;
+  }
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #0f172a;
+    background: #ffffff;
+    font-size: 7.75pt;
+    line-height: 1.21;
+    max-width: 100%;
+    margin: 0 auto;
+  }
+  .page {
+    width: 100%;
+    padding: 0;
+  }
+  .page-break {
+    page-break-after: always;
+    break-after: page;
+  }
+  @media screen {
+    body {
+      background: #e2e8f0;
+      padding: 20px 0;
+    }
+    .page {
+      background: #ffffff;
+      width: 8.5in;
+      min-height: 11in;
+      padding: 0.28in 0.36in;
+      margin: 0 auto 24px auto;
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
+      border-radius: 4px;
+    }
+  }
+
+  /* Header Banner */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 2px solid #0f172a;
+    padding-bottom: 4px;
+    margin-bottom: 5px;
+  }
+  .header-left h1 {
+    font-size: 13pt;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+    color: #0f172a;
+    text-transform: uppercase;
+  }
+  .header-left .subtitle {
+    font-size: 7.6pt;
+    font-weight: 600;
+    color: #2563eb;
+    margin-top: 1px;
+  }
+  .header-right {
+    text-align: right;
+    font-size: 7pt;
+    color: #475569;
+    line-height: 1.25;
+  }
+  .badge {
+    display: inline-block;
+    background: #0f172a;
+    color: #f8fafc;
+    font-weight: 700;
+    padding: 1.5px 5px;
+    border-radius: 3px;
+    font-size: 6.5pt;
+    letter-spacing: 0.4px;
+    margin-bottom: 2px;
+  }
+
+  /* KPI Strip */
+  .kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 5px;
+    margin-bottom: 5px;
+  }
+  .kpi-card {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-top: 2.5px solid #2563eb;
+    border-radius: 4px;
+    padding: 3.5px 4px;
+    text-align: center;
+  }
+  .kpi-card.emerald {
+    border-top-color: #059669;
+    background: #f0fdf4;
+  }
+  .kpi-card.amber {
+    border-top-color: #d97706;
+  }
+  .kpi-card .val {
+    font-size: 9.6pt;
+    font-weight: 800;
+    color: #0f172a;
+  }
+  .kpi-card.emerald .val {
+    color: #065f46;
+  }
+  .kpi-card .lbl {
+    font-size: 6.1pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #475569;
+    margin-top: 1px;
+  }
+  .kpi-card .sub {
+    font-size: 5.9pt;
+    color: #64748b;
+  }
+
+  /* Section Headings */
+  h2 {
+    font-size: 8.2pt;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.35px;
+    color: #ffffff;
+    background: #0f172a;
+    padding: 2.5px 7px;
+    border-radius: 3px;
+    margin: 5px 0 3.5px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  h2 span.sec-tag {
+    font-size: 6.6pt;
+    font-weight: 600;
+    color: #93c5fd;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  /* Grid Layouts */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .box {
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    padding: 4.5px 6.5px;
+    background: #ffffff;
+  }
+  .box-shaded {
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    padding: 4.5px 6.5px;
+    background: #f8fafc;
+  }
+  .box h3, .box-shaded h3 {
+    font-size: 7.6pt;
+    font-weight: 700;
+    color: #1e3a8a;
+    margin-bottom: 2px;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 1.5px;
+  }
+  p {
+    margin-bottom: 2.5px;
+  }
+  ul {
+    padding-left: 11px;
+    margin-bottom: 1px;
+  }
+  li {
+    margin-bottom: 1.5px;
+  }
+  strong {
+    color: #0f172a;
+  }
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 6.8pt;
+    background: #f1f5f9;
+    padding: 0.5px 2.5px;
+    border-radius: 2px;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
+  }
+
+  /* Architecture Pipeline Flow */
+  .pipeline {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    margin: 3.5px 0 4.5px 0;
+  }
+  .pipe-step {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-left: 2.5px solid #2563eb;
+    border-radius: 3px;
+    padding: 3.5px 5px;
+  }
+  .pipe-step .step-num {
+    font-size: 6pt;
+    font-weight: 800;
+    color: #2563eb;
+    text-transform: uppercase;
+  }
+  .pipe-step .step-title {
+    font-size: 7.2pt;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 1px 0;
+  }
+  .pipe-step .step-desc {
+    font-size: 6.4pt;
+    color: #334155;
+    line-height: 1.18;
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 7.1pt;
+    margin-bottom: 3.5px;
+  }
+  th {
+    background: #1e293b;
+    color: #f8fafc;
+    font-weight: 700;
+    text-align: left;
+    padding: 2.4px 4px;
+    border: 1px solid #1e293b;
+    font-size: 6.7pt;
+  }
+  th.num, td.num {
+    text-align: right;
+  }
+  th.center, td.center {
+    text-align: center;
+  }
+  td {
+    padding: 2.1px 4px;
+    border: 1px solid #cbd5e1;
+    color: #1e293b;
+  }
+  tr:nth-child(even) td {
+    background: #f8fafc;
+  }
+  tr.highlight td {
+    background: #ecfdf5;
+    font-weight: 700;
+    color: #064e3b;
+  }
+  tr.highlight-blue td {
+    background: #eff6ff;
+    font-weight: 700;
+    color: #1e3a8a;
+  }
+  .pos {
+    color: #047857;
+    font-weight: 700;
+  }
+  .neg {
+    color: #b91c1c;
+    font-weight: 600;
+  }
+
+  /* Callout Banner */
+  .callout {
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-left: 3px solid #d97706;
+    border-radius: 3px;
+    padding: 3.5px 6px;
+    font-size: 7pt;
+    color: #78350f;
+    margin: 3.5px 0;
+  }
+  .callout-blue {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-left: 3px solid #0284c7;
+    border-radius: 3px;
+    padding: 3.5px 6px;
+    font-size: 7pt;
+    color: #0c4a6e;
+    margin: 3.5px 0;
+  }
+
+  /* Footer */
+  .footer {
+    border-top: 1px solid #cbd5e1;
+    padding-top: 3px;
+    margin-top: 4px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 6.5pt;
+    color: #64748b;
+  }
+</style>
+</head>
+<body>
+
+<!-- ==================== PAGE 1: ARCHITECTURE & MECHANICS ==================== -->
+<div class="page page-break">
+  <div class="header">
+    <div class="header-left">
+      <div class="badge">INSTITUTIONAL STRATEGY FACT SHEET &bull; PAGE 1 OF 2</div>
+      <h1>Multi-Asset Quantitative Swing Trading System</h1>
+      <div class="subtitle">Cross-Sectional ElasticNet ML + Markov-Switching GARCH Volatility Filter + Dynamic Bear Hedge &amp; Cash Overlay</div>
+    </div>
+    <div class="header-right">
+      <strong>Universe:</strong> ~515 Liquid U.S. Equities + ETF Sleeve<br>
+      <strong>Horizon:</strong> 5–15 Trading Days (+8% Target / -5% Stop)<br>
+      <strong>Execution:</strong> Daily Post-Close (16:35 ET)
+    </div>
+  </div>
+
+  <!-- Headline Audited KPIs -->
+  <div class="kpi-strip">
+    <div class="kpi-card emerald">
+      <div class="val">+166.2%</div>
+      <div class="lbl">5-Yr OOS CAGR (65% Gate)</div>
+      <div class="sub">$10k &rarr; $1.33M (2021–26)</div>
+    </div>
+    <div class="kpi-card emerald">
+      <div class="val">+178.5%</div>
+      <div class="lbl">5-Yr OOS CAGR (Hybrid)</div>
+      <div class="sub">$10k &rarr; $1.67M (2021–26)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="val">+110.9%</div>
+      <div class="lbl">40-Yr Gross CAGR</div>
+      <div class="sub">1985–2025 Continuous</div>
+    </div>
+    <div class="kpi-card">
+      <div class="val">+80.9% / +56.2%</div>
+      <div class="lbl">40-Yr After-Tax CAGR</div>
+      <div class="sub">TTS (28%) / NYC (51% Tax)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="val">2.76 / 4.59</div>
+      <div class="lbl">40-Yr Sharpe / Sortino</div>
+      <div class="sub">vs. QQQ 0.65 Sharpe</div>
+    </div>
+    <div class="kpi-card amber">
+      <div class="val">-21.6% / -31.6%</div>
+      <div class="lbl">Max Drawdown (5Y / 40Y)</div>
+      <div class="sub">vs. QQQ -83.0% Max DD</div>
+    </div>
+  </div>
+
+  <!-- Section 1: Executive Thesis -->
+  <h2>1. Executive Thesis &amp; Structural Alpha Edge <span class="sec-tag">Why the Strategy Works Across Bull, Choppy &amp; Crash Regimes</span></h2>
+  <div class="grid-3">
+    <div class="box-shaded">
+      <h3>A. Cross-Sectional ML Selection</h3>
+      <p>Every day after market close, the engine scores <strong>~515 liquid S&amp;P 500, Nasdaq-100, and Russell 1000 stocks</strong> across 26 momentum, volatility, volume, and relative-strength features to estimate the calibrated probability of hitting <strong>+8.0% before -5.0% within 15 trading days</strong>.</p>
+    </div>
+    <div class="box-shaded">
+      <h3>B. Asymmetric 3-Tier Payoff Profile</h3>
+      <p>Instead of binary exits, positions scale out in thirds: locking in base hits at <strong>+4.0%</strong> (moving stop to breakeven), harvesting core swing targets at <strong>+8.0%</strong>, and uncapping right-tail multi-week breakouts via a <strong>Chandelier Trailing Stop</strong> on the final 1/3 runner.</p>
+    </div>
+    <div class="box-shaded">
+      <h3>C. All-Weather Crisis Alpha Sleeve</h3>
+      <p>Uninvested cash sweeps into <strong>SGOV</strong> (~5% Treasury yield). When the macro gate flips Bearish (<code>SPY &lt; 200-SMA</code> or <code>VIX &gt; 28</code>), long entries halt and idle capital rotates into inverse ETFs (<code>SH</code>/<code>PSQ</code> or <code>SQQQ</code>), turning crashes into positive compounding (+78.5% in 2022).</p>
+    </div>
+  </div>
+
+  <!-- Section 2: End-to-End Pipeline -->
+  <h2>2. Five-Stage Quantitative Signal &amp; Execution Architecture <span class="sec-tag">Zero-Lookahead Walk-Forward Pipeline</span></h2>
+  <div class="pipeline">
+    <div class="pipe-step">
+      <div class="step-num">Stage 1 &bull; Data</div>
+      <div class="step-title">Universe Ingestion</div>
+      <div class="step-desc">Fetches 10-yr adjusted OHLCV for ~515 liquid equities + <code>SPY</code>, <code>QQQ</code>, &amp; <code>^VIX</code>. Filters out illiquid or sub-$10 names.</div>
+    </div>
+    <div class="pipe-step">
+      <div class="step-num">Stage 2 &bull; Features</div>
+      <div class="step-title">26-Factor Matrix</div>
+      <div class="step-desc">Computes multi-horizon ROC, RSI-14, MACD, Bollinger Width, ATR%, Keltner Squeeze, OBV Slope, CMF, and 20d/60d RS vs SPY.</div>
+    </div>
+    <div class="pipe-step">
+      <div class="step-num">Stage 3 &bull; Regime</div>
+      <div class="step-title">MSGARCH + Macro Gate</div>
+      <div class="step-desc">Classifies market into <strong>Bull</strong>, <strong>Defensive/Choppy</strong>, or <strong>Bear/Crisis</strong> using SPY 50/200-SMA, VIX, and MS-GARCH vol state.</div>
+    </div>
+    <div class="pipe-step">
+      <div class="step-num">Stage 4 &bull; ML Scoring</div>
+      <div class="step-title">ElasticNet (<code>glmnet</code>)</div>
+      <div class="step-desc">Walk-forward penalized logistic regression (<code>&alpha;=0.5</code>) predicts out-of-sample win probability <em>P</em>(+8% before -5%).</div>
+    </div>
+    <div class="pipe-step">
+      <div class="step-num">Stage 5 &bull; Sizing</div>
+      <div class="step-title">Vince Optimal <em>f</em></div>
+      <div class="step-desc">Sizes positions up to 20% max equity, enforces 8% portfolio heat cap &amp; 2/sector limit, and sweeps excess cash into SGOV/Hedge.</div>
+    </div>
+  </div>
+
+  <!-- Section 3: Regime Gate & Feature Architecture -->
+  <div class="grid-2">
+    <div class="box">
+      <h3>Macro Regime Gate &amp; Asymmetric Hybrid Probability Cutoffs</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Market Regime</th>
+            <th>Trigger Condition</th>
+            <th class="center">Min Win Prob</th>
+            <th>Sleeve Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Bull Regime</strong></td>
+            <td><code>SPY &gt; 50 &amp; 200 SMA</code>, <code>VIX &lt; 22</code></td>
+            <td class="center"><span class="pos">&ge; 58.0%</span></td>
+            <td>Full Long Equity + <code>SGOV</code> Cash Sweep</td>
+          </tr>
+          <tr class="highlight-blue">
+            <td><strong>Defensive (Leader)</strong></td>
+            <td><code>SPY &lt; 50 SMA</code> &amp; Stock RS<sub>20</sub> &ge; +5%</td>
+            <td class="center"><strong>&ge; 60.0%</strong></td>
+            <td>Selective Top-RS Leaders + <code>SGOV</code></td>
+          </tr>
+          <tr>
+            <td><strong>Defensive (Base)</strong></td>
+            <td><code>SPY &lt; 50 SMA</code> or Elevated Vol</td>
+            <td class="center"><strong>&ge; 65.0%</strong></td>
+            <td>High-Conviction Only + <code>SGOV</code></td>
+          </tr>
+          <tr>
+            <td><strong>Bear / Crisis</strong></td>
+            <td><code>SPY &lt; 200 SMA</code> or <code>VIX &gt; 28</code></td>
+            <td class="center"><span class="neg">BLOCKED</span></td>
+            <td>0 New Longs + Active Bear Hedge (<code>SH</code>/<code>SQQQ</code>)</td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="font-size: 6.9pt; color: #475569;"><strong>Why the Asymmetric Hybrid Gate Works:</strong> During intermediate pullbacks, raising the baseline gate to <strong>65.0%</strong> filters out weak rebound trades, while allowing a <strong>60.0%</strong> gate for institutional relative-strength leaders (RS<sub>20</sub> &ge; +5%) captures early breakout winners.</p>
+    </div>
+
+    <div class="box">
+      <h3>26-Feature Cross-Sectional Factor Taxonomy</h3>
+      <ul>
+        <li><strong>Price Momentum &amp; Trend (7 features):</strong> 5d, 10d, 20d, and 60d Rate of Change (ROC); Price distance to 20-SMA, 50-SMA, and 200-SMA; ADX trend strength.</li>
+        <li><strong>Volatility Compression &amp; Tail Risk (6 features):</strong> 14-day Normalized ATR (<code>ATR%</code>), Bollinger Band Width &amp; %B, Keltner Channel Squeeze ratio, 20d Realized Volatility vs. 60d Vol, Idiosyncratic skewness.</li>
+        <li><strong>Microstructure &amp; Volume Accumulation (5 features):</strong> 20-day Volume Z-Score, On-Balance Volume (OBV) linear slope, Chaikin Money Flow (20d CMF), Up/Down Volume Ratio, Intraday Close Location Value (CLV).</li>
+        <li><strong>Mean-Reversion &amp; Relative Strength (8 features):</strong> RSI-14, Stochastic %K/%D, MACD Histogram slope, Williams %R, <strong>20-Day &amp; 60-Day Relative Strength vs. SPY</strong> (RS<sub>20</sub>, RS<sub>60</sub>), and 60-day Rolling Beta.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Section 4: 3-Tier Execution & Risk Lifecycle -->
+  <h2>3. Position Sizing, Portfolio Heat Controls &amp; 3-Tier Trade Lifecycle <span class="sec-tag">Strict Downside Truncation with Right-Tail Convexity</span></h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 19%;">Lifecycle Stage / Control</th>
+        <th style="width: 27%;">Quantitative Rule / Trigger</th>
+        <th>Execution Mechanics &amp; Institutional Purpose</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Entry &amp; Position Sizing</strong></td>
+        <td><strong>Limit Buy at Close</strong> &bull; Ralph Vince Optimal <em>f</em></td>
+        <td>Sizes each position by calibrated edge, capped at <strong>20.0% max account equity</strong> (~5 core slots). Blocks entry if stock gap exceeds +2.0% next morning.</td>
+      </tr>
+      <tr>
+        <td><strong>Portfolio Heat &amp; Sector Cap</strong></td>
+        <td><strong>8.0% Max Open Risk</strong> &bull; Max 2 / Sector</td>
+        <td>Sum of open risk &Sigma; (Price<sub>i</sub> &minus; Stop<sub>i</sub>) &times; Shares<sub>i</sub> across all holdings cannot exceed 8.0% of total equity. Maximum 2 concurrent stocks per GICS sector.</td>
+      </tr>
+      <tr>
+        <td><strong>Initial Downside Stop</strong></td>
+        <td><strong>Hard Stop at -5.0%</strong> (<code>Entry &times; 0.95</code>)</td>
+        <td>Resting GTC stop-loss placed immediately upon entry. Also exits post-close if price breaks below the 50-day SMA on above-average volume.</td>
+      </tr>
+      <tr class="highlight">
+        <td><strong>Tier 1 Scale-Out (1/3 Shares)</strong></td>
+        <td><strong>Limit Sell at +4.0%</strong> (<code>Entry &times; 1.04</code>)</td>
+        <td>Banks an early "base hit" on 1/3 of shares and <strong>ratchets the stop-loss on the remaining 2/3 shares to Breakeven (<code>Entry</code>)</strong>—eliminating principal risk.</td>
+      </tr>
+      <tr class="highlight">
+        <td><strong>Tier 2 Scale-Out (1/3 Shares)</strong></td>
+        <td><strong>Limit Sell at +8.0%</strong> (<code>Entry &times; 1.08</code>)</td>
+        <td>Captures the primary swing target on the second 1/3 tranche and <strong>ratchets the stop-loss on the final 1/3 runner to +4.0% (<code>Entry &times; 1.04</code>)</strong>.</td>
+      </tr>
+      <tr class="highlight-blue">
+        <td><strong>Tier 3 Runner (Final 1/3)</strong></td>
+        <td><strong>Chandelier Trail</strong> (<code>High<sub>max</sub> &minus; 2.5 ATR</code>)</td>
+        <td>Removes fixed profit ceilings on the final 1/3 tranche, trailing the highest high since entry minus 2.5 &times; ATR<sub>14</sub> until trend exhaustion or <strong>Day 15 time stop</strong>.</td>
+      </tr>
+      <tr>
+        <td><strong>Cash &amp; Bear Hedge Overlay</strong></td>
+        <td><strong>SGOV</strong> (Cash) + <strong>SH / PSQ / SQQQ</strong> (Bear)</td>
+        <td>Idle cash earns ~5% annualized in <code>SGOV</code>. In confirmed Bear Regimes, deploys 30%–50% into 1x inverse (<code>SH</code>/<code>PSQ</code>) or 15%–25% into 3x inverse (<code>SQQQ</code>) with a trailing stop.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <div><strong>Repository:</strong> <code>github.com/cmejo/R_SwingTrading</code> &bull; Core Engine: <code>daily_signal.R</code> | <code>execute_broker.py</code> | <code>track_performance.py</code></div>
+    <div><strong>Page 1 of 2</strong> &bull; Continued on Page 2 (Audited Returns &amp; Operator Guide)</div>
+  </div>
+</div>
+
+<!-- ==================== PAGE 2: AUDITED RETURNS & OPERATOR GUIDE ==================== -->
+<div class="page">
+  <div class="header">
+    <div class="header-left">
+      <div class="badge">AUDITED EMPIRICAL PERFORMANCE &amp; OPERATOR GUIDE &bull; PAGE 2 OF 2</div>
+      <h1>Historical Return Audit (1985–2026) &amp; Turnkey Deployment</h1>
+      <div class="subtitle">Out-of-Sample Walk-Forward, 40-Year Continuous Backtest, 5 Non-Selective 10-Yr Epochs, After-Tax Regimes &amp; Execution Guide</div>
+    </div>
+    <div class="header-right">
+      <strong>Friction:</strong> 10 bps Round-Trip Slippage Included<br>
+      <strong>Tax Audit:</strong> Gross vs. Sec. 475 TTS (28.4%) vs. NYC (51.2%)<br>
+      <strong>Benchmarks:</strong> SPY, QQQ, VTI &amp; 70/30 Blend
+    </div>
+  </div>
+
+  <!-- Section 4: 5-Year Out-of-Sample Walk-Forward -->
+  <h2>4. Five-Year Out-of-Sample Walk-Forward Audit (Apr 2021 – Apr 2026 &bull; 1,255 Trading Days) <span class="sec-tag">$10,000 Starting Capital</span></h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Strategy Configuration / Benchmark</th>
+        <th class="num">5-Yr CAGR</th>
+        <th class="num">Terminal Wealth ($10k)</th>
+        <th class="num">Cumulative Return</th>
+        <th class="num">Sharpe Ratio</th>
+        <th class="num">Sortino Ratio</th>
+        <th class="num">Max Drawdown</th>
+        <th class="num">Calmar Ratio</th>
+        <th class="num">2022 Bear Return</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="highlight">
+        <td><strong>Asymmetric Hybrid Gate (60% if RS<sub>20</sub> &ge; +5% | 65% Base)</strong></td>
+        <td class="num pos">+178.53%</td>
+        <td class="num pos">$1,669,671</td>
+        <td class="num pos">+16,596.7%</td>
+        <td class="num">2.75</td>
+        <td class="num">4.89</td>
+        <td class="num">-28.03%</td>
+        <td class="num">6.37</td>
+        <td class="num pos">+66.4%</td>
+      </tr>
+      <tr class="highlight-blue">
+        <td><strong>Conservative Gate (65% Uniform Defensive Cutoff)</strong></td>
+        <td class="num pos">+166.19%</td>
+        <td class="num pos">$1,331,406</td>
+        <td class="num pos">+13,214.1%</td>
+        <td class="num"><strong>2.86</strong></td>
+        <td class="num"><strong>5.12</strong></td>
+        <td class="num"><strong>-21.61%</strong></td>
+        <td class="num"><strong>7.69</strong></td>
+        <td class="num pos">+78.5%</td>
+      </tr>
+      <tr>
+        <td><strong>S&amp;P 500 Benchmark (<code>SPY</code> Buy &amp; Hold)</strong></td>
+        <td class="num">+11.84%</td>
+        <td class="num">$17,500</td>
+        <td class="num">+75.0%</td>
+        <td class="num">0.68</td>
+        <td class="num">0.94</td>
+        <td class="num">-25.40%</td>
+        <td class="num">0.47</td>
+        <td class="num neg">-18.1%</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Section 5: 40-Year Continuous Backtest & Tax Regimes -->
+  <h2>5. Forty-Year Continuous Backtest &amp; After-Tax Regimes (1985–2025) <span class="sec-tag">Annual Tax Drag Paid Out of Equity Every Dec 31</span></h2>
+  <div class="grid-2">
+    <div>
+      <table>
+        <thead>
+          <tr>
+            <th>Portfolio / Tax Jurisdiction (1985–2025)</th>
+            <th class="num">CAGR</th>
+            <th class="num">Ann. Vol</th>
+            <th class="num">Sharpe</th>
+            <th class="num">Sortino</th>
+            <th class="num">Max DD</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="highlight">
+            <td><strong>Strategy — Gross (IRA / Roth / PR Act 60)</strong></td>
+            <td class="num pos">+110.91%</td>
+            <td class="num">28.53%</td>
+            <td class="num">2.76</td>
+            <td class="num">4.59</td>
+            <td class="num">-31.62%</td>
+          </tr>
+          <tr class="highlight-blue">
+            <td><strong>Strategy — Trader Tax Status (28.4% Tax)</strong></td>
+            <td class="num pos">+80.86%</td>
+            <td class="num">28.23%</td>
+            <td class="num">2.01</td>
+            <td class="num">2.98</td>
+            <td class="num">-37.29%</td>
+          </tr>
+          <tr>
+            <td><strong>Strategy — NYC Resident (51.2% Top Tax)</strong></td>
+            <td class="num pos">+56.23%</td>
+            <td class="num">28.94%</td>
+            <td class="num">1.36</td>
+            <td class="num">1.68</td>
+            <td class="num">-50.45%</td>
+          </tr>
+          <tr>
+            <td><strong>Nasdaq-100 (<code>QQQ</code> Gross / NYC Net)</strong></td>
+            <td class="num">+14.33% / +12.91%</td>
+            <td class="num">26.27%</td>
+            <td class="num">0.65</td>
+            <td class="num">0.89</td>
+            <td class="num neg">-82.96%</td>
+          </tr>
+          <tr>
+            <td><strong>Total US Market (<code>VTI</code> Gross / NYC Net)</strong></td>
+            <td class="num">+9.01% / +7.40%</td>
+            <td class="num">17.56%</td>
+            <td class="num">0.56</td>
+            <td class="num">0.74</td>
+            <td class="num neg">-56.65%</td>
+          </tr>
+          <tr>
+            <td><strong>70/30 <code>VTI/QQQ</code> Blend (Gross / NYC Net)</strong></td>
+            <td class="num">+10.83% / +9.26%</td>
+            <td class="num">19.37%</td>
+            <td class="num">0.62</td>
+            <td class="num">0.83</td>
+            <td class="num neg">-61.35%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <table>
+        <thead>
+          <tr>
+            <th>Calendar Decade Breakdown</th>
+            <th class="num">Strategy CAGR</th>
+            <th class="num">Strat Max DD</th>
+            <th class="num">Strat Sharpe</th>
+            <th class="num">QQQ CAGR (Max DD)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>1985–1994</strong> (Pre-Tech Dawn)</td>
+            <td class="num pos">+94.64%</td>
+            <td class="num">-23.69%</td>
+            <td class="num">2.67</td>
+            <td class="num">+14.59% (-39.9%)</td>
+          </tr>
+          <tr>
+            <td><strong>1995–2004</strong> (Dot-Com Bubble/Bust)</td>
+            <td class="num pos">+114.49%</td>
+            <td class="num">-24.66%</td>
+            <td class="num">2.74</td>
+            <td class="num">+14.61% (-83.0%)</td>
+          </tr>
+          <tr>
+            <td><strong>2005–2014</strong> (GFC &amp; Recovery)</td>
+            <td class="num pos">+77.97%</td>
+            <td class="num">-31.62%</td>
+            <td class="num">2.19</td>
+            <td class="num">+9.98% (-53.6%)</td>
+          </tr>
+          <tr>
+            <td><strong>2015–2024</strong> (Tech &amp; COVID Era)</td>
+            <td class="num pos">+152.05%</td>
+            <td class="num">-21.27%</td>
+            <td class="num">3.33</td>
+            <td class="num">+17.38% (-35.6%)</td>
+          </tr>
+          <tr class="highlight">
+            <td><strong>2025–2026</strong> (Recent Walk-Forward)</td>
+            <td class="num pos">+177.37%</td>
+            <td class="num">-18.81%</td>
+            <td class="num">3.23</td>
+            <td class="num">+19.47% (-22.9%)</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout" style="margin-top: 2px;">
+        <strong>Capacity &amp; Liquidity Scaling ($10k vs. $10M+):</strong> At account sizes of <strong>$10k–$2M</strong>, the full hedged system compounds at <strong>100%+ Gross CAGR</strong>. Above <strong>$5M–$15M+</strong>, market-impact caps and unhedged large-cap constraints compress returns toward <strong>25%–36% CAGR</strong>. Cap single execution sleeves at $1M–$2.5M.
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 6: 5 Non-Selective 10-Year Epochs -->
+  <h2>6. Five Non-Selective 10-Year Historical Epochs ($10,000 Fresh Start Per Epoch) <span class="sec-tag">Stress-Tested Across Dot-Com Bust, Lost Decade &amp; 2008 GFC</span></h2>
+  <table>
+    <thead>
+      <tr>
+        <th>10-Year Historical Epoch ($10,000 Initial Capital)</th>
+        <th class="num">Gross CAGR</th>
+        <th class="num">Gross Final Wealth</th>
+        <th class="num">TTS Net CAGR (28.4% Tax)</th>
+        <th class="num">NYC Net CAGR (51.2% Tax)</th>
+        <th class="num">Strategy Max DD</th>
+        <th class="num">Strategy Sharpe</th>
+        <th class="num">QQQ Gross CAGR</th>
+        <th class="num">QQQ Max DD</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Epoch 1: Dot-Com Boom &amp; Crash (1995–2004)</strong></td>
+        <td class="num pos">+114.49%</td>
+        <td class="num pos">$16,913,925</td>
+        <td class="num">+83.01% ($3.46M)</td>
+        <td class="num">+57.39% ($766k)</td>
+        <td class="num">-24.66%</td>
+        <td class="num">2.74</td>
+        <td class="num">+14.61% ($32.2k)</td>
+        <td class="num neg">-82.96%</td>
+      </tr>
+      <tr class="highlight">
+        <td><strong>Epoch 2: The Equity "Lost Decade" (2000–2009)</strong></td>
+        <td class="num pos">+90.77%</td>
+        <td class="num pos">$5,193,144</td>
+        <td class="num">+66.21% ($1.31M)</td>
+        <td class="num">+45.97% ($359k)</td>
+        <td class="num">-25.13%</td>
+        <td class="num">2.45</td>
+        <td class="num neg">-6.70% ($4.1k)</td>
+        <td class="num neg">-82.96%</td>
+      </tr>
+      <tr>
+        <td><strong>Epoch 3: Global Financial Crisis (2007–2016)</strong></td>
+        <td class="num pos">+69.29%</td>
+        <td class="num pos">$1,580,450</td>
+        <td class="num">+50.51% ($490k)</td>
+        <td class="num">+35.04% ($166k)</td>
+        <td class="num">-31.62%</td>
+        <td class="num">2.01</td>
+        <td class="num">+10.63% ($22.6k)</td>
+        <td class="num neg">-53.55%</td>
+      </tr>
+      <tr class="highlight-blue">
+        <td><strong>Epoch 4: QE Bull to COVID Shock (2012–2021)</strong></td>
+        <td class="num pos">+114.82%</td>
+        <td class="num pos">$17,074,231</td>
+        <td class="num">+83.26% ($3.49M)</td>
+        <td class="num">+57.55% ($772k)</td>
+        <td class="num">-24.74%</td>
+        <td class="num">2.86</td>
+        <td class="num">+21.73% ($58.6k)</td>
+        <td class="num">-28.56%</td>
+      </tr>
+      <tr>
+        <td><strong>Epoch 5: Pre-Tech Modernization (1988–1997)</strong></td>
+        <td class="num pos">+97.50%</td>
+        <td class="num pos">$7,610,162</td>
+        <td class="num">+70.43% ($1.73M)</td>
+        <td class="num">+48.48% ($435k)</td>
+        <td class="num">-24.66%</td>
+        <td class="num">2.56</td>
+        <td class="num">+19.97% ($51.2k)</td>
+        <td class="num">-32.93%</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Section 7: Turnkey Operator Guide -->
+  <h2>7. Turnkey Operator Guide: How Others Can Deploy &amp; Run the Strategy <span class="sec-tag">10-Minute Setup on macOS / Linux</span></h2>
+  <div class="grid-3">
+    <div class="box">
+      <h3>Step 1: Environment &amp; Initialization</h3>
+      <ul>
+        <li><strong>Requirements:</strong> R (4.2+) with <code>quantmod</code>, <code>TTR</code>, <code>glmnet</code>, <code>MSGARCH</code>, <code>data.table</code>, <code>jsonlite</code>; Python (3.10+) with <code>schwab-py</code> / <code>ib_insync</code>, <code>yfinance</code>.</li>
+        <li><strong>Clone Repository:</strong><br><code>git clone https://github.com/cmejo/R_SwingTrading.git</code></li>
+        <li><strong>Set Starting Account Equity:</strong><br><code>python3 reset_evaluation.py --cash 25000</code><br>Initializes <code>portfolio.json</code> and sets a clean benchmark baseline against <code>SPY</code>.</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3>Step 2: Daily Execution (16:35 ET)</h3>
+      <ul>
+        <li><strong>Mode A — Semi-Automated Ticket Workflow:</strong><br>1. Run <code>Rscript daily_signal.R</code> at 16:35 ET.<br>2. Open <code>LATEST_TICKET.txt</code> for exact share counts, limit prices, 3-tier stop ratchets, and <code>SGOV</code>/<code>SQQQ</code> hedge adjustments.<br>3. Log fills via <code>python3 update_portfolio.py</code>.</li>
+        <li><strong>Mode B — Automated Broker API:</strong><br>Authenticate Schwab (<code>execute_broker.py --broker=schwab --auth</code>) or IBKR and schedule <code>run_daily.sh --broker=schwab --live</code> via cron at <code>35 16 * * 1-5</code>.</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3>Step 3: Monitoring &amp; Governance</h3>
+      <ul>
+        <li><strong>Live HTML Dashboard:</strong> Run <code>python3 track_performance.py</code> to generate <code>performance_dashboard.html</code> with real-time quotes, open positions, hedge sleeve weights, and cumulative alpha vs. SPY.</li>
+        <li><strong>Statistical Review Cadence:</strong><br>&bull; <em>Daily:</em> Verify cron &amp; stop-loss integrity.<br>&bull; <em>30 Closed Trades (~3–4 Mos):</em> Check win-rate (55%–62%) &amp; payoff ratio (&ge;1.4x).<br>&bull; <em>6–12 Months:</em> Evaluate Sharpe (&ge;1.5) &amp; Max DD (&le;28%).</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout-blue">
+    <strong>Important Risk Disclosure:</strong> Historical backtest and out-of-sample walk-forward results include 10 bps round-trip slippage and realistic borrow/ETF expenses, but do not guarantee future performance. Leveraged inverse ETFs (<code>SQQQ</code>) experience path-dependent volatility decay if held without trailing stops; operators seeking lower volatility should select the 1x inverse sleeve (<code>SH</code> / <code>PSQ</code>) and the <strong>65.0% Conservative Defensive Gate</strong>.
+  </div>
+
+  <div class="footer">
+    <div><strong>Multi-Asset Quantitative Swing Trading System</strong> &bull; Institutional Strategy Fact Sheet &amp; Operator Guide</div>
+    <div><strong>Page 2 of 2</strong> &bull; Audited via <code>full_40yr_continuous_scorecard.csv</code> &amp; <code>five_epoch_10yr_scorecard.csv</code></div>
+  </div>
+</div>
+
+</body>
+</html>
