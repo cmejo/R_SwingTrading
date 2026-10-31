@@ -239,7 +239,6 @@ SPIR
 # --- Healthcare Biotech (40 symbols) ---
 LLY
 NVO
-UNH
 ABBV
 MRK
 TMO

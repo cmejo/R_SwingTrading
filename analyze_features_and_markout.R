@@ -25,7 +25,7 @@ qqq_ohlcv <- if (file.exists("data/data_qqq.rds")) readRDS("data/data_qqq.rds") 
 # Representative liquid cross-section across sectors with long history in data/ or data/data_10yr/
 rep_syms <- c("AAPL", "MSFT", "NVDA", "AMD", "AMZN", "GOOGL", "META", "TSLA",
               "AVGO", "MU", "AMAT", "LRCX", "KLAC", "CRM", "ADBE", "PANW",
-              "NFLX", "JPM", "GS", "UNH", "LLY", "XOM", "CAT", "COST",
+              "NFLX", "JPM", "GS", "LLY", "XOM", "CAT", "COST",
               "HD", "V", "MA", "ISRG", "NOW", "INTU")
 
 load_sym_ohlcv <- function(sym) {
