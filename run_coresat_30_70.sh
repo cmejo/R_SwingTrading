@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Triple-Engine Momentum & Relative Strength Execution System (30/70 SGOV-VT)
+# Triple-Engine Momentum System (Option 6: 1.5x Margin + QLD Core + 22% VT -> GLD)
 # ==============================================================================
 # Usage:
 #   ./run_coresat_30_70.sh                   # Daily monitoring / watchdog run
+#   ./run_coresat_30_70.sh --reset           # Fresh portfolio setup with new tickets
 #   ./run_coresat_30_70.sh --force_rebalance # Force immediate rebalance
-#   ./run_coresat_30_70.sh --capital=8000    # Run with specific capital
+#   ./run_coresat_30_70.sh --capital=8000    # Run with custom capital base
 # ==============================================================================
 set -e
 

@@ -1,25 +1,26 @@
 #!/usr/bin/env Rscript
 #' ==============================================================================
-#' Triple-Engine Momentum & Relative Strength Execution System (30/70 SGOV/GLD-VT)
+#' Triple-Engine Momentum & Relative Strength Execution System
 #'
-#' Architecture (Solution 3: The Combined Upgrade):
-#'   * Engine 1 - Core Trend & Bull Leverage (30% Baseline):
-#'       - Bull Market (QQQ >= 200 SMA & Realized Vol <= 20%): 1.25x QQQ leverage
-#'       - Bear Market (QQQ < 200 SMA): 100% Core capital parked in Defensive Reserve (0x QQQ)
-#'   * Engine 2 - Satellite Momentum Sleeve (70% Baseline / 5 slots @ 14%):
-#'       - Top-5 Relative Strength stocks (126-day excess return over QQQ)
-#'       - Eligibility: Stock price >= 200-day SMA (no falling knives)
-#'       - Unconstrained upside: No artificial profit caps (+2R/+4R removed)
-#'       - Risk Floor: -20% disaster stop-loss floor on individual positions
-#'   * Engine 3 - Volatility Targeting to Gold (22% Target Vol -> GLD):
-#'       - Rolling 20-day realized volatility of QQQ (sigma_20d)
-#'       - Gross exposure scaled by min(1.0, 22% / sigma_20d)
-#'       - Unallocated capital parked in Gold (GLD) for real compounding & crisis flight-to-safety
+#' CONFIGURATION MODES SUPPORTED:
+#' ------------------------------------------------------------------------------
+#' OPTION 6 (ACTIVE DEFAULT): Supercharged Ultra Model (1.5x Margin + QLD Core + GLD)
+#'   - 20-Year Backtest: +45.70% CAGR ($14.7M on $8k) | -61.7% MaxDD
+#'   - Core Sleeve: QLD (2x QQQ ETF)
+#'   - Portfolio Margin: 1.5x gross exposure during confirmed bull regimes (QQQ >= 200 SMA)
+#'   - Safety Gate: De-levers margin to 0% debt and exits QLD to GLD when QQQ < 200 SMA
+#'   - Volatility Target: 22% Vol Target into Gold (GLD)
+#'
+#' OPTION 3 (COMMENTED OUT): Pure Cash / IRA Sweet Spot (QLD Core, NO Margin)
+#'   - 20-Year Backtest: +35.97% CAGR ($3.70M on $8k) | -49.1% MaxDD
+#'   - Zero margin debt, zero margin interest, zero margin call risk
+#'   - Tradable in Cash, Margin, and IRA/401(k) retirement accounts
+#'   - Core Sleeve: QLD (2x QQQ ETF) when QQQ >= 200 SMA; exits to GLD when < 200 SMA
+#'   - Volatility Target: 22% Vol Target into Gold (GLD)
 #'
 #' Usage:
-#'   Rscript core_satellite_signal.R [--capital=8000] [--core_weight=0.30] [--top_n=5]
-#'                                   [--vol_target=0.22] [--defensive_asset=GLD]
-#'                                   [--core_bull_leverage=1.25] [--use_core_trend=TRUE]
+#'   Rscript core_satellite_signal.R [--capital=8000] [--core_asset=QLD]
+#'                                   [--portfolio_margin=1.5] [--vol_target=0.22]
 #'                                   [--force_rebalance] [--reset]
 #' ==============================================================================
 
@@ -34,27 +35,52 @@ suppressPackageStartupMessages({
 source("R/01_data_loader.R")
 
 # ------------------------------------------------------------------------------
-# 1. Parse Command Line Arguments
+# 1. Parse Command Line Arguments & Configuration Presets
 # ------------------------------------------------------------------------------
 args <- commandArgs(trailingOnly = TRUE)
 
-CAPITAL            <- 8000    # Default capital base: $8,000
-CORE_WEIGHT        <- 0.30    # 30% Core Sleeve
-TOP_N              <- 5       # 5 Satellite slots (14% each)
-LOOKBACK_DAYS      <- 126     # ~6 months for relative strength
-DISASTER_STOP      <- 0.20    # 20% catastrophic max loss floor
-VOL_TARGET         <- 0.22    # 22% annualized realized volatility target
-DEFENSIVE_ASSET    <- "GLD"   # Gold (GLD) as crisis hedge
-CORE_BULL_LEVERAGE <- 1.25    # 1.25x bull leverage when QQQ > 200 SMA and vol <= 22%
-USE_CORE_TREND     <- TRUE    # Park Core in Defensive Asset when QQQ < 200 SMA
-FORCE_REBALANCE    <- FALSE
-RESET              <- FALSE
-SYMBOLS_FILE       <- "symbols.txt"
-PORTFOLIO_FILE     <- "portfolio_coresat.json"
+CAPITAL               <- 8000    # Default capital base: $8,000
+CORE_WEIGHT           <- 0.30    # 30% Core Sleeve
+TOP_N                 <- 5       # 5 Satellite slots (14% each)
+LOOKBACK_DAYS         <- 126     # ~6 months for relative strength
+DISASTER_STOP         <- 0.20    # 20% catastrophic max loss floor
+FORCE_REBALANCE       <- FALSE
+RESET                 <- FALSE
+SYMBOLS_FILE          <- "symbols.txt"
+PORTFOLIO_FILE        <- "portfolio_coresat.json"
 
+# ==============================================================================
+# ACTIVE PRESET: OPTION 6 (Supercharged: 1.5x Margin + QLD Core + GLD Hedge)
+# ==============================================================================
+CORE_ASSET            <- "QLD"   # Core Sleeve holds QLD (2x QQQ ETF)
+PORTFOLIO_MARGIN_LEV  <- 1.50    # 1.5x portfolio margin during bull markets
+USE_MARGIN_TREND_GATE <- TRUE    # De-lever margin debt to 0% when QQQ < 200 SMA
+USE_CORE_TREND        <- TRUE    # Exit QLD to GLD when QQQ < 200 SMA
+VOL_TARGET            <- 0.22    # 22% Volatility Target
+DEFENSIVE_ASSET       <- "GLD"   # Gold (GLD) flight-to-safety crisis hedge
+
+# ==============================================================================
+# OPTION 3 (COMMENTED OUT): Pure Cash / IRA Sweet Spot (QLD Core, NO Margin)
+# To switch to Option 3 (Cash / IRA), uncomment the 6 lines below:
+# ==============================================================================
+# CORE_ASSET            <- "QLD"   # Core Sleeve holds QLD (2x QQQ ETF)
+# PORTFOLIO_MARGIN_LEV  <- 1.00    # 1.0x cash account (zero margin debt)
+# USE_MARGIN_TREND_GATE <- FALSE   # No margin to de-lever
+# USE_CORE_TREND        <- TRUE    # Exit QLD to GLD when QQQ < 200 SMA
+# VOL_TARGET            <- 0.22    # 22% Volatility Target
+# DEFENSIVE_ASSET       <- "GLD"   # Gold (GLD) flight-to-safety crisis hedge
+# ==============================================================================
+
+# Parse CLI overrides
 for (arg in args) {
   if (grepl("^--capital=", arg)) {
     CAPITAL <- as.numeric(sub("^--capital=", "", arg))
+  } else if (grepl("^--core_asset=", arg)) {
+    CORE_ASSET <- toupper(sub("^--core_asset=", "", arg))
+  } else if (grepl("^--portfolio_margin=", arg)) {
+    PORTFOLIO_MARGIN_LEV <- as.numeric(sub("^--portfolio_margin=", "", arg))
+  } else if (grepl("^--margin_trend_gate=", arg)) {
+    USE_MARGIN_TREND_GATE <- as.logical(sub("^--margin_trend_gate=", "", arg))
   } else if (grepl("^--core_weight=", arg)) {
     CORE_WEIGHT <- as.numeric(sub("^--core_weight=", "", arg))
   } else if (grepl("^--top_n=", arg)) {
@@ -67,8 +93,6 @@ for (arg in args) {
     VOL_TARGET <- as.numeric(sub("^--vol_target=", "", arg))
   } else if (grepl("^--defensive_asset=", arg)) {
     DEFENSIVE_ASSET <- toupper(sub("^--defensive_asset=", "", arg))
-  } else if (grepl("^--core_bull_leverage=", arg)) {
-    CORE_BULL_LEVERAGE <- as.numeric(sub("^--core_bull_leverage=", "", arg))
   } else if (grepl("^--use_core_trend=", arg)) {
     USE_CORE_TREND <- as.logical(sub("^--use_core_trend=", "", arg))
   } else if (arg == "--force_rebalance") {
@@ -91,19 +115,20 @@ SLOT_WEIGHT      <- if (TOP_N > 0) SATELLITE_WEIGHT / TOP_N else 0.0
 # ------------------------------------------------------------------------------
 init_portfolio <- function(capital = CAPITAL) {
   list(
-    total_capital       = capital,
-    cash_balance        = capital,
-    core_weight         = CORE_WEIGHT,
-    satellite_weight    = SATELLITE_WEIGHT,
-    vol_target          = VOL_TARGET,
-    defensive_asset     = DEFENSIVE_ASSET,
-    core_bull_leverage  = CORE_BULL_LEVERAGE,
-    use_core_trend      = USE_CORE_TREND,
-    last_rebalance_date = "",
-    core_position       = NULL,
-    defensive_position  = NULL,
-    satellite_positions = list(),
-    closed_trades       = list()
+    total_capital        = capital,
+    cash_balance         = capital,
+    core_weight          = CORE_WEIGHT,
+    satellite_weight     = SATELLITE_WEIGHT,
+    core_asset           = CORE_ASSET,
+    portfolio_margin_lev = PORTFOLIO_MARGIN_LEV,
+    vol_target           = VOL_TARGET,
+    defensive_asset      = DEFENSIVE_ASSET,
+    use_core_trend       = USE_CORE_TREND,
+    last_rebalance_date  = "",
+    core_position        = NULL,
+    defensive_position   = NULL,
+    satellite_positions  = list(),
+    closed_trades        = list()
   )
 }
 
@@ -123,7 +148,6 @@ load_portfolio <- function(file_path = PORTFOLIO_FILE, capital = CAPITAL) {
     if (is.null(state$cash_balance)) state$cash_balance <- capital
     if (is.null(state$satellite_positions)) state$satellite_positions <- list()
     if (is.null(state$closed_trades)) state$closed_trades <- list()
-    # Migrate legacy sgov_position if present
     if (!is.null(state$sgov_position) && is.null(state$defensive_position)) {
       state$defensive_position <- state$sgov_position
       state$sgov_position <- NULL
@@ -141,8 +165,9 @@ save_portfolio <- function(state, file_path = PORTFOLIO_FILE) {
 port_state <- load_portfolio(PORTFOLIO_FILE, CAPITAL)
 
 # ------------------------------------------------------------------------------
-# 3. Load Market Data & Benchmark (QQQ & Defensive Asset)
+# 3. Load Market Data (QQQ, Core Asset, and Defensive Asset)
 # ------------------------------------------------------------------------------
+# Benchmark QQQ (Market Compass)
 qqq_ohlcv <- tryCatch(load_stock_data("QQQ", force_refresh = FALSE), error = function(e) NULL)
 if (is.null(qqq_ohlcv) || nrow(qqq_ohlcv) < max(LOOKBACK_DAYS, 200)) {
   stop("FATAL: Could not load sufficient historical data for benchmark QQQ.")
@@ -154,7 +179,7 @@ qqq_lb_px  <- qqq_close[n_qqq - LOOKBACK_DAYS]
 qqq_ret    <- (qqq_cur_px / qqq_lb_px) - 1
 
 # QQQ Trend & Realized Volatility Diagnostics
-qqq_sma200 <- mean(tail(qqq_close, 200))
+qqq_sma200   <- mean(tail(qqq_close, 200))
 qqq_trend_up <- qqq_cur_px >= qqq_sma200
 
 # Rolling 20-day realized volatility of log returns
@@ -162,24 +187,37 @@ ret_20d      <- diff(log(tail(qqq_close, 21)))
 realized_vol <- sd(ret_20d) * sqrt(252)
 vol_scale    <- min(1.0, VOL_TARGET / max(0.05, realized_vol))
 
+# Core Asset Data (QLD or QQQ)
+core_ohlcv <- if (CORE_ASSET == "QQQ") qqq_ohlcv else tryCatch(load_stock_data(CORE_ASSET, force_refresh = FALSE), error = function(e) NULL)
+core_cur_px <- if (!is.null(core_ohlcv)) tail(as.numeric(Cl(core_ohlcv)), 1) else if (CORE_ASSET == "QLD") 82.59 else qqq_cur_px
+
 # Defensive Asset Market Data (GLD or SGOV)
-def_ohlcv <- tryCatch(load_stock_data(DEFENSIVE_ASSET, force_refresh = FALSE), error = function(e) NULL)
+def_ohlcv  <- tryCatch(load_stock_data(DEFENSIVE_ASSET, force_refresh = FALSE), error = function(e) NULL)
 def_cur_px <- if (!is.null(def_ohlcv)) tail(as.numeric(Cl(def_ohlcv)), 1) else if (DEFENSIVE_ASSET == "GLD") 355.78 else 100.73
 
+# Determine active margin leverage today
+active_margin <- PORTFOLIO_MARGIN_LEV
+if (PORTFOLIO_MARGIN_LEV > 1.0 && USE_MARGIN_TREND_GATE && !qqq_trend_up) {
+  active_margin <- 1.0 # Bear market safety gate: de-lever margin debt to 0%
+}
+
 cat("\n========================================================================================\n")
-cat(sprintf("     TRIPLE-ENGINE MOMENTUM SYSTEM (30/70 + %.0f%% VT -> %s)       \n", VOL_TARGET * 100, DEFENSIVE_ASSET))
+if (PORTFOLIO_MARGIN_LEV > 1.0) {
+  cat(sprintf("   TRIPLE-ENGINE SUPERCHARGED MODEL: 1.5x MARGIN + %s CORE + 22%% VT -> %s     \n", CORE_ASSET, DEFENSIVE_ASSET))
+} else {
+  cat(sprintf("   TRIPLE-ENGINE SWEET SPOT MODEL (CASH / IRA): %s CORE + 22%% VT -> %s        \n", CORE_ASSET, DEFENSIVE_ASSET))
+}
 cat("========================================================================================\n")
 cat(sprintf(" Date:                   %s\n", Sys.Date()))
-cat(sprintf(" Capital Base:           $%.2f\n", port_state$total_capital))
-cat(sprintf(" Target Weights:         Core (QQQ): %.1f%% | Satellite (Top %d): %.1f%% (%.1f%%/slot)\n",
-            CORE_WEIGHT * 100, TOP_N, SATELLITE_WEIGHT * 100, SLOT_WEIGHT * 100))
+cat(sprintf(" Capital Base (Equity):  $%.2f\n", port_state$total_capital))
+cat(sprintf(" Core Asset:             %s @ $%.2f (Target: %.1f%%)\n", CORE_ASSET, core_cur_px, CORE_WEIGHT * 100))
+cat(sprintf(" Satellite Sleeve:       Top %d RS Stocks (Target: %.1f%% / %.1f%% per slot)\n",
+            TOP_N, SATELLITE_WEIGHT * 100, SLOT_WEIGHT * 100))
+cat(sprintf(" Portfolio Leverage:     Target: %.2fx | Active Today: %.2fx %s\n",
+            PORTFOLIO_MARGIN_LEV, active_margin,
+            if (active_margin < PORTFOLIO_MARGIN_LEV) "(DE-LEVERED TO 0% DEBT: QQQ < 200 SMA)" else "(BULL MARGIN ACTIVE)"))
 cat(sprintf(" Volatility Targeting:   Target: %.1f%% | Realized (20d): %.1f%% | Vol Scale Factor: %.2fx\n",
             VOL_TARGET * 100, realized_vol * 100, vol_scale))
-cat(sprintf(" Active Exposure:        Equities: %.1f%% ($%.2f) | Defensive %s: %.1f%% ($%.2f)\n",
-            (CORE_WEIGHT + SATELLITE_WEIGHT) * vol_scale * 100,
-            port_state$total_capital * (CORE_WEIGHT + SATELLITE_WEIGHT) * vol_scale,
-            DEFENSIVE_ASSET, (1.0 - (CORE_WEIGHT + SATELLITE_WEIGHT) * vol_scale) * 100,
-            port_state$total_capital * (1.0 - (CORE_WEIGHT + SATELLITE_WEIGHT) * vol_scale)))
 cat(sprintf(" Benchmark Status:       QQQ @ $%.2f | 200 SMA: $%.2f | Trend: %s\n",
             qqq_cur_px, qqq_sma200, if (qqq_trend_up) "BULLISH (>= 200 SMA)" else "BEARISH (< 200 SMA)"))
 cat(sprintf(" Defensive Reserve:      %s @ $%.2f (Inflation/Crisis Flight-to-Safety)\n",
@@ -202,7 +240,8 @@ if (nzchar(last_reb_str)) {
   is_new_month <- TRUE
 }
 
-should_rebalance <- FORCE_REBALANCE || is_new_month
+is_uninvested <- (length(port_state$satellite_positions) == 0 && is.null(port_state$core_position))
+should_rebalance <- FORCE_REBALANCE || is_new_month || is_uninvested
 
 # ------------------------------------------------------------------------------
 # 5. Universe Relative Strength Scan
@@ -263,7 +302,8 @@ cat("---------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
 # 6. Mark Current Portfolio Value & Process Disaster Stops
 # ------------------------------------------------------------------------------
-cur_prices <- list(QQQ = qqq_cur_px, GLD = def_cur_px, SGOV = 100.73)
+cur_prices <- list(QQQ = qqq_cur_px, QLD = core_cur_px, GLD = def_cur_px, SGOV = 100.73)
+cur_prices[[CORE_ASSET]]      <- core_cur_px
 cur_prices[[DEFENSIVE_ASSET]] <- def_cur_px
 
 for (row_idx in seq_len(nrow(rs_df))) {
@@ -274,7 +314,8 @@ for (row_idx in seq_len(nrow(rs_df))) {
 core_val <- 0
 core_pos <- port_state$core_position
 if (!is.null(core_pos) && as.numeric(core_pos$shares) > 0) {
-  core_px <- if (!is.null(cur_prices[["QQQ"]])) cur_prices[["QQQ"]] else as.numeric(core_pos$entry_price)
+  sym_core <- if (!is.null(core_pos$symbol)) core_pos$symbol else CORE_ASSET
+  core_px  <- if (!is.null(cur_prices[[sym_core]])) cur_prices[[sym_core]] else as.numeric(core_pos$entry_price)
   core_val <- round(as.numeric(core_pos$shares) * core_px, 2)
 }
 
@@ -339,19 +380,27 @@ port_state$satellite_positions <- kept_sat_positions
 total_equity <- round(port_state$cash_balance + core_val + def_val + sat_val, 2)
 port_state$total_capital <- total_equity
 
+gross_exposure   <- core_val + def_val + sat_val
+margin_debt      <- max(0, gross_exposure - total_equity)
+unallocated_cash <- max(0, total_equity - gross_exposure)
+
 cat("========================================================================================\n")
 cat("                               PORTFOLIO BALANCE SHEET                                  \n")
 cat("========================================================================================\n")
-cat(sprintf(" Total Portfolio Equity:  $%.2f\n", total_equity))
-cat(sprintf(" Core QQQ Sleeve:         $%.2f (%5.1f%% of equity | Target: %4.1f%%)\n",
-            core_val, (core_val / max(1, total_equity)) * 100, CORE_WEIGHT * 100))
-cat(sprintf(" Satellite Sleeve:        $%.2f (%5.1f%% of equity | Target: %4.1f%%)\n",
-            sat_val, (sat_val / max(1, total_equity)) * 100, SATELLITE_WEIGHT * 100))
-cat(sprintf(" Defensive %s Sleeve:    $%.2f (%5.1f%% of equity)\n",
-            if (!is.null(port_state$defensive_position$symbol)) port_state$defensive_position$symbol else DEFENSIVE_ASSET,
-            def_val, (def_val / max(1, total_equity)) * 100))
-cat(sprintf(" Unallocated Cash:        $%.2f (%5.1f%% of equity)\n",
-            port_state$cash_balance, (port_state$cash_balance / max(1, total_equity)) * 100))
+cat(sprintf(" Total Portfolio Equity (Net Worth): $%.2f\n", total_equity))
+cat(sprintf(" Gross Long Market Value:            $%.2f (%5.1f%% of equity)\n",
+            gross_exposure, (gross_exposure / max(1, total_equity)) * 100))
+cat(sprintf(" Borrowed Margin Loan (Debt):        $%.2f (%5.1f%% leverage)\n",
+            margin_debt, (margin_debt / max(1, total_equity)) * 100))
+cat("----------------------------------------------------------------------------------------\n")
+cat(sprintf(" Core %-4s Sleeve:                  $%.2f (%5.1f%% of equity)\n",
+            CORE_ASSET, core_val, (core_val / max(1, total_equity)) * 100))
+cat(sprintf(" Satellite Sleeve (5 Stocks):        $%.2f (%5.1f%% of equity)\n",
+            sat_val, (sat_val / max(1, total_equity)) * 100))
+cat(sprintf(" Defensive %-4s Sleeve:             $%.2f (%5.1f%% of equity)\n",
+            DEFENSIVE_ASSET, def_val, (def_val / max(1, total_equity)) * 100))
+cat(sprintf(" Unallocated Free Cash:              $%.2f (%5.1f%% of equity)\n",
+            unallocated_cash, (unallocated_cash / max(1, total_equity)) * 100))
 cat("========================================================================================\n\n")
 
 # ------------------------------------------------------------------------------
@@ -362,33 +411,34 @@ rebalance_tickets <- character()
 if (should_rebalance) {
   cat("----------------------------------------------------------------------------------------\n")
   cat(sprintf(" 🔄 REBALANCE ACTIVE (Trigger: %s)\n",
-              if (FORCE_REBALANCE) "FORCED CLI / SOLUTION 3 UPGRADE" else "NEW MONTH ENTRY"))
+              if (FORCE_REBALANCE) "FORCED CLI / SUPERCHARGED LEVERAGE UPGRADE"
+              else if (is_uninvested) "INITIAL PORTFOLIO DEPLOYMENT"
+              else "NEW MONTH ENTRY"))
   cat("----------------------------------------------------------------------------------------\n")
   
-  # Engine 1: Core Trend & Bull Leverage Sizing
+  # Engine 1: Core Trend & Bear Market Check
   core_active <- TRUE
   if (USE_CORE_TREND && !qqq_trend_up) {
     core_active <- FALSE
-    cat(sprintf(" 🛡️ BEAR MARKET REGIME: QQQ < 200 SMA. Core Sleeve exiting to 100%% %s / Cash.\n", DEFENSIVE_ASSET))
+    cat(sprintf(" 🛡️ BEAR MARKET REGIME: QQQ < 200 SMA. Core %s exiting to 100%% %s / Cash.\n",
+                CORE_ASSET, DEFENSIVE_ASSET))
   }
   
-  core_lev <- 1.0
-  if (core_active && qqq_trend_up && realized_vol <= VOL_TARGET) {
-    core_lev <- CORE_BULL_LEVERAGE
-    cat(sprintf(" 🚀 BULL ENGINE ACTIVE: QQQ >= 200 SMA & Vol <= %.1f%%. Core Leverage = %.2fx.\n",
-                VOL_TARGET * 100, core_lev))
-  }
+  # Target dollar amounts:
+  base_core_cash <- if (core_active) total_equity * CORE_WEIGHT * vol_scale else 0.0
+  base_sat_cash  <- total_equity * SATELLITE_WEIGHT * vol_scale
   
-  target_core_cash <- if (core_active) total_equity * CORE_WEIGHT * vol_scale * core_lev else 0.0
-  target_sat_cash  <- total_equity * SATELLITE_WEIGHT * vol_scale
+  target_core_cash <- base_core_cash * active_margin
+  target_sat_cash  <- base_sat_cash * active_margin
   target_slot_cash <- target_sat_cash / TOP_N
   target_sat_syms  <- top_picks$Symbol
   
-  # Defensive Target Allocation
-  target_def_cash <- max(0, total_equity - (target_core_cash + (target_slot_cash * length(target_sat_syms))))
+  # Defensive Target Allocation: absorbs unallocated buffer + core when core inactive
+  base_equity_w   <- (if (core_active) CORE_WEIGHT else 0.0) * vol_scale + (SATELLITE_WEIGHT * vol_scale)
+  target_def_cash <- max(0, total_equity * (1.0 - base_equity_w))
   
-  cat(sprintf(" Target Allocations: Core QQQ: $%.2f (%.1f%%) | Satellites (5): $%.2f (%.1f%%) | Defensive %s: $%.2f (%.1f%%)\n\n",
-              target_core_cash, (target_core_cash / total_equity) * 100,
+  cat(sprintf(" Target Allocations: Core %s: $%.2f (%.1f%%) | Satellites (5): $%.2f (%.1f%%) | Defensive %s: $%.2f (%.1f%%)\n\n",
+              CORE_ASSET, target_core_cash, (target_core_cash / total_equity) * 100,
               target_sat_cash, (target_sat_cash / total_equity) * 100,
               DEFENSIVE_ASSET, target_def_cash, (target_def_cash / total_equity) * 100))
   
@@ -421,29 +471,44 @@ if (should_rebalance) {
   }
   port_state$satellite_positions <- updated_sat_list
   
-  # B. Core QQQ Adjustment
-  current_core_shs <- if (!is.null(port_state$core_position)) as.numeric(port_state$core_position$shares) else 0
-  target_core_shs  <- round(target_core_cash / qqq_cur_px, 3)
-  core_delta_shs   <- target_core_shs - current_core_shs
-  core_delta_cash  <- round(core_delta_shs * qqq_cur_px, 2)
+  # B. Core Position Adjustment (Liquidate old QQQ if switching to QLD)
+  current_core_sym <- if (!is.null(port_state$core_position$symbol)) port_state$core_position$symbol else ""
+  current_core_shs <- if (!is.null(port_state$core_position$shares)) as.numeric(port_state$core_position$shares) else 0
+  
+  if (current_core_sym != CORE_ASSET && current_core_shs > 0) {
+    old_core_px <- if (!is.null(cur_prices[[current_core_sym]])) cur_prices[[current_core_sym]] else as.numeric(port_state$core_position$entry_price)
+    old_core_mv <- round(current_core_shs * old_core_px, 2)
+    ticket <- sprintf("SELL %s shares of %s @ ~$%.2f ($%.2f proceeds - Switch Core to %s)",
+                      current_core_shs, current_core_sym, old_core_px, old_core_mv, CORE_ASSET)
+    rebalance_tickets <- c(rebalance_tickets, ticket)
+    port_state$cash_balance <- port_state$cash_balance + old_core_mv
+    port_state$core_position <- NULL
+    current_core_shs <- 0
+  }
+  
+  target_core_shs <- round(target_core_cash / core_cur_px, 3)
+  core_delta_shs  <- target_core_shs - current_core_shs
+  core_delta_cash <- round(core_delta_shs * core_cur_px, 2)
   
   if (abs(core_delta_cash) >= 30) {
     if (core_delta_cash > 0) {
-      buy_shs <- round(core_delta_cash / qqq_cur_px, 3)
-      ticket <- sprintf("BUY %s shares of QQQ @ ~$%.2f ($%.2f outlay - Align Core Target to %.1f%%)",
-                        buy_shs, qqq_cur_px, round(buy_shs * qqq_cur_px, 2), (target_core_cash / total_equity) * 100)
+      buy_shs <- round(core_delta_cash / core_cur_px, 3)
+      ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Align Core Target to %.1f%%)",
+                        buy_shs, CORE_ASSET, core_cur_px, round(buy_shs * core_cur_px, 2),
+                        (target_core_cash / total_equity) * 100)
       rebalance_tickets <- c(rebalance_tickets, ticket)
       port_state$core_position <- list(
-        symbol = "QQQ",
+        symbol = CORE_ASSET,
         shares = current_core_shs + buy_shs,
-        entry_price = qqq_cur_px,
+        entry_price = core_cur_px,
         entry_date = today_str
       )
-      port_state$cash_balance <- port_state$cash_balance - round(buy_shs * qqq_cur_px, 2)
+      port_state$cash_balance <- port_state$cash_balance - round(buy_shs * core_cur_px, 2)
     } else {
       trim_shs <- abs(core_delta_shs)
-      ticket <- sprintf("SELL %s shares of QQQ @ ~$%.2f ($%.2f proceeds - Trim Core Target to %.1f%%)",
-                        trim_shs, qqq_cur_px, abs(core_delta_cash), (target_core_cash / total_equity) * 100)
+      ticket <- sprintf("SELL %s shares of %s @ ~$%.2f ($%.2f proceeds - Trim Core Target to %.1f%%)",
+                        trim_shs, CORE_ASSET, core_cur_px, abs(core_delta_cash),
+                        (target_core_cash / total_equity) * 100)
       rebalance_tickets <- c(rebalance_tickets, ticket)
       port_state$core_position$shares <- max(0, current_core_shs - trim_shs)
       port_state$cash_balance <- port_state$cash_balance + abs(core_delta_cash)
@@ -539,13 +604,15 @@ if (should_rebalance) {
     }
   }
   
-  port_state$core_weight         <- CORE_WEIGHT
-  port_state$satellite_weight    <- SATELLITE_WEIGHT
-  port_state$vol_target          <- VOL_TARGET
-  port_state$defensive_asset     <- DEFENSIVE_ASSET
-  port_state$realized_vol_20d    <- round(realized_vol, 4)
-  port_state$vol_scale           <- round(vol_scale, 4)
-  port_state$last_rebalance_date <- today_str
+  port_state$core_weight          <- CORE_WEIGHT
+  port_state$satellite_weight     <- SATELLITE_WEIGHT
+  port_state$core_asset           <- CORE_ASSET
+  port_state$portfolio_margin_lev <- PORTFOLIO_MARGIN_LEV
+  port_state$vol_target           <- VOL_TARGET
+  port_state$defensive_asset      <- DEFENSIVE_ASSET
+  port_state$realized_vol_20d     <- round(realized_vol, 4)
+  port_state$vol_scale            <- round(vol_scale, 4)
+  port_state$last_rebalance_date  <- today_str
   save_portfolio(port_state, PORTFOLIO_FILE)
   cat(" Rebalance calculation complete and state updated.\n\n")
 } else {

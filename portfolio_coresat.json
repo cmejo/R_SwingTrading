@@ -1,74 +1,75 @@
 {
   "total_capital": 8000,
-  "cash_balance": 0.18,
+  "cash_balance": -3850.97,
   "core_weight": 0.3,
   "satellite_weight": 0.7,
+  "core_asset": "QLD",
+  "portfolio_margin_lev": 1.5,
   "vol_target": 0.22,
   "defensive_asset": "GLD",
-  "core_bull_leverage": 1.25,
   "use_core_trend": true,
-  "last_rebalance_date": "2026-10-31",
+  "last_rebalance_date": "2026-11-01",
   "core_position": {
-    "symbol": "QQQ",
-    "shares": 3.346,
-    "entry_price": 690.49,
-    "entry_date": "2026-10-31"
+    "symbol": "QLD",
+    "shares": 41.967,
+    "entry_price": 82.59,
+    "entry_date": "2026-11-01"
   },
   "defensive_position": {
     "symbol": "GLD",
     "shares": 0.837,
     "entry_price": 355.78,
-    "entry_date": "2026-10-31"
+    "entry_date": "2026-11-01"
   },
   "satellite_positions": [
     {
       "symbol": "CRWD",
-      "shares": 4.306,
+      "shares": 6.459,
       "entry_price": 250.43,
       "current_price": 250.43,
-      "entry_date": "2026-10-31",
-      "market_value": 1078.35,
-      "unrealized_pnl": -0
+      "entry_date": "2026-11-01",
+      "market_value": 1617.53,
+      "unrealized_pnl": 0
     },
     {
       "symbol": "PANW",
-      "shares": 2.947,
+      "shares": 4.421,
       "entry_price": 365.87,
       "current_price": 365.87,
-      "entry_date": "2026-10-31",
-      "market_value": 1078.22,
+      "entry_date": "2026-11-01",
+      "market_value": 1617.51,
       "unrealized_pnl": 0
     },
     {
       "symbol": "MU",
-      "shares": 1.219,
+      "shares": 1.828,
       "entry_price": 884.74,
       "current_price": 884.74,
-      "entry_date": "2026-10-31",
-      "market_value": 1078.5,
+      "entry_date": "2026-11-01",
+      "market_value": 1617.3,
       "unrealized_pnl": 0
     },
     {
       "symbol": "AMD",
-      "shares": 2.136,
+      "shares": 3.204,
       "entry_price": 504.8,
       "current_price": 504.8,
-      "entry_date": "2026-10-31",
-      "market_value": 1078.25,
-      "unrealized_pnl": -0
+      "entry_date": "2026-11-01",
+      "market_value": 1617.38,
+      "unrealized_pnl": 0
     },
     {
       "symbol": "PLTR",
-      "shares": 5.857,
+      "shares": 8.785,
       "entry_price": 184.11,
       "current_price": 184.11,
-      "entry_date": "2026-10-31",
-      "market_value": 1078.33,
-      "unrealized_pnl": -0
+      "entry_date": "2026-11-01",
+      "market_value": 1617.41,
+      "unrealized_pnl": 0
     }
   ],
   "closed_trades": [],
   "realized_vol_20d": 0.2285,
   "vol_scale": 0.9628,
-  "last_updated": "2026-10-31 23:43:55.479932"
+  "last_updated": "2026-11-01 00:03:13.141228"
 }
