@@ -71,6 +71,9 @@ FORCE_REBALANCE       <- FALSE
 RESET                 <- FALSE
 SYMBOLS_FILE          <- "symbols_broad.txt" # Broad 170-name growth/momentum list (alt: symbols_n100.txt = PIT-tested universe)
 PORTFOLIO_FILE        <- "portfolio_coresat.json"
+BROKER_STATE_FILE     <- NULL    # Optional JSON file containing live broker equity, cash & positions
+QUOTES_FILE           <- NULL    # Optional JSON file containing real-time quotes (e.g. from Schwab API)
+ORDERS_OUT_FILE       <- NULL    # Optional JSON output destination for structured machine-readable orders
 
 # ==============================================================================
 # ACTIVE PRESET: OPTION 6 (Supercharged: 1.5x Margin + QLD Core + GLD Hedge)
@@ -141,6 +144,12 @@ for (arg in args) {
     SYMBOLS_FILE <- sub("^--symbols_file=", "", arg)
   } else if (grepl("^--portfolio_file=", arg)) {
     PORTFOLIO_FILE <- sub("^--portfolio_file=", "", arg)
+  } else if (grepl("^--broker_state=", arg)) {
+    BROKER_STATE_FILE <- sub("^--broker_state=", "", arg)
+  } else if (grepl("^--quotes_file=", arg)) {
+    QUOTES_FILE <- sub("^--quotes_file=", "", arg)
+  } else if (grepl("^--orders_out=", arg)) {
+    ORDERS_OUT_FILE <- sub("^--orders_out=", "", arg)
   }
 }
 
@@ -201,11 +210,134 @@ save_portfolio <- function(state, file_path = PORTFOLIO_FILE) {
 
 port_state <- load_portfolio(PORTFOLIO_FILE, CAPITAL)
 
+`%||%` <- function(a, b) if (!is.null(a)) a else b
+
+# Reconcile with live broker state if provided (e.g. from Schwab API sync)
+if (!is.null(BROKER_STATE_FILE) && file.exists(BROKER_STATE_FILE)) {
+  broker_state <- tryCatch(fromJSON(BROKER_STATE_FILE, simplifyVector = FALSE), error = function(e) NULL)
+  if (!is.null(broker_state)) {
+    b_cap <- as.numeric(broker_state$total_capital %||% broker_state$equity %||% CAPITAL)
+    b_cash <- as.numeric(broker_state$cash_balance %||% broker_state$cashAvailableForTrading %||% CAPITAL)
+    if (!is.na(b_cap) && b_cap > 0) {
+      CAPITAL <- b_cap
+      port_state$total_capital <- b_cap
+    }
+    if (!is.na(b_cash)) {
+      port_state$cash_balance <- b_cash
+    }
+    
+    # Synchronize broker positions if available
+    b_positions <- broker_state$positions
+    if (!is.null(b_positions) && length(b_positions) > 0) {
+      cat(sprintf(" 🔗 Reconciling %d live broker position(s) from %s...\n", length(b_positions), BROKER_STATE_FILE))
+      b_core_pos <- NULL
+      b_def_pos  <- NULL
+      b_sat_pos  <- list()
+      
+      existing_sat_map <- list()
+      for (p in port_state$satellite_positions) {
+        if (!is.null(p$symbol)) existing_sat_map[[p$symbol]] <- p
+      }
+      
+      for (bp in b_positions) {
+        b_sym <- toupper(bp$symbol)
+        b_shs <- as.numeric(bp$shares %||% bp$quantity %||% 0)
+        b_px  <- as.numeric(bp$average_price %||% bp$averageCost %||% bp$current_price %||% 0)
+        if (b_shs <= 0) next
+        
+        if (b_sym == CORE_ASSET || b_sym == "QQQ") {
+          b_core_pos <- list(symbol = b_sym, shares = b_shs, entry_price = b_px, entry_date = as.character(Sys.Date()))
+        } else if (b_sym == DEFENSIVE_ASSET || b_sym %in% c("GLD", "SGOV", "BIL")) {
+          b_def_pos <- list(symbol = b_sym, shares = b_shs, entry_price = b_px, entry_date = as.character(Sys.Date()))
+        } else {
+          orig_p <- existing_sat_map[[b_sym]]
+          entry_dt <- if (!is.null(orig_p$entry_date)) orig_p$entry_date else as.character(Sys.Date())
+          entry_px <- if (!is.null(orig_p$entry_price)) as.numeric(orig_p$entry_price) else b_px
+          b_sat_pos[[length(b_sat_pos) + 1]] <- list(
+            symbol = b_sym, shares = b_shs, entry_price = entry_px,
+            current_price = b_px, entry_date = entry_dt, market_value = round(b_shs * b_px, 2),
+            unrealized_pnl = 0.0
+          )
+        }
+      }
+      if (!is.null(b_core_pos)) port_state$core_position <- b_core_pos
+      if (!is.null(b_def_pos)) port_state$defensive_position <- b_def_pos
+      if (length(b_sat_pos) > 0) port_state$satellite_positions <- b_sat_pos
+    }
+    cat(sprintf(" 🏦 Live Broker State Synchronized: Equity = $%.2f | Cash = $%.2f\n",
+                port_state$total_capital, port_state$cash_balance))
+  }
+}
+
+# Load fresh market quotes if provided (e.g. from Schwab real-time quotes API)
+live_quotes_data <- NULL
+if (!is.null(QUOTES_FILE) && file.exists(QUOTES_FILE)) {
+  live_quotes_data <- tryCatch(fromJSON(QUOTES_FILE, simplifyVector = FALSE), error = function(e) {
+    warning("Failed to parse quotes_file: ", e$message)
+    NULL
+  })
+  if (!is.null(live_quotes_data)) {
+    q_nodes <- live_quotes_data$quotes %||% live_quotes_data
+    q_count <- if (is.list(q_nodes)) length(q_nodes) else 0
+    cat(sprintf(" ⚡ Fresh real-time quotes loaded from: %s (%d symbol%s)\n",
+                QUOTES_FILE, q_count, if (q_count == 1) "" else "s"))
+  }
+}
+
+get_live_quote_price <- function(sym, lq) {
+  if (is.null(lq)) return(NULL)
+  sym <- toupper(trimws(sym))
+  node <- lq[[sym]]
+  if (is.null(node) && !is.null(lq$quotes)) node <- lq$quotes[[sym]]
+  if (is.null(node)) return(NULL)
+  if (is.numeric(node)) return(as.numeric(node))
+  if (is.list(node)) {
+    if (!is.null(node$price)) return(as.numeric(node$price))
+    if (!is.null(node$lastPrice)) return(as.numeric(node$lastPrice))
+    if (!is.null(node$quote$lastPrice)) return(as.numeric(node$quote$lastPrice))
+    if (!is.null(node$close)) return(as.numeric(node$close))
+  }
+  return(NULL)
+}
+
+inject_live_quote <- function(ohlcv, sym, lq) {
+  if (is.null(ohlcv) || nrow(ohlcv) == 0) return(ohlcv)
+  px <- get_live_quote_price(sym, lq)
+  if (is.null(px) || is.na(px) || px <= 0) return(ohlcv)
+  
+  n_rows <- nrow(ohlcv)
+  last_dt <- as.Date(index(ohlcv[n_rows]))
+  today_dt <- Sys.Date()
+  
+  cl_col <- grep("Close", colnames(ohlcv))[1]
+  adj_col <- grep("Adjusted", colnames(ohlcv))[1]
+  hi_col <- grep("High", colnames(ohlcv))[1]
+  lo_col <- grep("Low", colnames(ohlcv))[1]
+  if (is.na(cl_col)) cl_col <- ncol(ohlcv)
+  
+  if (last_dt == today_dt) {
+    ohlcv[n_rows, cl_col] <- px
+    if (!is.na(adj_col)) ohlcv[n_rows, adj_col] <- px
+    if (!is.na(hi_col) && px > as.numeric(ohlcv[n_rows, hi_col])) ohlcv[n_rows, hi_col] <- px
+    if (!is.na(lo_col) && px < as.numeric(ohlcv[n_rows, lo_col])) ohlcv[n_rows, lo_col] <- px
+  } else if (today_dt > last_dt) {
+    last_cl <- as.numeric(ohlcv[n_rows, cl_col])
+    bar_mat <- matrix(c(last_cl, max(last_cl, px), min(last_cl, px), px, 0, px), nrow = 1)
+    if (ncol(bar_mat) == ncol(ohlcv)) {
+      new_row <- xts(bar_mat, order.by = today_dt)
+      colnames(new_row) <- colnames(ohlcv)
+      ohlcv <- rbind(ohlcv, new_row)
+    }
+  }
+  return(ohlcv)
+}
+
 # ------------------------------------------------------------------------------
 # 3. Load Market Data (QQQ, Core Asset, and Defensive Asset)
 # ------------------------------------------------------------------------------
 # Benchmark QQQ (Market Compass)
 qqq_ohlcv <- tryCatch(load_stock_data("QQQ", force_refresh = FALSE), error = function(e) NULL)
+qqq_ohlcv <- inject_live_quote(qqq_ohlcv, "QQQ", live_quotes_data)
 if (is.null(qqq_ohlcv) || nrow(qqq_ohlcv) < max(LOOKBACK_LONG, 200)) {
   stop("FATAL: Could not load sufficient historical data for benchmark QQQ.")
 }
@@ -227,10 +359,12 @@ vol_scale    <- min(1.0, VOL_TARGET / max(0.05, realized_vol))
 
 # Core Asset Data (QLD or QQQ)
 core_ohlcv <- if (CORE_ASSET == "QQQ") qqq_ohlcv else tryCatch(load_stock_data(CORE_ASSET, force_refresh = FALSE), error = function(e) NULL)
+core_ohlcv <- inject_live_quote(core_ohlcv, CORE_ASSET, live_quotes_data)
 core_cur_px <- if (!is.null(core_ohlcv)) tail(as.numeric(Cl(core_ohlcv)), 1) else if (CORE_ASSET == "QLD") 82.59 else qqq_cur_px
 
 # Defensive Asset Market Data (GLD or SGOV)
 def_ohlcv  <- tryCatch(load_stock_data(DEFENSIVE_ASSET, force_refresh = FALSE), error = function(e) NULL)
+def_ohlcv  <- inject_live_quote(def_ohlcv, DEFENSIVE_ASSET, live_quotes_data)
 def_cur_px <- if (!is.null(def_ohlcv)) tail(as.numeric(Cl(def_ohlcv)), 1) else if (DEFENSIVE_ASSET == "GLD") 355.78 else 100.73
 
 # Determine active margin leverage today
@@ -301,6 +435,7 @@ cat(sprintf(" Scanning %d candidate stocks for Dual-Lookback RS (50%% %dd + 50%%
 rs_results <- list()
 for (sym in scan_syms) {
   d <- tryCatch(load_stock_data(sym, force_refresh = FALSE), error = function(e) NULL)
+  d <- inject_live_quote(d, sym, live_quotes_data)
   if (is.null(d) || nrow(d) < LOOKBACK_LONG + 10) next
   # Data-quality guard: skip tickers with zero/negative/missing closes in the lookback
   # window (e.g. thin OTC listings such as SSNLF report long runs of 0.00 prices)
@@ -399,6 +534,17 @@ for (row_idx in seq_len(nrow(rs_df))) {
   cur_prices[[rs_df$Symbol[row_idx]]] <- rs_df$Close[row_idx]
 }
 
+# Override/supplement with any live quotes loaded from quotes_file
+if (!is.null(live_quotes_data)) {
+  q_nodes <- live_quotes_data$quotes %||% live_quotes_data
+  if (is.list(q_nodes)) {
+    for (sym_q in names(q_nodes)) {
+      px_q <- get_live_quote_price(sym_q, live_quotes_data)
+      if (!is.null(px_q) && px_q > 0) cur_prices[[sym_q]] <- px_q
+    }
+  }
+}
+
 # Value Core Position
 core_val <- 0
 core_pos <- port_state$core_position
@@ -421,6 +567,7 @@ if (!is.null(def_pos) && as.numeric(def_pos$shares) > 0) {
 sat_val <- 0
 kept_sat_positions <- list()
 disaster_tickets   <- character()
+order_records      <- list()
 
 if (!is.null(port_state$satellite_positions) && length(port_state$satellite_positions) > 0) {
   cat(" Current Satellite Holdings Status & Disaster Stop Watchdog:\n")
@@ -441,6 +588,12 @@ if (!is.null(port_state$satellite_positions) && length(port_state$satellite_posi
       ticket <- sprintf("SELL %s shares of %s @ ~$%.2f (Disaster Stop Floor Triggered: %+.1f%%)",
                         round(shs, 3), sym, cur_px, pnl_pct * 100)
       disaster_tickets <- c(disaster_tickets, ticket)
+      order_records[[length(order_records) + 1]] <- list(
+        symbol = sym, side = "SELL", shares = round(shs, 3),
+        shares_whole = as.integer(round(shs)), estimated_price = round(cur_px, 2),
+        estimated_outlay = round(shs * cur_px, 2), order_type = "MARKET",
+        reason = "DISASTER_STOP", stop_loss_price = NULL
+      )
       
       port_state$cash_balance <- port_state$cash_balance + mv
       port_state$closed_trades[[length(port_state$closed_trades) + 1]] <- list(
@@ -479,6 +632,12 @@ if (STOP_PROCEEDS_TO_CORE && length(disaster_tickets) > 0 && !should_rebalance &
     disaster_tickets <- c(disaster_tickets, sprintf(
       "BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Redeploy stop-loss proceeds into Core until next rebalance)",
       buy_shs, CORE_ASSET, core_cur_px, round(buy_shs * core_cur_px, 2)))
+    order_records[[length(order_records) + 1]] <- list(
+      symbol = CORE_ASSET, side = "BUY", shares = round(buy_shs, 3),
+      shares_whole = as.integer(floor(buy_shs)), estimated_price = round(core_cur_px, 2),
+      estimated_outlay = round(buy_shs * core_cur_px, 2), order_type = "MARKET",
+      reason = "REDEPLOY_STOP_PROCEEDS_TO_CORE", stop_loss_price = NULL
+    )
     prev_shs <- if (!is.null(port_state$core_position$shares)) as.numeric(port_state$core_position$shares) else 0
     prev_px  <- if (!is.null(port_state$core_position$entry_price)) as.numeric(port_state$core_position$entry_price) else core_cur_px
     new_shs  <- prev_shs + buy_shs
@@ -569,6 +728,12 @@ if (should_rebalance) {
         cat(sprintf(" ✂️  ROTATION EXIT: %s dropped out of Top-%d RS\n", sym, TOP_N))
         ticket <- sprintf("SELL %s shares of %s @ ~$%.2f (Monthly RS Rotation Out)", round(shs, 3), sym, px)
         rebalance_tickets <- c(rebalance_tickets, ticket)
+        order_records[[length(order_records) + 1]] <- list(
+          symbol = sym, side = "SELL", shares = round(shs, 3),
+          shares_whole = as.integer(round(shs)), estimated_price = round(px, 2),
+          estimated_outlay = round(shs * px, 2), order_type = "MARKET",
+          reason = "MONTHLY_ROTATION", stop_loss_price = NULL
+        )
         
         port_state$cash_balance <- port_state$cash_balance + mv
         port_state$closed_trades[[length(port_state$closed_trades) + 1]] <- list(
@@ -595,6 +760,12 @@ if (should_rebalance) {
     ticket <- sprintf("SELL %s shares of %s @ ~$%.2f ($%.2f proceeds - Switch Core to %s)",
                       current_core_shs, current_core_sym, old_core_px, old_core_mv, CORE_ASSET)
     rebalance_tickets <- c(rebalance_tickets, ticket)
+    order_records[[length(order_records) + 1]] <- list(
+      symbol = current_core_sym, side = "SELL", shares = round(current_core_shs, 3),
+      shares_whole = as.integer(round(current_core_shs)), estimated_price = round(old_core_px, 2),
+      estimated_outlay = round(old_core_mv, 2), order_type = "MARKET",
+      reason = sprintf("SWITCH_CORE_TO_%s", CORE_ASSET), stop_loss_price = NULL
+    )
     port_state$cash_balance <- port_state$cash_balance + old_core_mv
     port_state$core_position <- NULL
     current_core_shs <- 0
@@ -611,6 +782,12 @@ if (should_rebalance) {
                         buy_shs, CORE_ASSET, core_cur_px, round(buy_shs * core_cur_px, 2),
                         (target_core_cash / total_equity) * 100)
       rebalance_tickets <- c(rebalance_tickets, ticket)
+      order_records[[length(order_records) + 1]] <- list(
+        symbol = CORE_ASSET, side = "BUY", shares = round(buy_shs, 3),
+        shares_whole = as.integer(floor(buy_shs)), estimated_price = round(core_cur_px, 2),
+        estimated_outlay = round(buy_shs * core_cur_px, 2), order_type = "MARKET",
+        reason = "ALIGN_CORE_TARGET", stop_loss_price = NULL
+      )
       port_state$core_position <- list(
         symbol = CORE_ASSET,
         shares = current_core_shs + buy_shs,
@@ -624,6 +801,12 @@ if (should_rebalance) {
                         trim_shs, CORE_ASSET, core_cur_px, abs(core_delta_cash),
                         (target_core_cash / total_equity) * 100)
       rebalance_tickets <- c(rebalance_tickets, ticket)
+      order_records[[length(order_records) + 1]] <- list(
+        symbol = CORE_ASSET, side = "SELL", shares = round(trim_shs, 3),
+        shares_whole = as.integer(round(trim_shs)), estimated_price = round(core_cur_px, 2),
+        estimated_outlay = abs(core_delta_cash), order_type = "MARKET",
+        reason = "TRIM_CORE_TARGET", stop_loss_price = NULL
+      )
       port_state$core_position$shares <- max(0, current_core_shs - trim_shs)
       port_state$cash_balance <- port_state$cash_balance + abs(core_delta_cash)
     }
@@ -642,6 +825,13 @@ if (should_rebalance) {
       ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Top-%d RS Satellite Entrant)",
                         shs_to_buy, sym, px, outlay, TOP_N)
       rebalance_tickets <- c(rebalance_tickets, ticket)
+      order_records[[length(order_records) + 1]] <- list(
+        symbol = sym, side = "BUY", shares = round(shs_to_buy, 3),
+        shares_whole = as.integer(floor(shs_to_buy)), estimated_price = round(px, 2),
+        estimated_outlay = round(outlay, 2), order_type = "MARKET",
+        reason = sprintf("TOP_%d_RS_SATELLITE_ENTRANT", TOP_N),
+        stop_loss_price = round(px * (1.0 - DISASTER_STOP), 2)
+      )
       
       port_state$satellite_positions[[length(port_state$satellite_positions) + 1]] <- list(
         symbol = sym,
@@ -664,12 +854,25 @@ if (should_rebalance) {
           ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Top up Satellite Slot to %.1f%%)",
                             delta_shs, sym, px, round(delta_shs * px, 2), (target_slot_cash / total_equity) * 100)
           rebalance_tickets <- c(rebalance_tickets, ticket)
+          order_records[[length(order_records) + 1]] <- list(
+            symbol = sym, side = "BUY", shares = round(delta_shs, 3),
+            shares_whole = as.integer(floor(delta_shs)), estimated_price = round(px, 2),
+            estimated_outlay = round(delta_shs * px, 2), order_type = "MARKET",
+            reason = "TOP_UP_SATELLITE_SLOT",
+            stop_loss_price = round(px * (1.0 - DISASTER_STOP), 2)
+          )
           port_state$satellite_positions[[existing_idx]]$shares <- curr_shs + delta_shs
           port_state$cash_balance <- port_state$cash_balance - round(delta_shs * px, 2)
         } else {
           ticket <- sprintf("SELL %s shares of %s @ ~$%.2f ($%.2f proceeds - Trim Satellite Slot to %.1f%%)",
                             abs(delta_shs), sym, px, abs(round(delta_shs * px, 2)), (target_slot_cash / total_equity) * 100)
           rebalance_tickets <- c(rebalance_tickets, ticket)
+          order_records[[length(order_records) + 1]] <- list(
+            symbol = sym, side = "SELL", shares = round(abs(delta_shs), 3),
+            shares_whole = as.integer(round(abs(delta_shs))), estimated_price = round(px, 2),
+            estimated_outlay = abs(round(delta_shs * px, 2)), order_type = "MARKET",
+            reason = "TRIM_SATELLITE_SLOT", stop_loss_price = NULL
+          )
           port_state$satellite_positions[[existing_idx]]$shares <- max(0, curr_shs - abs(delta_shs))
           port_state$cash_balance <- port_state$cash_balance + abs(round(delta_shs * px, 2))
         }
@@ -687,6 +890,12 @@ if (should_rebalance) {
     ticket <- sprintf("SELL %s shares of %s @ ~$%.2f ($%.2f proceeds - Switch Defense to %s)",
                       curr_def_shs, curr_def_sym, old_px, old_mv, DEFENSIVE_ASSET)
     rebalance_tickets <- c(rebalance_tickets, ticket)
+    order_records[[length(order_records) + 1]] <- list(
+      symbol = curr_def_sym, side = "SELL", shares = round(curr_def_shs, 3),
+      shares_whole = as.integer(round(curr_def_shs)), estimated_price = round(old_px, 2),
+      estimated_outlay = round(old_mv, 2), order_type = "MARKET",
+      reason = sprintf("SWITCH_DEFENSE_TO_%s", DEFENSIVE_ASSET), stop_loss_price = NULL
+    )
     port_state$cash_balance <- port_state$cash_balance + old_mv
     port_state$defensive_position <- NULL
     curr_def_shs <- 0
@@ -701,6 +910,12 @@ if (should_rebalance) {
       ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Park Vol-Target Buffer in Gold)",
                         def_delta_shs, DEFENSIVE_ASSET, def_cur_px, def_delta_cash)
       rebalance_tickets <- c(rebalance_tickets, ticket)
+      order_records[[length(order_records) + 1]] <- list(
+        symbol = DEFENSIVE_ASSET, side = "BUY", shares = round(def_delta_shs, 3),
+        shares_whole = as.integer(floor(def_delta_shs)), estimated_price = round(def_cur_px, 2),
+        estimated_outlay = round(def_delta_cash, 2), order_type = "MARKET",
+        reason = "PARK_VOL_TARGET_BUFFER", stop_loss_price = NULL
+      )
       port_state$defensive_position <- list(
         symbol = DEFENSIVE_ASSET,
         shares = curr_def_shs + def_delta_shs,
@@ -713,6 +928,12 @@ if (should_rebalance) {
       ticket <- sprintf("SELL %s shares of %s @ ~$%.2f ($%.2f proceeds - Trim Defense for Equity)",
                         trim_def, DEFENSIVE_ASSET, def_cur_px, abs(def_delta_cash))
       rebalance_tickets <- c(rebalance_tickets, ticket)
+      order_records[[length(order_records) + 1]] <- list(
+        symbol = DEFENSIVE_ASSET, side = "SELL", shares = round(trim_def, 3),
+        shares_whole = as.integer(round(trim_def)), estimated_price = round(def_cur_px, 2),
+        estimated_outlay = round(abs(def_delta_cash), 2), order_type = "MARKET",
+        reason = "TRIM_DEFENSE_FOR_EQUITY", stop_loss_price = NULL
+      )
       port_state$defensive_position$shares <- max(0, curr_def_shs - trim_def)
       port_state$cash_balance <- port_state$cash_balance + abs(def_delta_cash)
     }
@@ -735,7 +956,7 @@ if (should_rebalance) {
 }
 
 # ------------------------------------------------------------------------------
-# 8. Output Actionable Order Tickets
+# 8. Output Actionable Order Tickets & Structured JSON Orders
 # ------------------------------------------------------------------------------
 all_tickets <- c(disaster_tickets, rebalance_tickets)
 
@@ -750,6 +971,13 @@ if (length(all_tickets) > 0) {
   cat(" No trading actions required today. Portfolio is in balance and all risk metrics healthy.\n")
 }
 cat("========================================================================================\n\n")
+
+if (!is.null(ORDERS_OUT_FILE) && nzchar(ORDERS_OUT_FILE)) {
+  dir.create(dirname(ORDERS_OUT_FILE), showWarnings = FALSE, recursive = TRUE)
+  write(toJSON(order_records, pretty = TRUE, auto_unbox = TRUE), file = ORDERS_OUT_FILE)
+  cat(sprintf(" 📋 Structured machine-readable orders written to: %s (%d order%s)\n\n",
+              ORDERS_OUT_FILE, length(order_records), if (length(order_records) == 1) "" else "s"))
+}
 
 save_portfolio(port_state, PORTFOLIO_FILE)
 invisible(port_state)

@@ -1,6 +1,6 @@
 {
   "total_capital": 8000,
-  "cash_balance": -3850.97,
+  "cash_balance": -3766.22,
   "core_weight": 0.3,
   "satellite_weight": 0.7,
   "core_asset": "QLD",
@@ -11,13 +11,13 @@
   "last_rebalance_date": "2026-11-01",
   "core_position": {
     "symbol": "QLD",
-    "shares": 41.967,
+    "shares": 42.809,
     "entry_price": 82.59,
     "entry_date": "2026-11-01"
   },
   "defensive_position": {
     "symbol": "GLD",
-    "shares": 0.837,
+    "shares": 0.402,
     "entry_price": 355.78,
     "entry_date": "2026-11-01"
   },
@@ -41,35 +41,69 @@
       "unrealized_pnl": -0
     },
     {
+      "symbol": "TENB",
+      "shares": 31.872,
+      "entry_price": 50.75,
+      "current_price": 50.75,
+      "entry_date": "2026-11-01",
+      "market_value": 1617.5,
+      "unrealized_pnl": -0
+    },
+    {
+      "symbol": "SNOW",
+      "shares": 5.285,
+      "entry_price": 306.08,
+      "current_price": 306.08,
+      "entry_date": "2026-11-01",
+      "market_value": 1617.63,
+      "unrealized_pnl": -0
+    },
+    {
+      "symbol": "DELL",
+      "shares": 3.812,
+      "entry_price": 424.3,
+      "current_price": 424.3,
+      "entry_date": "2026-11-01",
+      "market_value": 1617.43,
+      "unrealized_pnl": -0
+    }
+  ],
+  "closed_trades": [
+    {
       "symbol": "MU",
       "shares": 1.828,
       "entry_price": 884.74,
-      "current_price": 884.74,
+      "exit_price": 884.74,
       "entry_date": "2026-11-01",
-      "market_value": 1617.3,
-      "unrealized_pnl": -0
+      "exit_date": "2026-11-01",
+      "pnl_dollar": 0,
+      "pnl_pct": 0,
+      "reason": "MONTHLY_ROTATION"
     },
     {
       "symbol": "AMD",
       "shares": 3.204,
       "entry_price": 504.8,
-      "current_price": 504.8,
+      "exit_price": 504.8,
       "entry_date": "2026-11-01",
-      "market_value": 1617.38,
-      "unrealized_pnl": 0
+      "exit_date": "2026-11-01",
+      "pnl_dollar": 0,
+      "pnl_pct": 0,
+      "reason": "MONTHLY_ROTATION"
     },
     {
       "symbol": "PLTR",
       "shares": 8.785,
       "entry_price": 184.11,
-      "current_price": 184.11,
+      "exit_price": 184.11,
       "entry_date": "2026-11-01",
-      "market_value": 1617.41,
-      "unrealized_pnl": 0
+      "exit_date": "2026-11-01",
+      "pnl_dollar": 0,
+      "pnl_pct": 0,
+      "reason": "MONTHLY_ROTATION"
     }
   ],
-  "closed_trades": [],
-  "realized_vol_20d": 0.2285,
-  "vol_scale": 0.9628,
-  "last_updated": "2026-11-01 00:22:09.180763"
+  "realized_vol_20d": 0.224,
+  "vol_scale": 0.9821,
+  "last_updated": "2026-11-01 01:20:33.44725"
 }

@@ -18,6 +18,9 @@ logs/launchd_*.log
 .env.*
 !.env.example
 schwab_token.json
+schwab_state.json
+schwab_quotes.json
+orders.json
 robinhood_positions.json
 
 # Keep sample data, ignore large transient downloads
