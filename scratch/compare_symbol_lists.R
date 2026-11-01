@@ -14,7 +14,7 @@ PIT_G <- list(P = P, MEM = MEM, syms = syms, R = R, SMA200 = SMA200, SMA50 = SMA
 EXCL <- c("QQQ","QLD","TQQQ","SQQQ","SPY","VTI","SOXL","SOXS","FNGD","FNGU","SGOV","BIL","GLD","SMH","XLK",
           "AMUU","NVDU","PLTU","SNDQ","SMHC","SKHY","^VIX","^IRX")
 up <- read.csv("data/universe_prices_adjclose.csv", check.names = FALSE); up$Date <- as.Date(substr(up$Date, 1, 10))
-read_list <- function(fn) { l <- readLines(fn); l <- l[!grepl("^\\s*#", l)]
+read_list <- function(fn) { l <- trimws(sub("#.*$", "", readLines(fn))); l <- l[nzchar(l)]
   setdiff(unique(toupper(unlist(strsplit(trimws(l), "[, \t]+")))), c("", EXCL)) }
 
 set_universe <- function(tickers) {

@@ -46,7 +46,7 @@ BREADTH <- sapply(seq_along(cal), function(i) { m <- MEM[i, ] & !is.na(SMA200[i,
 
 sim <- function(margin = 1.5, w_long = 0.5, top_n = 5, skip = 0, buffer = 0, weighting = "equal",
                 gate_sma = "200", breadth_gate = NA, stop_to = "cash", exit_sma50 = FALSE,
-                semi_monthly = FALSE, dd_brake = NA, core_pct = 0.30, vt = 0.22, stop_pct = 0.20,
+                semi_monthly = FALSE, dd_brake = NA, rank_skip = 0, core_pct = 0.30, vt = 0.22, stop_pct = 0.20,
                 start = EVAL_START, end = EVAL_END) {
   U <- syms; ev <- which(cal >= start & cal <= end); sat_pct <- 1 - core_pct; sma_g <- SMAQ[[gate_sma]]
   cw <- 0; sw <- setNames(rep(0, length(U)), U); dw <- 0; ep <- setNames(rep(NA_real_, length(U)), U)
@@ -79,10 +79,10 @@ sim <- function(margin = 1.5, w_long = 0.5, top_n = 5, skip = 0, buffer = 0, wei
         rs <- w_long * r126 + (1 - w_long) * r63
         okf <- ok[!is.na(SMA200[s0, ok]) & P[s0, ok] >= SMA200[s0, ok]]
         if (length(okf) >= top_n) { ok <- okf; rs <- rs[ok] }
-        rk <- names(sort(rs, decreasing = TRUE))
+        rk <- names(sort(rs, decreasing = TRUE)); if (rank_skip > 0) rk <- rk[-seq_len(rank_skip)]
         held <- intersect(names(sw)[sw > 0], rk[seq_len(min(length(rk), top_n + buffer))])
-        top <- unique(c(held, rk))[1:top_n]
-        wts <- if (weighting == "invvol") { iv <- 1 / pmax(VOL63[s0, top], 0.15); iv[is.na(iv)] <- mean(iv, na.rm = TRUE); iv / sum(iv) } else rep(1 / top_n, top_n)
+        top <- unique(c(held, rk))[1:top_n]; top <- top[!is.na(top)]
+        wts <- if (weighting == "invvol") { iv <- 1 / pmax(VOL63[s0, top], 0.15); iv[is.na(iv)] <- mean(iv, na.rm = TRUE); iv / sum(iv) } else rep(1 / top_n, length(top))
         ts[top] <- sat_pct * sc * am * wts
         for (ne in setdiff(top, names(sw)[sw > 0])) ep[ne] <- P[t, ne]
       }

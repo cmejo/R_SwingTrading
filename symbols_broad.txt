@@ -35,7 +35,6 @@ ADBE
 INTU
 ORCL
 SNOW
-WDAY
 SHOP
 PLTR
 
@@ -73,6 +72,9 @@ GE
 QLD
 SPY
 XLK
+
+# Healthcare / Pharma
+LLY
 
 # 9. Google Finance watched stocks
 
@@ -151,7 +153,6 @@ AMUU
 CRWV
 CORZ
 TLN
-PLTU
 SMCI
 CRSP
 SEMTC
@@ -261,7 +262,6 @@ NTES
 RMD  # US ADR for RMD.AX
 # 010950.KS  # Non-US local exchange (No direct US liquid ADR)
 # 005935.KS  # Non-US local exchange (No direct US liquid ADR)
-SSNLF  # US ADR for 005930.KS
 # 600183.SS  # Non-US local exchange (No direct US liquid ADR)
 # TACN.BO  # Non-US local exchange (No direct US liquid ADR)
 YUMC  # US ADR for 9987.HK

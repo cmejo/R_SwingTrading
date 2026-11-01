@@ -286,7 +286,9 @@ EXCLUDE_ETFS <- c("QQQ", "QLD", "TQQQ", "SQQQ", "SPY", "VTI", "SOXL", "SOXS", "F
                   "AMUU", "NVDU", "PLTU", "SNDQ", "SMHC", "SKHY", "NVDL", "TSLL", "CONL", "MSTU")
 
 sym_lines <- if (file.exists(SYMBOLS_FILE)) readLines(SYMBOLS_FILE) else character()
-raw_syms <- unique(trimws(unlist(strsplit(sym_lines[!grepl("^#", sym_lines) & nzchar(sym_lines)], "[, ]+"))))
+sym_lines <- trimws(sub("#.*$", "", sym_lines))   # strip full-line and inline "# ..." comments
+raw_syms <- unique(toupper(trimws(unlist(strsplit(sym_lines[nzchar(sym_lines)], "[,[:space:]]+")))))
+raw_syms <- raw_syms[nzchar(raw_syms)]
 scan_syms <- setdiff(raw_syms, EXCLUDE_ETFS)
 
 cat(sprintf(" Scanning %d candidate stocks for Dual-Lookback RS (50%% %dd + 50%% %dd) vs QQQ...\n",
