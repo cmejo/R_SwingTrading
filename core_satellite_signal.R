@@ -1,25 +1,26 @@
 #!/usr/bin/env Rscript
 #' ==============================================================================
-#' Triple-Engine Momentum & Relative Strength Execution System
+#' Triple-Engine Momentum & Relative Strength Execution System (30/70 SGOV/GLD-VT)
 #'
-#' Architecture:
+#' Architecture (Solution 3: The Combined Upgrade):
 #'   * Engine 1 - Core Trend & Bull Leverage (30% Baseline):
-#'       - Bull Market (QQQ >= 200 SMA & Realized Vol <= 16%): 1.25x QQQ leverage
-#'       - Bear Market (QQQ < 200 SMA): 100% Core capital parked in SGOV (0x QQQ)
+#'       - Bull Market (QQQ >= 200 SMA & Realized Vol <= 20%): 1.25x QQQ leverage
+#'       - Bear Market (QQQ < 200 SMA): 100% Core capital parked in Defensive Reserve (0x QQQ)
 #'   * Engine 2 - Satellite Momentum Sleeve (70% Baseline / 5 slots @ 14%):
 #'       - Top-5 Relative Strength stocks (126-day excess return over QQQ)
 #'       - Eligibility: Stock price >= 200-day SMA (no falling knives)
 #'       - Unconstrained upside: No artificial profit caps (+2R/+4R removed)
 #'       - Risk Floor: -20% disaster stop-loss floor on individual positions
-#'   * Engine 3 - Volatility Targeting to SGOV (16% Target Vol):
+#'   * Engine 3 - Volatility Targeting to Gold (20% Target Vol -> GLD):
 #'       - Rolling 20-day realized volatility of QQQ (sigma_20d)
-#'       - Gross exposure scaled by min(1.0, 16% / sigma_20d)
-#'       - Unallocated cash parked in risk-free Treasury yield (SGOV)
+#'       - Gross exposure scaled by min(1.0, 20% / sigma_20d)
+#'       - Unallocated capital parked in Gold (GLD) for real compounding & crisis flight-to-safety
 #'
 #' Usage:
-#'   Rscript core_satellite_signal.R [--capital=10000] [--core_weight=0.30] [--top_n=5]
-#'                                   [--vol_target=0.16] [--core_bull_leverage=1.25]
-#'                                   [--use_core_trend=TRUE] [--force_rebalance]
+#'   Rscript core_satellite_signal.R [--capital=8000] [--core_weight=0.30] [--top_n=5]
+#'                                   [--vol_target=0.20] [--defensive_asset=GLD]
+#'                                   [--core_bull_leverage=1.25] [--use_core_trend=TRUE]
+#'                                   [--force_rebalance] [--reset]
 #' ==============================================================================
 
 suppressPackageStartupMessages({
@@ -42,9 +43,10 @@ CORE_WEIGHT        <- 0.30    # 30% Core Sleeve
 TOP_N              <- 5       # 5 Satellite slots (14% each)
 LOOKBACK_DAYS      <- 126     # ~6 months for relative strength
 DISASTER_STOP      <- 0.20    # 20% catastrophic max loss floor
-VOL_TARGET         <- 0.16    # 16% annualized realized volatility target
-CORE_BULL_LEVERAGE <- 1.25    # 1.25x bull leverage when QQQ > 200 SMA and vol <= 16%
-USE_CORE_TREND     <- TRUE    # Park Core in SGOV when QQQ < 200 SMA
+VOL_TARGET         <- 0.20    # Solution 3: 20% annualized realized volatility target
+DEFENSIVE_ASSET    <- "GLD"   # Solution 3: Gold (GLD) as crisis hedge
+CORE_BULL_LEVERAGE <- 1.25    # 1.25x bull leverage when QQQ > 200 SMA and vol <= 20%
+USE_CORE_TREND     <- TRUE    # Park Core in Defensive Asset when QQQ < 200 SMA
 FORCE_REBALANCE    <- FALSE
 RESET              <- FALSE
 SYMBOLS_FILE       <- "symbols.txt"
@@ -63,6 +65,8 @@ for (arg in args) {
     DISASTER_STOP <- as.numeric(sub("^--disaster_stop=", "", arg))
   } else if (grepl("^--vol_target=", arg)) {
     VOL_TARGET <- as.numeric(sub("^--vol_target=", "", arg))
+  } else if (grepl("^--defensive_asset=", arg)) {
+    DEFENSIVE_ASSET <- toupper(sub("^--defensive_asset=", "", arg))
   } else if (grepl("^--core_bull_leverage=", arg)) {
     CORE_BULL_LEVERAGE <- as.numeric(sub("^--core_bull_leverage=", "", arg))
   } else if (grepl("^--use_core_trend=", arg)) {
@@ -92,11 +96,12 @@ init_portfolio <- function(capital = CAPITAL) {
     core_weight         = CORE_WEIGHT,
     satellite_weight    = SATELLITE_WEIGHT,
     vol_target          = VOL_TARGET,
+    defensive_asset     = DEFENSIVE_ASSET,
     core_bull_leverage  = CORE_BULL_LEVERAGE,
     use_core_trend      = USE_CORE_TREND,
     last_rebalance_date = "",
     core_position       = NULL,
-    sgov_position       = NULL,
+    defensive_position  = NULL,
     satellite_positions = list(),
     closed_trades       = list()
   )
@@ -118,6 +123,11 @@ load_portfolio <- function(file_path = PORTFOLIO_FILE, capital = CAPITAL) {
     if (is.null(state$cash_balance)) state$cash_balance <- capital
     if (is.null(state$satellite_positions)) state$satellite_positions <- list()
     if (is.null(state$closed_trades)) state$closed_trades <- list()
+    # Migrate legacy sgov_position if present
+    if (!is.null(state$sgov_position) && is.null(state$defensive_position)) {
+      state$defensive_position <- state$sgov_position
+      state$sgov_position <- NULL
+    }
     return(state)
   }
   init_portfolio(capital)
@@ -131,7 +141,7 @@ save_portfolio <- function(state, file_path = PORTFOLIO_FILE) {
 port_state <- load_portfolio(PORTFOLIO_FILE, CAPITAL)
 
 # ------------------------------------------------------------------------------
-# 3. Load Market Data & Benchmark (QQQ & SGOV)
+# 3. Load Market Data & Benchmark (QQQ & Defensive Asset)
 # ------------------------------------------------------------------------------
 qqq_ohlcv <- tryCatch(load_stock_data("QQQ", force_refresh = FALSE), error = function(e) NULL)
 if (is.null(qqq_ohlcv) || nrow(qqq_ohlcv) < max(LOOKBACK_DAYS, 200)) {
@@ -152,12 +162,12 @@ ret_20d      <- diff(log(tail(qqq_close, 21)))
 realized_vol <- sd(ret_20d) * sqrt(252)
 vol_scale    <- min(1.0, VOL_TARGET / max(0.05, realized_vol))
 
-# SGOV Market Data
-sgov_ohlcv <- tryCatch(load_stock_data("SGOV", force_refresh = FALSE), error = function(e) NULL)
-sgov_cur_px <- if (!is.null(sgov_ohlcv)) tail(as.numeric(Cl(sgov_ohlcv)), 1) else 100.73
+# Defensive Asset Market Data (GLD or SGOV)
+def_ohlcv <- tryCatch(load_stock_data(DEFENSIVE_ASSET, force_refresh = FALSE), error = function(e) NULL)
+def_cur_px <- if (!is.null(def_ohlcv)) tail(as.numeric(Cl(def_ohlcv)), 1) else if (DEFENSIVE_ASSET == "GLD") 355.78 else 100.73
 
 cat("\n========================================================================================\n")
-cat("               TRIPLE-ENGINE MOMENTUM EXECUTION SYSTEM (30/70 SGOV-VT)                  \n")
+cat(sprintf("     TRIPLE-ENGINE MOMENTUM SYSTEM: SOLUTION 3 (30/70 + 20%% VT -> %s)       \n", DEFENSIVE_ASSET))
 cat("========================================================================================\n")
 cat(sprintf(" Date:                   %s\n", Sys.Date()))
 cat(sprintf(" Capital Base:           $%.2f\n", port_state$total_capital))
@@ -165,8 +175,15 @@ cat(sprintf(" Target Weights:         Core (QQQ): %.1f%% | Satellite (Top %d): %
             CORE_WEIGHT * 100, TOP_N, SATELLITE_WEIGHT * 100, SLOT_WEIGHT * 100))
 cat(sprintf(" Volatility Targeting:   Target: %.1f%% | Realized (20d): %.1f%% | Vol Scale Factor: %.2fx\n",
             VOL_TARGET * 100, realized_vol * 100, vol_scale))
+cat(sprintf(" Active Exposure:        Equities: %.1f%% ($%.2f) | Defensive %s: %.1f%% ($%.2f)\n",
+            (CORE_WEIGHT + SATELLITE_WEIGHT) * vol_scale * 100,
+            port_state$total_capital * (CORE_WEIGHT + SATELLITE_WEIGHT) * vol_scale,
+            DEFENSIVE_ASSET, (1.0 - (CORE_WEIGHT + SATELLITE_WEIGHT) * vol_scale) * 100,
+            port_state$total_capital * (1.0 - (CORE_WEIGHT + SATELLITE_WEIGHT) * vol_scale)))
 cat(sprintf(" Benchmark Status:       QQQ @ $%.2f | 200 SMA: $%.2f | Trend: %s\n",
             qqq_cur_px, qqq_sma200, if (qqq_trend_up) "BULLISH (>= 200 SMA)" else "BEARISH (< 200 SMA)"))
+cat(sprintf(" Defensive Reserve:      %s @ $%.2f (Inflation/Crisis Flight-to-Safety)\n",
+            DEFENSIVE_ASSET, def_cur_px))
 cat(sprintf(" Disaster Stop Floor:    -%.1f%% on individual satellite positions\n", DISASTER_STOP * 100))
 cat("========================================================================================\n\n")
 
@@ -209,7 +226,7 @@ for (sym in scan_syms) {
   cur_px <- cl[n]
   lb_px  <- cl[n - LOOKBACK_DAYS]
   
-  # Trend check: 200 SMA (or available history if 150-200 bars)
+  # Trend check: 200 SMA
   sma200 <- if (n >= 200) mean(cl[(n - 199):n]) else mean(cl)
   trend_up <- cur_px >= sma200
   
@@ -232,9 +249,8 @@ if (length(rs_results) == 0) {
 }
 
 rs_df <- do.call(rbind, rs_results)
-# Filter for trend-following health (only consider names above their 200 SMA)
 rs_qualified <- rs_df[rs_df$Trend_Up, ]
-if (nrow(rs_qualified) < TOP_N) rs_qualified <- rs_df # fallback if ultra-bearish
+if (nrow(rs_qualified) < TOP_N) rs_qualified <- rs_df
 
 rs_qualified <- rs_qualified[order(-rs_qualified$RS_vs_QQQ), ]
 top_picks <- head(rs_qualified, TOP_N)
@@ -247,7 +263,9 @@ cat("---------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
 # 6. Mark Current Portfolio Value & Process Disaster Stops
 # ------------------------------------------------------------------------------
-cur_prices <- list(QQQ = qqq_cur_px, SGOV = sgov_cur_px)
+cur_prices <- list(QQQ = qqq_cur_px, GLD = def_cur_px, SGOV = 100.73)
+cur_prices[[DEFENSIVE_ASSET]] <- def_cur_px
+
 for (row_idx in seq_len(nrow(rs_df))) {
   cur_prices[[rs_df$Symbol[row_idx]]] <- rs_df$Close[row_idx]
 }
@@ -260,12 +278,13 @@ if (!is.null(core_pos) && as.numeric(core_pos$shares) > 0) {
   core_val <- round(as.numeric(core_pos$shares) * core_px, 2)
 }
 
-# Value SGOV Position
-sgov_val <- 0
-sgov_pos <- port_state$sgov_position
-if (!is.null(sgov_pos) && as.numeric(sgov_pos$shares) > 0) {
-  sgov_px <- if (!is.null(cur_prices[["SGOV"]])) cur_prices[["SGOV"]] else as.numeric(sgov_pos$entry_price)
-  sgov_val <- round(as.numeric(sgov_pos$shares) * sgov_px, 2)
+# Value Defensive Position (GLD or legacy SGOV)
+def_val <- 0
+def_pos <- port_state$defensive_position
+if (!is.null(def_pos) && as.numeric(def_pos$shares) > 0) {
+  sym_def <- if (!is.null(def_pos$symbol)) def_pos$symbol else DEFENSIVE_ASSET
+  def_px  <- if (!is.null(cur_prices[[sym_def]])) cur_prices[[sym_def]] else as.numeric(def_pos$entry_price)
+  def_val <- round(as.numeric(def_pos$shares) * def_px, 2)
 }
 
 # Value & Audit Satellite Positions
@@ -293,7 +312,6 @@ if (!is.null(port_state$satellite_positions) && length(port_state$satellite_posi
                         round(shs, 3), sym, cur_px, pnl_pct * 100)
       disaster_tickets <- c(disaster_tickets, ticket)
       
-      # Liquidate to cash
       port_state$cash_balance <- port_state$cash_balance + mv
       port_state$closed_trades[[length(port_state$closed_trades) + 1]] <- list(
         symbol = sym, shares = shs, entry_price = entry_px, exit_price = cur_px,
@@ -318,7 +336,7 @@ if (!is.null(port_state$satellite_positions) && length(port_state$satellite_posi
 
 port_state$satellite_positions <- kept_sat_positions
 
-total_equity <- round(port_state$cash_balance + core_val + sgov_val + sat_val, 2)
+total_equity <- round(port_state$cash_balance + core_val + def_val + sat_val, 2)
 port_state$total_capital <- total_equity
 
 cat("========================================================================================\n")
@@ -329,8 +347,9 @@ cat(sprintf(" Core QQQ Sleeve:         $%.2f (%5.1f%% of equity | Target: %4.1f%
             core_val, (core_val / max(1, total_equity)) * 100, CORE_WEIGHT * 100))
 cat(sprintf(" Satellite Sleeve:        $%.2f (%5.1f%% of equity | Target: %4.1f%%)\n",
             sat_val, (sat_val / max(1, total_equity)) * 100, SATELLITE_WEIGHT * 100))
-cat(sprintf(" SGOV Defensive Sleeve:   $%.2f (%5.1f%% of equity)\n",
-            sgov_val, (sgov_val / max(1, total_equity)) * 100))
+cat(sprintf(" Defensive %s Sleeve:    $%.2f (%5.1f%% of equity)\n",
+            if (!is.null(port_state$defensive_position$symbol)) port_state$defensive_position$symbol else DEFENSIVE_ASSET,
+            def_val, (def_val / max(1, total_equity)) * 100))
 cat(sprintf(" Unallocated Cash:        $%.2f (%5.1f%% of equity)\n",
             port_state$cash_balance, (port_state$cash_balance / max(1, total_equity)) * 100))
 cat("========================================================================================\n\n")
@@ -342,15 +361,15 @@ rebalance_tickets <- character()
 
 if (should_rebalance) {
   cat("----------------------------------------------------------------------------------------\n")
-  cat(sprintf(" 🔄 MONTHLY REBALANCE ACTIVE (Trigger: %s)\n",
-              if (FORCE_REBALANCE) "FORCED CLI FLAG" else "NEW MONTH ENTRY"))
+  cat(sprintf(" 🔄 REBALANCE ACTIVE (Trigger: %s)\n",
+              if (FORCE_REBALANCE) "FORCED CLI / SOLUTION 3 UPGRADE" else "NEW MONTH ENTRY"))
   cat("----------------------------------------------------------------------------------------\n")
   
   # Engine 1: Core Trend & Bull Leverage Sizing
   core_active <- TRUE
   if (USE_CORE_TREND && !qqq_trend_up) {
     core_active <- FALSE
-    cat(" 🛡️ BEAR MARKET REGIME: QQQ < 200 SMA. Core Sleeve exiting to 100% SGOV / Cash.\n")
+    cat(sprintf(" 🛡️ BEAR MARKET REGIME: QQQ < 200 SMA. Core Sleeve exiting to 100%% %s / Cash.\n", DEFENSIVE_ASSET))
   }
   
   core_lev <- 1.0
@@ -365,13 +384,13 @@ if (should_rebalance) {
   target_slot_cash <- target_sat_cash / TOP_N
   target_sat_syms  <- top_picks$Symbol
   
-  # Defensive SGOV Target
-  target_sgov_cash <- max(0, total_equity - (target_core_cash + (target_slot_cash * length(target_sat_syms))))
+  # Defensive Target Allocation
+  target_def_cash <- max(0, total_equity - (target_core_cash + (target_slot_cash * length(target_sat_syms))))
   
-  cat(sprintf(" Target Allocations: Core QQQ: $%.2f (%.1f%%) | Satellites (5): $%.2f (%.1f%%) | SGOV: $%.2f (%.1f%%)\n\n",
+  cat(sprintf(" Target Allocations: Core QQQ: $%.2f (%.1f%%) | Satellites (5): $%.2f (%.1f%%) | Defensive %s: $%.2f (%.1f%%)\n\n",
               target_core_cash, (target_core_cash / total_equity) * 100,
               target_sat_cash, (target_sat_cash / total_equity) * 100,
-              target_sgov_cash, (target_sgov_cash / total_equity) * 100))
+              DEFENSIVE_ASSET, target_def_cash, (target_def_cash / total_equity) * 100))
   
   # A. Liquidate Satellite Positions That Dropped Out of Top-N
   updated_sat_list <- list()
@@ -383,7 +402,6 @@ if (should_rebalance) {
       mv  <- round(shs * px, 2)
       
       if (!(sym %in% target_sat_syms)) {
-        # Rotated out
         cat(sprintf(" ✂️  ROTATION EXIT: %s dropped out of Top-%d RS\n", sym, TOP_N))
         ticket <- sprintf("SELL %s shares of %s @ ~$%.2f (Monthly RS Rotation Out)", round(shs, 3), sym, px)
         rebalance_tickets <- c(rebalance_tickets, ticket)
@@ -409,11 +427,10 @@ if (should_rebalance) {
   core_delta_shs   <- target_core_shs - current_core_shs
   core_delta_cash  <- round(core_delta_shs * qqq_cur_px, 2)
   
-  if (abs(core_delta_cash) >= 50) {
+  if (abs(core_delta_cash) >= 30) {
     if (core_delta_cash > 0) {
-      # Buy QQQ
       buy_shs <- round(core_delta_cash / qqq_cur_px, 3)
-      ticket <- sprintf("BUY %s shares of QQQ @ ~$%.2f ($%.2f outlay - Align Core Target)",
+      ticket <- sprintf("BUY %s shares of QQQ @ ~$%.2f ($%.2f outlay - Align Core Target to 26.2%%)",
                         buy_shs, qqq_cur_px, round(buy_shs * qqq_cur_px, 2))
       rebalance_tickets <- c(rebalance_tickets, ticket)
       port_state$core_position <- list(
@@ -424,9 +441,8 @@ if (should_rebalance) {
       )
       port_state$cash_balance <- port_state$cash_balance - round(buy_shs * qqq_cur_px, 2)
     } else {
-      # Trim QQQ
       trim_shs <- abs(core_delta_shs)
-      ticket <- sprintf("SELL %s shares of QQQ @ ~$%.2f ($%.2f proceeds - Trim Core Target)",
+      ticket <- sprintf("SELL %s shares of QQQ @ ~$%.2f ($%.2f proceeds - Trim Core Target to 26.2%%)",
                         trim_shs, qqq_cur_px, abs(core_delta_cash))
       rebalance_tickets <- c(rebalance_tickets, ticket)
       port_state$core_position$shares <- max(0, current_core_shs - trim_shs)
@@ -442,7 +458,6 @@ if (should_rebalance) {
     
     existing_idx <- which(existing_sat_syms == sym)
     if (length(existing_idx) == 0) {
-      # Brand new entrant
       shs_to_buy <- round(target_slot_cash / px, 3)
       outlay <- round(shs_to_buy * px, 2)
       ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Top-%d RS Satellite Entrant)",
@@ -460,20 +475,21 @@ if (should_rebalance) {
       )
       port_state$cash_balance <- port_state$cash_balance - outlay
     } else {
-      # Retained entrant: Check if drift warrants rebalancing
       existing_pos <- port_state$satellite_positions[[existing_idx]]
       curr_shs <- as.numeric(existing_pos$shares)
       curr_mv  <- curr_shs * px
       drift_dlr <- target_slot_cash - curr_mv
-      if (abs(drift_dlr) >= (target_slot_cash * 0.20)) {
+      if (abs(drift_dlr) >= (target_slot_cash * 0.15)) {
         delta_shs <- round(drift_dlr / px, 3)
         if (delta_shs > 0) {
-          ticket <- sprintf("BUY %s shares of %s @ ~$%.2f (Rebalance Satellite Slot to 14%%)", delta_shs, sym, px)
+          ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Top up Satellite Slot to 12.2%%)",
+                            delta_shs, sym, px, round(delta_shs * px, 2))
           rebalance_tickets <- c(rebalance_tickets, ticket)
           port_state$satellite_positions[[existing_idx]]$shares <- curr_shs + delta_shs
           port_state$cash_balance <- port_state$cash_balance - round(delta_shs * px, 2)
         } else {
-          ticket <- sprintf("SELL %s shares of %s @ ~$%.2f (Trim Satellite Slot to 14%%)", abs(delta_shs), sym, px)
+          ticket <- sprintf("SELL %s shares of %s @ ~$%.2f ($%.2f proceeds - Trim Satellite Slot to 12.2%%)",
+                            abs(delta_shs), sym, px, abs(round(delta_shs * px, 2)))
           rebalance_tickets <- c(rebalance_tickets, ticket)
           port_state$satellite_positions[[existing_idx]]$shares <- max(0, curr_shs - abs(delta_shs))
           port_state$cash_balance <- port_state$cash_balance + abs(round(delta_shs * px, 2))
@@ -482,37 +498,51 @@ if (should_rebalance) {
     }
   }
   
-  # D. SGOV Defensive Treasury Adjustment
-  current_sgov_shs <- if (!is.null(port_state$sgov_position)) as.numeric(port_state$sgov_position$shares) else 0
-  target_sgov_shs  <- round(target_sgov_cash / sgov_cur_px, 3)
-  sgov_delta_shs   <- target_sgov_shs - current_sgov_shs
-  sgov_delta_cash  <- round(sgov_delta_shs * sgov_cur_px, 2)
+  # D. Defensive Reserve Adjustment (Liquidate SGOV if switching to GLD)
+  curr_def_sym <- if (!is.null(port_state$defensive_position$symbol)) port_state$defensive_position$symbol else ""
+  curr_def_shs <- if (!is.null(port_state$defensive_position$shares)) as.numeric(port_state$defensive_position$shares) else 0
   
-  if (abs(sgov_delta_cash) >= 50) {
-    if (sgov_delta_cash > 0) {
-      ticket <- sprintf("BUY %s shares of SGOV @ ~$%.2f ($%.2f outlay - Park Vol-Target Cash in T-Bills)",
-                        sgov_delta_shs, sgov_cur_px, sgov_delta_cash)
+  if (curr_def_sym != DEFENSIVE_ASSET && curr_def_shs > 0) {
+    old_px <- if (!is.null(cur_prices[[curr_def_sym]])) cur_prices[[curr_def_sym]] else as.numeric(port_state$defensive_position$entry_price)
+    old_mv <- round(curr_def_shs * old_px, 2)
+    ticket <- sprintf("SELL %s shares of %s @ ~$%.2f ($%.2f proceeds - Switch Defense to %s)",
+                      curr_def_shs, curr_def_sym, old_px, old_mv, DEFENSIVE_ASSET)
+    rebalance_tickets <- c(rebalance_tickets, ticket)
+    port_state$cash_balance <- port_state$cash_balance + old_mv
+    port_state$defensive_position <- NULL
+    curr_def_shs <- 0
+  }
+  
+  target_def_shs  <- round(target_def_cash / def_cur_px, 3)
+  def_delta_shs   <- target_def_shs - curr_def_shs
+  def_delta_cash  <- round(def_delta_shs * def_cur_px, 2)
+  
+  if (abs(def_delta_cash) >= 30) {
+    if (def_delta_cash > 0) {
+      ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Park Vol-Target Buffer in Gold)",
+                        def_delta_shs, DEFENSIVE_ASSET, def_cur_px, def_delta_cash)
       rebalance_tickets <- c(rebalance_tickets, ticket)
-      port_state$sgov_position <- list(
-        symbol = "SGOV",
-        shares = current_sgov_shs + sgov_delta_shs,
-        entry_price = sgov_cur_px,
+      port_state$defensive_position <- list(
+        symbol = DEFENSIVE_ASSET,
+        shares = curr_def_shs + def_delta_shs,
+        entry_price = def_cur_px,
         entry_date = today_str
       )
-      port_state$cash_balance <- port_state$cash_balance - sgov_delta_cash
+      port_state$cash_balance <- port_state$cash_balance - def_delta_cash
     } else {
-      trim_sgov <- abs(sgov_delta_shs)
-      ticket <- sprintf("SELL %s shares of SGOV @ ~$%.2f ($%.2f proceeds - Free T-Bills for Equity)",
-                        trim_sgov, sgov_cur_px, abs(sgov_delta_cash))
+      trim_def <- abs(def_delta_shs)
+      ticket <- sprintf("SELL %s shares of %s @ ~$%.2f ($%.2f proceeds - Trim Defense for Equity)",
+                        trim_def, DEFENSIVE_ASSET, def_cur_px, abs(def_delta_cash))
       rebalance_tickets <- c(rebalance_tickets, ticket)
-      port_state$sgov_position$shares <- max(0, current_sgov_shs - trim_sgov)
-      port_state$cash_balance <- port_state$cash_balance + abs(sgov_delta_cash)
+      port_state$defensive_position$shares <- max(0, curr_def_shs - trim_def)
+      port_state$cash_balance <- port_state$cash_balance + abs(def_delta_cash)
     }
   }
   
   port_state$core_weight         <- CORE_WEIGHT
   port_state$satellite_weight    <- SATELLITE_WEIGHT
   port_state$vol_target          <- VOL_TARGET
+  port_state$defensive_asset     <- DEFENSIVE_ASSET
   port_state$realized_vol_20d    <- round(realized_vol, 4)
   port_state$vol_scale           <- round(vol_scale, 4)
   port_state$last_rebalance_date <- today_str
