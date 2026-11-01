@@ -11,14 +11,14 @@
 #'       - Eligibility: Stock price >= 200-day SMA (no falling knives)
 #'       - Unconstrained upside: No artificial profit caps (+2R/+4R removed)
 #'       - Risk Floor: -20% disaster stop-loss floor on individual positions
-#'   * Engine 3 - Volatility Targeting to Gold (20% Target Vol -> GLD):
+#'   * Engine 3 - Volatility Targeting to Gold (22% Target Vol -> GLD):
 #'       - Rolling 20-day realized volatility of QQQ (sigma_20d)
-#'       - Gross exposure scaled by min(1.0, 20% / sigma_20d)
+#'       - Gross exposure scaled by min(1.0, 22% / sigma_20d)
 #'       - Unallocated capital parked in Gold (GLD) for real compounding & crisis flight-to-safety
 #'
 #' Usage:
 #'   Rscript core_satellite_signal.R [--capital=8000] [--core_weight=0.30] [--top_n=5]
-#'                                   [--vol_target=0.20] [--defensive_asset=GLD]
+#'                                   [--vol_target=0.22] [--defensive_asset=GLD]
 #'                                   [--core_bull_leverage=1.25] [--use_core_trend=TRUE]
 #'                                   [--force_rebalance] [--reset]
 #' ==============================================================================
@@ -43,9 +43,9 @@ CORE_WEIGHT        <- 0.30    # 30% Core Sleeve
 TOP_N              <- 5       # 5 Satellite slots (14% each)
 LOOKBACK_DAYS      <- 126     # ~6 months for relative strength
 DISASTER_STOP      <- 0.20    # 20% catastrophic max loss floor
-VOL_TARGET         <- 0.20    # Solution 3: 20% annualized realized volatility target
-DEFENSIVE_ASSET    <- "GLD"   # Solution 3: Gold (GLD) as crisis hedge
-CORE_BULL_LEVERAGE <- 1.25    # 1.25x bull leverage when QQQ > 200 SMA and vol <= 20%
+VOL_TARGET         <- 0.22    # 22% annualized realized volatility target
+DEFENSIVE_ASSET    <- "GLD"   # Gold (GLD) as crisis hedge
+CORE_BULL_LEVERAGE <- 1.25    # 1.25x bull leverage when QQQ > 200 SMA and vol <= 22%
 USE_CORE_TREND     <- TRUE    # Park Core in Defensive Asset when QQQ < 200 SMA
 FORCE_REBALANCE    <- FALSE
 RESET              <- FALSE
@@ -167,7 +167,7 @@ def_ohlcv <- tryCatch(load_stock_data(DEFENSIVE_ASSET, force_refresh = FALSE), e
 def_cur_px <- if (!is.null(def_ohlcv)) tail(as.numeric(Cl(def_ohlcv)), 1) else if (DEFENSIVE_ASSET == "GLD") 355.78 else 100.73
 
 cat("\n========================================================================================\n")
-cat(sprintf("     TRIPLE-ENGINE MOMENTUM SYSTEM: SOLUTION 3 (30/70 + 20%% VT -> %s)       \n", DEFENSIVE_ASSET))
+cat(sprintf("     TRIPLE-ENGINE MOMENTUM SYSTEM (30/70 + %.0f%% VT -> %s)       \n", VOL_TARGET * 100, DEFENSIVE_ASSET))
 cat("========================================================================================\n")
 cat(sprintf(" Date:                   %s\n", Sys.Date()))
 cat(sprintf(" Capital Base:           $%.2f\n", port_state$total_capital))
@@ -430,8 +430,8 @@ if (should_rebalance) {
   if (abs(core_delta_cash) >= 30) {
     if (core_delta_cash > 0) {
       buy_shs <- round(core_delta_cash / qqq_cur_px, 3)
-      ticket <- sprintf("BUY %s shares of QQQ @ ~$%.2f ($%.2f outlay - Align Core Target to 26.2%%)",
-                        buy_shs, qqq_cur_px, round(buy_shs * qqq_cur_px, 2))
+      ticket <- sprintf("BUY %s shares of QQQ @ ~$%.2f ($%.2f outlay - Align Core Target to %.1f%%)",
+                        buy_shs, qqq_cur_px, round(buy_shs * qqq_cur_px, 2), (target_core_cash / total_equity) * 100)
       rebalance_tickets <- c(rebalance_tickets, ticket)
       port_state$core_position <- list(
         symbol = "QQQ",
@@ -442,8 +442,8 @@ if (should_rebalance) {
       port_state$cash_balance <- port_state$cash_balance - round(buy_shs * qqq_cur_px, 2)
     } else {
       trim_shs <- abs(core_delta_shs)
-      ticket <- sprintf("SELL %s shares of QQQ @ ~$%.2f ($%.2f proceeds - Trim Core Target to 26.2%%)",
-                        trim_shs, qqq_cur_px, abs(core_delta_cash))
+      ticket <- sprintf("SELL %s shares of QQQ @ ~$%.2f ($%.2f proceeds - Trim Core Target to %.1f%%)",
+                        trim_shs, qqq_cur_px, abs(core_delta_cash), (target_core_cash / total_equity) * 100)
       rebalance_tickets <- c(rebalance_tickets, ticket)
       port_state$core_position$shares <- max(0, current_core_shs - trim_shs)
       port_state$cash_balance <- port_state$cash_balance + abs(core_delta_cash)
@@ -482,14 +482,14 @@ if (should_rebalance) {
       if (abs(drift_dlr) >= (target_slot_cash * 0.15)) {
         delta_shs <- round(drift_dlr / px, 3)
         if (delta_shs > 0) {
-          ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Top up Satellite Slot to 12.2%%)",
-                            delta_shs, sym, px, round(delta_shs * px, 2))
+          ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Top up Satellite Slot to %.1f%%)",
+                            delta_shs, sym, px, round(delta_shs * px, 2), (target_slot_cash / total_equity) * 100)
           rebalance_tickets <- c(rebalance_tickets, ticket)
           port_state$satellite_positions[[existing_idx]]$shares <- curr_shs + delta_shs
           port_state$cash_balance <- port_state$cash_balance - round(delta_shs * px, 2)
         } else {
-          ticket <- sprintf("SELL %s shares of %s @ ~$%.2f ($%.2f proceeds - Trim Satellite Slot to 12.2%%)",
-                            abs(delta_shs), sym, px, abs(round(delta_shs * px, 2)))
+          ticket <- sprintf("SELL %s shares of %s @ ~$%.2f ($%.2f proceeds - Trim Satellite Slot to %.1f%%)",
+                            abs(delta_shs), sym, px, abs(round(delta_shs * px, 2)), (target_slot_cash / total_equity) * 100)
           rebalance_tickets <- c(rebalance_tickets, ticket)
           port_state$satellite_positions[[existing_idx]]$shares <- max(0, curr_shs - abs(delta_shs))
           port_state$cash_balance <- port_state$cash_balance + abs(round(delta_shs * px, 2))
