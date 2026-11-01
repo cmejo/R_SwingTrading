@@ -2,18 +2,23 @@
 #' ==============================================================================
 #' Triple-Engine Momentum & Relative Strength Execution System
 #'
+#' BACKTEST BASIS: 2007-2026, survivorship-free point-in-time Nasdaq-100 membership
+#' (jmccarrell/n100tickers), dual RS + stop proceeds -> QLD. Earlier figures (55% CAGR)
+#' came from a hindsight-selected list and are NOT achievable. See scratch/pit_feature_search.R.
+#'
 #' CONFIGURATION MODES SUPPORTED:
 #' ------------------------------------------------------------------------------
-#' OPTION 6 (ACTIVE DEFAULT): Supercharged Ultra Model (1.5x Margin + QLD Core + Dual RS + GLD)
-#'   - 20-Year Backtest: +55.41% CAGR ($53.47M on $8k) | -63.2% MaxDD | 1.04 Sharpe | 1.56 Sortino
+#' OPTION 6 (ACTIVE DEFAULT): 1.5x Margin + QLD Core + Dual RS + GLD
+#'   - PIT Backtest: ~35.8% CAGR | -62.3% MaxDD | 0.92 Sharpe (QQQ B&H: 16.6% | -53.4%)
 #'   - Core Sleeve: QLD (2x QQQ ETF)
-#'   - Satellite Sleeve: Dual-Lookback RS (50% 126d + 50% 63d blend vs QQQ)
+#'   - Satellite Sleeve: Top-5 Dual-Lookback RS (50% 126d + 50% 63d vs QQQ), universe = Nasdaq-100
 #'   - Portfolio Margin: 1.5x gross exposure during confirmed bull regimes (QQQ >= 200 SMA)
 #'   - Safety Gate: De-levers margin to 0% debt and exits QLD to GLD when QQQ < 200 SMA
 #'   - Volatility Target: 22% Vol Target into Gold (GLD)
+#'   - Stop proceeds: disaster-stopped cash is redeployed into QLD until the next rebalance
 #'
-#' OPTION 3 (COMMENTED OUT): Pure Cash / IRA Sweet Spot (QLD Core + Dual RS, NO Margin)
-#'   - 20-Year Backtest: +42.90% CAGR ($10.00M on $8k) | -46.59% MaxDD | 1.08 Sharpe | 1.63 Sortino
+#' OPTION 3 (COMMENTED OUT): Pure Cash / IRA (QLD Core + Dual RS, NO Margin)
+#'   - PIT Backtest: ~27.4% CAGR | -51.6% MaxDD | 0.97 Sharpe
 #'   - Zero margin debt, zero margin interest, zero margin call risk
 #'   - Tradable in Cash, Margin, and IRA/401(k) retirement accounts
 #'   - Core Sleeve: QLD (2x QQQ ETF) when QQQ >= 200 SMA; exits to GLD when < 200 SMA
@@ -23,6 +28,9 @@
 #' Usage:
 #'   Rscript core_satellite_signal.R [--capital=8000] [--core_asset=QLD]
 #'                                   [--portfolio_margin=1.5] [--vol_target=0.22]
+#'                                   [--top_n=5] [--symbols_file=symbols_n100.txt]
+#'                                   [--stop_to_core=TRUE] [--breadth_gate=FALSE]
+#'                                   [--breadth_threshold=0.50]
 #'                                   [--force_rebalance] [--reset]
 #' ==============================================================================
 
@@ -50,9 +58,16 @@ WEIGHT_LONG           <- 0.50    # 50% weight on 126d RS
 WEIGHT_SHORT          <- 0.50    # 50% weight on 63d RS
 LOOKBACK_DAYS         <- LOOKBACK_LONG # Compatibility alias
 DISASTER_STOP         <- 0.20    # 20% catastrophic max loss floor
+STOP_PROCEEDS_TO_CORE <- TRUE    # (A) Redeploy stopped-out satellite cash into the Core asset (QLD)
+                                 #     when QQQ >= 200 SMA, instead of idling in cash until month-end.
+                                 #     PIT N100 backtest: +1.6 pts CAGR, improved in both 2007-16 and 2017-26.
+USE_BREADTH_GATE      <- FALSE   # (B) OPTIONAL, OFF BY DEFAULT: drop margin to 1.0x when fewer than
+BREADTH_THRESHOLD     <- 0.50    #     BREADTH_THRESHOLD of scanned stocks are above their 200 SMA.
+                                 #     Cuts MaxDD ~6 pts in backtest, but the 50% threshold is fragile
+                                 #     (40% had no effect, 60% was worse). Needs a broad list (e.g. N100).
 FORCE_REBALANCE       <- FALSE
 RESET                 <- FALSE
-SYMBOLS_FILE          <- "symbols.txt"
+SYMBOLS_FILE          <- "symbols_n100.txt" # Current Nasdaq-100 members (matches PIT backtest universe)
 PORTFOLIO_FILE        <- "portfolio_coresat.json"
 
 # ==============================================================================
@@ -99,6 +114,12 @@ for (arg in args) {
     LOOKBACK_DAYS <- LOOKBACK_LONG
   } else if (grepl("^--lookback_short=", arg)) {
     LOOKBACK_SHORT <- as.integer(sub("^--lookback_short=", "", arg))
+  } else if (grepl("^--stop_to_core=", arg)) {
+    STOP_PROCEEDS_TO_CORE <- as.logical(sub("^--stop_to_core=", "", arg))
+  } else if (grepl("^--breadth_gate=", arg)) {
+    USE_BREADTH_GATE <- as.logical(sub("^--breadth_gate=", "", arg))
+  } else if (grepl("^--breadth_threshold=", arg)) {
+    BREADTH_THRESHOLD <- as.numeric(sub("^--breadth_threshold=", "", arg))
   } else if (grepl("^--disaster_stop=", arg)) {
     DISASTER_STOP <- as.numeric(sub("^--disaster_stop=", "", arg))
   } else if (grepl("^--vol_target=", arg)) {
@@ -309,6 +330,17 @@ if (length(rs_results) == 0) {
 }
 
 rs_df <- do.call(rbind, rs_results)
+
+# (B) Optional market-breadth gate: % of scanned universe above its own 200 SMA
+breadth_pct <- mean(rs_df$Trend_Up, na.rm = TRUE)
+if (USE_BREADTH_GATE && active_margin > 1.0 && breadth_pct < BREADTH_THRESHOLD) {
+  active_margin <- 1.0
+  cat(sprintf("\n 🛡️ BREADTH GATE: only %.0f%% of %d scanned stocks above 200 SMA (< %.0f%%). Margin reduced to 1.00x.\n",
+              breadth_pct * 100, nrow(rs_df), BREADTH_THRESHOLD * 100))
+} else {
+  cat(sprintf("\n Market Breadth: %.0f%% of %d scanned stocks above 200 SMA%s\n", breadth_pct * 100, nrow(rs_df),
+              if (USE_BREADTH_GATE) sprintf(" (gate ON, threshold %.0f%%)", BREADTH_THRESHOLD * 100) else " (gate OFF)"))
+}
 rs_qualified <- rs_df[rs_df$Trend_Up, ]
 if (nrow(rs_qualified) < TOP_N) rs_qualified <- rs_df
 
@@ -404,6 +436,31 @@ if (!is.null(port_state$satellite_positions) && length(port_state$satellite_posi
 
 port_state$satellite_positions <- kept_sat_positions
 
+# (A) Redeploy disaster-stop proceeds into the Core asset (QLD) between rebalances.
+#     Skipped on rebalance days (the rebalance redeploys everything anyway) and in
+#     bear regimes (QQQ < 200 SMA), where the proceeds stay in cash until month-end.
+if (STOP_PROCEEDS_TO_CORE && length(disaster_tickets) > 0 && !should_rebalance &&
+    (!USE_CORE_TREND || qqq_trend_up)) {
+  stop_proceeds <- sum(sapply(port_state$closed_trades, function(tr)
+    if (identical(tr$exit_date, today_str) && identical(tr$reason, "DISASTER_STOP"))
+      as.numeric(tr$shares) * as.numeric(tr$exit_price) else 0))
+  if (stop_proceeds >= 30) {
+    buy_shs <- round(stop_proceeds / core_cur_px, 3)
+    disaster_tickets <- c(disaster_tickets, sprintf(
+      "BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Redeploy stop-loss proceeds into Core until next rebalance)",
+      buy_shs, CORE_ASSET, core_cur_px, round(buy_shs * core_cur_px, 2)))
+    prev_shs <- if (!is.null(port_state$core_position$shares)) as.numeric(port_state$core_position$shares) else 0
+    prev_px  <- if (!is.null(port_state$core_position$entry_price)) as.numeric(port_state$core_position$entry_price) else core_cur_px
+    new_shs  <- prev_shs + buy_shs
+    port_state$core_position <- list(
+      symbol = CORE_ASSET, shares = new_shs,
+      entry_price = round((prev_shs * prev_px + buy_shs * core_cur_px) / new_shs, 4),
+      entry_date = if (!is.null(port_state$core_position$entry_date)) port_state$core_position$entry_date else today_str)
+    port_state$cash_balance <- port_state$cash_balance - round(buy_shs * core_cur_px, 2)
+    core_val <- round(new_shs * core_cur_px, 2)
+  }
+}
+
 total_equity <- round(port_state$cash_balance + core_val + def_val + sat_val, 2)
 port_state$total_capital <- total_equity
 
@@ -422,7 +479,7 @@ cat(sprintf(" Borrowed Margin Loan (Debt):        $%.2f (%5.1f%% leverage)\n",
 cat("----------------------------------------------------------------------------------------\n")
 cat(sprintf(" Core %-4s Sleeve:                  $%.2f (%5.1f%% of equity)\n",
             CORE_ASSET, core_val, (core_val / max(1, total_equity)) * 100))
-cat(sprintf(" Satellite Sleeve (5 Stocks):        $%.2f (%5.1f%% of equity)\n",
+cat(sprintf(" Satellite Sleeve (%d Stocks):        $%.2f (%5.1f%% of equity)\n", TOP_N,
             sat_val, (sat_val / max(1, total_equity)) * 100))
 cat(sprintf(" Defensive %-4s Sleeve:             $%.2f (%5.1f%% of equity)\n",
             DEFENSIVE_ASSET, def_val, (def_val / max(1, total_equity)) * 100))
@@ -464,8 +521,8 @@ if (should_rebalance) {
   base_equity_w   <- (if (core_active) CORE_WEIGHT else 0.0) * vol_scale + (SATELLITE_WEIGHT * vol_scale)
   target_def_cash <- max(0, total_equity * (1.0 - base_equity_w))
   
-  cat(sprintf(" Target Allocations: Core %s: $%.2f (%.1f%%) | Satellites (5): $%.2f (%.1f%%) | Defensive %s: $%.2f (%.1f%%)\n\n",
-              CORE_ASSET, target_core_cash, (target_core_cash / total_equity) * 100,
+  cat(sprintf(" Target Allocations: Core %s: $%.2f (%.1f%%) | Satellites (%d): $%.2f (%.1f%%) | Defensive %s: $%.2f (%.1f%%)\n\n",
+              CORE_ASSET, target_core_cash, (target_core_cash / total_equity) * 100, TOP_N,
               target_sat_cash, (target_sat_cash / total_equity) * 100,
               DEFENSIVE_ASSET, target_def_cash, (target_def_cash / total_equity) * 100))
   
