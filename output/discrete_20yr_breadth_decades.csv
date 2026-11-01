@@ -1,0 +1,5 @@
+"Strategy","D1_CAGR","D1_MaxDD","D2_CAGR","D2_MaxDD"
+"A. Strategy 1.5x + Hedge (no breadth)","-0.42%","-48.97%","+13.21%","-41.93%"
+"B. Strategy 1.5x + Hedge + Breadth","-0.67%","-49.61%","+13.56%","-43.14%"
+"QQQ Buy & Hold","+11.32%","-53.55%","+20.43%","-35.62%"
+"SPY Buy & Hold","+4.94%","-56.47%","+13.70%","-34.10%"

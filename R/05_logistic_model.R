@@ -359,8 +359,8 @@ fit_logistic_swing_model <- function(df_model,
   
   if (is.null(train_idx) || is.null(test_idx)) {
     n_train <- floor(n * train_split)
-    # Embargo training window by 5 days to eliminate target leakage into test set (L1)
-    train_idx <- 1:max(1, (n_train - 5))
+    # Embargo training window by 7 days to eliminate target leakage into test set (L1)
+    train_idx <- 1:max(1, (n_train - 7))
     test_idx <- if (n_train >= n) integer(0) else (n_train + 1):n
   }
   
@@ -372,7 +372,7 @@ fit_logistic_swing_model <- function(df_model,
   X_test  <- X[test_idx, , drop = FALSE]
   y_test  <- y[test_idx]
   
-  cat(sprintf("[LogisticModel] Training set: %d bars (%s to %s | 5-day embargo applied)\n",
+  cat(sprintf("[LogisticModel] Training set: %d bars (%s to %s | 7-day embargo applied)\n",
               length(train_idx), df_model$Date[train_idx[1]], df_model$Date[max(train_idx)]))
   cat(sprintf("[LogisticModel] Testing set:  %d bars (%s to %s)\n",
               length(test_idx),
@@ -390,7 +390,7 @@ fit_logistic_swing_model <- function(df_model,
     p_long        = p_long,
     p_short       = p_short,
     calibrate     = calibrate,
-    embargo_days  = 5
+    embargo_days  = 7
   )
   
   cv_fit             <- model_core$cv_fit

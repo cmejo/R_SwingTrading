@@ -29,7 +29,7 @@ source("R/send_alert.R")
 
 # Default Parameters
 CAPITAL          <- 8230
-MAX_POSITIONS    <- 3     # Max concurrent swing positions to hold (e.g., 3 positions @ $3,333 each)
+MAX_POSITIONS    <- 5     # Max concurrent swing positions (5 slots @ 20% budget each - Clean Diversified Model)
 TARGET_VOL       <- 0.45  # Target Volatility Budget (0.45 = 45% annual vol, matches QQQ/tech growth)
 FAST_N           <- 20
 SLOW_N           <- 50
@@ -43,8 +43,8 @@ SIZING_MODE      <- "vince" # Position sizing engine: "vince" (Leverage Space) o
 SAFETY_FACTOR    <- 0.50    # Aggressive Safe f scaling factor for Ralph Vince Leverage Space model
 VINCE_LOOKBACK   <- 120     # Lookback days for joint scenario return matrix
 ALLOW_FRACTIONAL <- TRUE    # Allow fractional shares for exact risk budget allocation
-LEVERAGE         <- 1.5     # Default leverage multiplier: 1.5x (margin). Set 1.0 for cash only.
-MAX_PER_SECTOR   <- 3       # Maximum concurrent positions allowed in any single sector
+LEVERAGE         <- 1.0     # Default leverage multiplier: 1.0x (unthrottled cash). Defensive cash parks in SGOV.
+MAX_PER_SECTOR   <- 2       # Maximum concurrent positions allowed in any single sector
 MAX_HEAT         <- 0.08    # Max portfolio heat budget (0.08 = 8.0% total dollars at risk across stops)
 FORCE_REFRESH    <- FALSE   # Bypass cache and re-download latest market data
 CIRCUIT_BREAKER  <- TRUE    # Account Drawdown Circuit Breaker (-12.0% throttle)
@@ -337,6 +337,27 @@ cat(sprintf("   GLD Gold Close: $%.2f | 50D lmMA Fit: $%.2f | Slope: %+.3f (%s)\
 cat(sprintf("   SPY Benchmark Close: $%.2f | MS-GARCH Ann Vol: %.1f%% | P(High Vol Regime): %.1f%%\n",
             spy_px, spy_ann_vol * 100, spy_p_high_vol * 100))
 cat(sprintf("   CBOE VIX:  %.2f   | Volatility Regime: %s\n", vix_info$close, vix_info$regime))
+
+# Market Breadth: 10-day smoothed Intraday Advance-Decline Ratio across universe
+current_breadth_10d <- tryCatch({
+  if (file.exists("data/intraday_breadth_10d.rds")) {
+    b_rds <- readRDS("data/intraday_breadth_10d.rds")
+    as.numeric(tail(b_rds, 1))
+  } else {
+    0.0
+  }
+}, error = function(e) 0.0)
+breadth_conviction_mult <- calculate_breadth_conviction_multiplier(current_breadth_10d)
+breadth_status_str <- if (current_breadth_10d <= -0.15) {
+  " (Oversold Washout: +20% Sizing Boost)"
+} else if (current_breadth_10d >= 0.30) {
+  " (Overextended Market: -20% Sizing Dampener)"
+} else {
+  " (Neutral Breadth)"
+}
+cat(sprintf("   Market Intraday Breadth (10D): %+.3f | Conviction Sizing Multiplier: %.2fx%s\n",
+            current_breadth_10d, breadth_conviction_mult, breadth_status_str))
+
 cat(sprintf("   -> Dynamic Policy: Max Positions = %d | Safe f = %.2f | Min P(Up) >= %.1f%%%s\n\n", 
             EFFECTIVE_MAX_POS, EFFECTIVE_SAFETY_FACTOR, EFFECTIVE_P_LONG * 100,
             ifelse(isTRUE(DEFENSIVE_REGIME_ACTIVE), " (Asymmetric Hybrid Gate: 60.0% for RS > +5%)", "")))
@@ -694,7 +715,8 @@ sync_res <- sync_portfolio_with_market(
   model_scan_df = df_scan,
   macro_bullish = macro_info$is_bullish,
   enable_circuit_breaker = CIRCUIT_BREAKER,
-  circuit_breaker_threshold = CIRCUIT_BREAKER_THRESH
+  circuit_breaker_threshold = CIRCUIT_BREAKER_THRESH,
+  breadth_10d = current_breadth_10d
 )
 port_state <- sync_res$updated_portfolio
 save_portfolio(port_state, PORTFOLIO_FILE)
@@ -766,10 +788,10 @@ cat(sprintf(" PORTFOLIO HEAT (RISK):  $%.2f of $%.2f max allowed (%.2f%% of equi
             existing_dollar_risk, max_portfolio_heat, (existing_dollar_risk / max(1, sync_res$total_account_value)) * 100, MAX_HEAT * 100))
 
 # ----------------------------------------------------------------------------------------
-# Core-Satellite Cash Yield Allocation & Defensive Asset Deployment
+# Cash Yield Allocation & Defensive Asset Deployment
 # 1. Macro Bullish -> Park in QQQ
 # 2. QQQ Bearish, Gold Bullish -> Park in GLD
-# 3. Dual Bear -> 75% FNGD + 25% SQQQ with 15-Day Time Stop / -10% Max Loss -> SGOV
+# 3. Dual Bear -> 100% SGOV (Treasury Yield) - Inverse Hedge Permanently Disabled
 # Automatically emits SELL tickets when rotating regimes or funding swing setups.
 # ----------------------------------------------------------------------------------------
 deploy_unallocated_cash <- function(unalloc_cash, port_state, macro_info, gld_info,
@@ -822,66 +844,22 @@ deploy_unallocated_cash <- function(unalloc_cash, port_state, macro_info, gld_in
     )
     target_syms <- c("SGOV")
   } else {
-    # DUAL BEAR REGIME: Both 50D & 20D QQQ Trends AND 50D GLD Trend are Bearish
-    cat(sprintf(" Macro Gate Status:      %s | Gold Trend: %s (CONFIRMED 50D+20D DUAL BEAR ACTIVE)\n", 
+    # DEFENSIVE CAPITAL PRESERVATION REGIME (DUAL BEAR): Both 50D & 20D QQQ Trends AND 50D GLD Trend are Bearish
+    # Empirical 20-Year Walk-Forward Audit: -3x Inverse ETFs (FNGD/SQQQ) suffer -93.8% drawdown and -10.85% CAGR drift.
+    # Inverse hedge is permanently DISABLED. 100% of defensive cash is parked safely in risk-free Treasury yield (SGOV).
+    cat(sprintf(" Macro Gate Status:      %s | Gold Trend: %s (DUAL BEAR ACTIVE -> SGOV CASH PRESERVATION)\n", 
                 macro_info$regime, gld_info$regime))
+    cat(" Defensive Action:       Inverse hedge (FNGD/SQQQ) DISABLED to eliminate volatility decay and whipsaws.\n")
+    cat("                         Parking 100% of defensive cash in SGOV (Treasury yield).\n")
     
-    h_state <- port_state$hedge_state
-    # Infer existing FNGD / SQQQ entry metadata from hedge_positions if present
-    existing_fngd <- NULL
-    existing_sqqq <- NULL
-    if (has_existing_hedge) {
-      for (hp in port_state$hedge_positions) {
-        if (toupper(hp$symbol) == "FNGD") existing_fngd <- hp
-        if (toupper(hp$symbol) == "SQQQ") existing_sqqq <- hp
-      }
-    }
-    if (is.null(h_state) || is.null(h_state$regime) || h_state$regime != "DUAL_BEAR_HEDGE") {
-      inferred_dt <- today_str
-      if (!is.null(existing_fngd) && !is.null(existing_fngd$entry_date)) inferred_dt <- existing_fngd$entry_date
-      else if (!is.null(existing_sqqq) && !is.null(existing_sqqq$entry_date)) inferred_dt <- existing_sqqq$entry_date
-      
-      inferred_fngd_px <- if (!is.null(existing_fngd) && as.numeric(existing_fngd$entry_price) > 0) as.numeric(existing_fngd$entry_price) else fngd_px
-      inferred_sqqq_px <- if (!is.null(existing_sqqq) && as.numeric(existing_sqqq$entry_price) > 0) as.numeric(existing_sqqq$entry_price) else sqqq_px
-      
-      h_state <- list(
-        regime = "DUAL_BEAR_HEDGE",
-        entry_date = inferred_dt,
-        days_held = 1L,
-        entry_fngd_px = inferred_fngd_px,
-        entry_sqqq_px = inferred_sqqq_px,
-        peak_ratio = 1.0,
-        rotated_to_sgov = FALSE,
-        rotation_reason = ""
-      )
-    }
-    
-    ent_dt <- tryCatch(as.Date(h_state$entry_date), error = function(e) Sys.Date())
-    cur_dt <- Sys.Date()
-    if (cur_dt > ent_dt) {
-      all_d <- seq(ent_dt + 1, cur_dt, by = "day")
-      bus_days <- sum(!weekdays(all_d) %in% c("Saturday", "Sunday"))
-      h_state$days_held <- max(1L, as.integer(bus_days) + 1L)
-    }
-    
-    r_fngd <- if (!is.null(h_state$entry_fngd_px) && h_state$entry_fngd_px > 0 && fngd_px > 0) (fngd_px / h_state$entry_fngd_px) - 1 else 0
-    r_sqqq <- if (!is.null(h_state$entry_sqqq_px) && h_state$entry_sqqq_px > 0 && sqqq_px > 0) (sqqq_px / h_state$entry_sqqq_px) - 1 else 0
-    hedge_cum_pnl <- (0.75 * r_fngd) + (0.25 * r_sqqq)
-    
-    cur_ratio <- 1.0 + hedge_cum_pnl
-    prev_peak <- if (!is.null(h_state$peak_ratio)) as.numeric(h_state$peak_ratio) else 1.0
-    h_state$peak_ratio <- max(prev_peak, cur_ratio)
-    
-    # Safety Stops: 15-Day Time Stop OR -10.0% Max Loss Stop
-    if (h_state$days_held > 15) {
-      h_state$rotated_to_sgov <- TRUE
-      h_state$rotation_reason <- sprintf("15-Day Time Stop Reached (%d trading days held)", h_state$days_held)
-    } else if (hedge_cum_pnl <= -0.10) {
-      h_state$rotated_to_sgov <- TRUE
-      h_state$rotation_reason <- sprintf("-10.0%% Max Loss Triggered (Cumulative P&L: %+.1f%%)", hedge_cum_pnl * 100)
-    }
-    port_state$hedge_state <- h_state
-    target_syms <- if (isTRUE(h_state$rotated_to_sgov)) c("SGOV") else c("FNGD", "SQQQ")
+    port_state$hedge_state <- list(
+      regime = "DEFENSIVE_SGOV",
+      entry_date = today_str,
+      days_held = 0L,
+      rotated_to_sgov = TRUE,
+      rotation_reason = "Capital Preservation: Inverse hedge disabled; parked in risk-free SGOV"
+    )
+    target_syms <- c("SGOV")
   }
   
   # 2. Check Existing Hedge / Cash-Park Positions for Regime Rotation or Swing Funding Liquidation
@@ -963,41 +941,21 @@ deploy_unallocated_cash <- function(unalloc_cash, port_state, macro_info, gld_in
         cat("                         Captures non-correlated gold alpha while preserving purchasing power.\n")
         tickets <- c(tickets, sprintf("BUY %s shares of GLD @ ~$%.2f", gld_shs, gld_px_val))
       }
-    } else if (isTRUE(port_state$hedge_state$rotated_to_sgov)) {
+    } else {
+      # DEFENSIVE SGOV DEPLOYMENT (Risk-Free Short-Term Treasury Yield)
       sgov_px_val <- px_lookup["SGOV"]
       sgov_shs <- if (isTRUE(allow_fractional)) round(net_deploy_cash / sgov_px_val, 3) else floor(net_deploy_cash / sgov_px_val)
       if (sgov_shs > 0) {
-        cat(sprintf(" 🛡️  HEDGE DEFENSE TRIGGERED: %s\n", port_state$hedge_state$rotation_reason))
+        cat(sprintf(" 🛡️  DEFENSIVE SGOV DEPLOYMENT: %s\n", 
+                    if (!is.null(port_state$hedge_state$rotation_reason) && nzchar(port_state$hedge_state$rotation_reason))
+                      port_state$hedge_state$rotation_reason else "Preserving capital in risk-free Treasury yield"))
         cat(sprintf(" Actionable Ticket:      BUY %s shares of SGOV @ ~$%.2f ($%.2f outlay)\n",
                     ifelse(isTRUE(allow_fractional), sprintf("%.3f", sgov_shs), sprintf("%d", as.integer(sgov_shs))),
                     sgov_px_val, round(sgov_shs * sgov_px_val, 2)))
-        cat(" Strategy Purpose:       Safety stop triggered. Rotates 100% of defensive cash into risk-free SGOV yield\n")
-        cat("                         to completely avoid late-stage bear market counter-trend squeezes and volatility decay.\n")
+        cat(" Strategy Purpose:       Capital preservation in risk-free short-term Treasury yield (SGOV).\n")
+        cat("                         Eliminates volatility decay and inverse whipsaws while earning risk-free yield.\n")
         tickets <- c(tickets, sprintf("BUY %s shares of SGOV @ ~$%.2f", sgov_shs, sgov_px_val))
       }
-    } else {
-      fngd_px_val <- px_lookup["FNGD"]
-      sqqq_px_val <- px_lookup["SQQQ"]
-      
-      fngd_cash <- round(net_deploy_cash * 0.75, 2)
-      sqqq_cash <- round(net_deploy_cash * 0.25, 2)
-      fngd_shs  <- if (isTRUE(allow_fractional)) round(fngd_cash / fngd_px_val, 3) else floor(fngd_cash / fngd_px_val)
-      sqqq_shs  <- if (isTRUE(allow_fractional)) round(sqqq_cash / sqqq_px_val, 3) else floor(sqqq_cash / sqqq_px_val)
-      
-      cat(sprintf(" ⚔️  DUAL BEAR HEDGE ACTIVE: Day %d of 15 (75%% FNGD + 25%% SQQQ | -10%% Max Loss Protection)\n", port_state$hedge_state$days_held))
-      cat(sprintf(" Actionable Ticket:      BUY %s shares of FNGD @ ~$%.2f ($%.2f outlay)\n",
-                  ifelse(isTRUE(allow_fractional), sprintf("%.3f", fngd_shs), sprintf("%d", as.integer(fngd_shs))),
-                  fngd_px_val, round(fngd_shs * fngd_px_val, 2)))
-      cat(sprintf(" Actionable Ticket:      BUY %s shares of SQQQ @ ~$%.2f ($%.2f outlay)\n",
-                  ifelse(isTRUE(allow_fractional), sprintf("%.3f", sqqq_shs), sprintf("%d", as.integer(sqqq_shs))),
-                  sqqq_px_val, round(sqqq_shs * sqqq_px_val, 2)))
-      cat(" Strategy Purpose:       Captures explosive crash alpha during severe market selloffs.\n")
-      cat("                         Protected by automatic 15-day time stop and -10.0% max loss circuit into SGOV.\n")
-      tickets <- c(
-        tickets,
-        sprintf("BUY %s shares of FNGD @ ~$%.2f", fngd_shs, fngd_px_val),
-        sprintf("BUY %s shares of SQQQ @ ~$%.2f", sqqq_shs, sqqq_px_val)
-      )
     }
   } else if (kept_hedge_val > 0) {
     cat(sprintf(" ℹ️  Existing defensive sleeve ($%.2f in %s) already matches active regime.\n",
@@ -1210,7 +1168,8 @@ if (isTRUE(IS_FRIDAY)) {
         row <- actionable_df[actionable_df$Symbol == candidate_syms[i], ]
         c_sec <- get_sector(row$Symbol)
         
-        shares <- raw_shares_list[i] * heat_scale
+        # Apply heat scaling and Breadth Conviction Multiplier (1.20x oversold <= -0.15, 0.80x overextended >= 0.30)
+        shares <- raw_shares_list[i] * heat_scale * breadth_conviction_mult
         # Cap order size to 1.0% of 20-day ADV to eliminate market impact (L3)
         if (!is.null(row$ADV_20) && !is.na(row$ADV_20) && row$ADV_20 > 0) {
           max_adv_shs <- floor(row$ADV_20 * 0.01)
@@ -1241,12 +1200,12 @@ if (isTRUE(IS_FRIDAY)) {
         
         shares_display <- if (isTRUE(ALLOW_FRACTIONAL) && (shares %% 1 != 0)) sprintf("%.3f", shares) else sprintf("%d", as.integer(shares))
         
-        # Multi-Tier Bracket Pricing (50% @ +1.5R, 25% @ +3.0R, 25% Chandelier Runner)
-        tier1_shares  <- if (isTRUE(ALLOW_FRACTIONAL)) round(shares * 0.50, 3) else floor(shares * 0.50)
-        tier2_shares  <- if (isTRUE(ALLOW_FRACTIONAL)) round(shares * 0.25, 3) else floor(shares * 0.25)
+        # Multi-Tier Bracket Pricing (35% @ +2.0R, 35% @ +4.0R, 30% Chandelier Runner)
+        tier1_shares  <- if (isTRUE(ALLOW_FRACTIONAL)) round(shares * 0.35, 3) else floor(shares * 0.35)
+        tier2_shares  <- if (isTRUE(ALLOW_FRACTIONAL)) round(shares * 0.35, 3) else floor(shares * 0.35)
         runner_shares <- round(shares - tier1_shares - tier2_shares, 3)
-        tier1_target  <- round(row$Close * (1 + 3.0 * row$Daily_Vol), 2)  # +1.5R target
-        tier2_target  <- round(row$Close * (1 + 6.0 * row$Daily_Vol), 2)  # +3.0R target
+        tier1_target  <- round(row$Close * (1 + 4.0 * row$Daily_Vol), 2)  # +2.0R target (expanded right-tail alpha)
+        tier2_target  <- round(row$Close * (1 + 8.0 * row$Daily_Vol), 2)  # +4.0R target
         total_risk    <- round(shares * (row$Close - row$Stop_Loss), 2)
         tier1_gain    <- round(tier1_shares * (tier1_target - row$Close), 2)
         tier2_gain    <- round(tier2_shares * (tier2_target - row$Close), 2)
@@ -1263,18 +1222,18 @@ if (isTRUE(IS_FRIDAY)) {
         cat(sprintf("  GTC Stop-Loss:       $%.2f (-%.2f%%) [Total Downside Risk: $%.2f]\n", 
                     row$Stop_Loss, 2.0 * row$Daily_Vol * 100, total_risk))
         cat("  3-Tier Execution & Trend-Trailing Runner Plan:\n")
-        cat(sprintf("    -> Tier 1 (50%% = %s shs): Target $%.2f (+1.5R) [Gain: $%.2f] -> Close 50%% & move stop to Breakeven $%.2f\n",
+        cat(sprintf("    -> Tier 1 (35%% = %s shs): Target $%.2f (+2.0R) [Gain: $%.2f] -> Close 35%% & move stop to Breakeven $%.2f\n",
                     tier1_shares, tier1_target, tier1_gain, row$Close))
-        cat(sprintf("    -> Tier 2 (25%% = %s shs): Target $%.2f (+3.0R) [Gain: $%.2f] -> Close 25%%\n",
+        cat(sprintf("    -> Tier 2 (35%% = %s shs): Target $%.2f (+4.0R) [Gain: $%.2f] -> Close 35%%\n",
                     tier2_shares, tier2_target, tier2_gain))
         runner_horizon <- if ((!is.na(row$Trend_Quality) && row$Trend_Quality > 0.60) || (!is.na(row$Eff_Ratio) && row$Eff_Ratio >= 0.45) || (!is.na(row$RS_20) && row$RS_20 >= 0.05)) 20L else 15L
-        cat(sprintf("    -> Runner Lot (25%% = %s shs): Chandelier Trailing Stop (Initial: $%.2f, Trails Highest High - 2.5 x ATR(14) $%.2f)\n",
+        cat(sprintf("    -> Runner Lot (30%% = %s shs): Chandelier Trailing Stop (Initial: $%.2f, Trails Highest High - 2.5 x ATR(14) $%.2f)\n",
                     runner_shares, row$Chandelier_Stop, row$ATR_14))
         cat(sprintf("       * Adaptive Runner Horizon: %d trading days (R^2 = %.2f | Mark-Out Extended for High-R^2 / RS Leaders)!\n\n",
                     runner_horizon, ifelse(is.na(row$Trend_Quality), 0.50, row$Trend_Quality)))
         
         alert_tickets <- c(alert_tickets, sprintf(
-          "• *%s* (%s): BUY %s shs @ ~$%.2f\n  - Stop: $%.2f | T1 (50%%): $%.2f (+1.5R) | T2 (25%%): $%.2f (+3.0R)\n  - Runner (25%%): Chandelier Stop $%.2f | RS vs SPY: %+.1f%%",
+          "• *%s* (%s): BUY %s shs @ ~$%.2f\n  - Stop: $%.2f | T1 (35%%): $%.2f (+2.0R) | T2 (35%%): $%.2f (+4.0R)\n  - Runner (30%%): Chandelier Stop $%.2f | RS vs SPY: %+.1f%%",
           row$Symbol, c_sec, shares_display, row$Close, row$Stop_Loss, tier1_target, tier2_target, row$Chandelier_Stop, row$RS_20 * 100
         ))
       }

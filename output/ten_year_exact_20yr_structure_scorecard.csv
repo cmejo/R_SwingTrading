@@ -1,0 +1,7 @@
+"Strategy","Terminal_Gross","CAGR","Max_Drawdown","Sharpe","Sortino","Annual_Vol"
+"1. Exact 20-Year Structure on 10-Year Horizon (1.5x Lev + Dual-Bear)","$79,913,951","+145.97%","-20.21%","2.60","3.84","36.32%"
+"2. Baseline 20-Year Structure (1.5x Lev, Unhedged)","$177,267,018","+166.40%","-24.12%","3.33","6.08","30.14%"
+"3. Buy & Hold QQQ (100%)","$63,987.53","+20.43%","-35.62%","0.83","1.07","22.55%"
+"4. Buy & Hold 70% QQQ / 30% VTI","$53,544","+18.30%","-32.68%","0.79","1.00","20.97%"
+"5. Buy & Hold SPY (100%)","$36,018.96","+13.70%","-34.10%","0.67","0.81","18.00%"
+"6. Prior Clean Discrete Engine (1.0x Cash / Unleveraged)","$427,581.80","+45.58%","-62.97%","1.06","1.68","35.40%"

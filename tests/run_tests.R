@@ -101,6 +101,13 @@ assert_equal(length(port$positions), 0, "Full exit closes position completely")
 assert_equal(length(port$closed_trades), 2, "Closed trades contains 2 records")
 assert_equal(port$cash_balance, 9100 + 1300, "Full proceeds restored to cash ($10,400)")
 
+# Test Breadth Conviction Sizing Multiplier
+assert_equal(calculate_breadth_conviction_multiplier(-0.25), 1.20, "Breadth Sizing: Oversold <= -0.15 boosts sizing to 1.20x")
+assert_equal(calculate_breadth_conviction_multiplier(0.35), 0.80, "Breadth Sizing: Overextended >= +0.30 dampens sizing to 0.80x")
+assert_equal(calculate_breadth_conviction_multiplier(0.05), 1.00, "Breadth Sizing: Neutral breadth yields 1.00x multiplier")
+sync_br <- sync_portfolio_with_market(port, current_prices = px_map, breadth_10d = -0.20)
+assert_equal(sync_br$breadth_multiplier, 1.20, "sync_portfolio_with_market exposes breadth_multiplier accurately")
+
 # ------------------------------------------------------------------------------
 # TEST GROUP 2: Standardized Performance Metrics Engine (I1, B8)
 # ------------------------------------------------------------------------------
@@ -168,8 +175,9 @@ assert_true(!is.null(m_fit), "B1: fit_logistic_swing_model succeeds without acti
 assert_true("Active Signal Accuracy" %in% m_fit$metrics$Metric, "B1: Active Signal Accuracy metric present")
 assert_true(!is.null(m_fit$feature_importance), "M2: Feature importance data frame generated")
 assert_equal(nrow(m_fit$feature_importance), length(pipe_res$feature_names), "M2: All features ranked in importance")
-assert_equal(length(pipe_res$feature_names), 26, "M2: Orthogonalized 26-feature continuous predictor set active")
-assert_true(all(c("Prox52WHigh", "IdioAlpha_20D", "RangeToCloseVol_20D", "LowerWickDemand_10D", "CMF_20D", "RS_60", "EfficiencyRatio_20D", "ATR_Comp_5v20", "VolumeExp_5v20", "UpDownVolRatio_20D", "NetWickDemand_10D", "LeftTailShock_20D") %in% pipe_res$feature_names), "M2: All 12 Stage-1/2/3 orthogonal alpha features present in feature_names")
+assert_equal(length(pipe_res$feature_names), 27, "M2: Orthogonalized 27-feature continuous predictor set active")
+assert_true(all(c("Prox52WHigh", "IdioAlpha_20D", "RangeToCloseVol_20D", "LowerWickDemand_10D", "CMF_20D", "RS_60", "EfficiencyRatio_20D", "ATR_Comp_5v20", "VolumeExp_5v20", "UpDownVolRatio_20D", "NetWickDemand_10D", "LeftTailShock_20D", "IntradayBreadthRatio_10D") %in% pipe_res$feature_names), "M2: All 13 Stage-1/2/3/Breadth orthogonal alpha features present in feature_names")
+assert_true(!is.null(pipe_res$latest_breadth_10d), "M2: latest_breadth_10d exposed for Breadth Conviction Sizing Multiplier")
 assert_true("StdBeta" %in% colnames(m_fit$feature_importance), "M2: Scale-invariant StdBeta column present in feature_importance")
 assert_true(!is.null(pipe_res$latest_trend_quality), "M2: latest_trend_quality exposed for Adaptive 20D Runner Horizon")
 assert_true(!is.null(pipe_res$latest_idio_alpha) && !is.null(pipe_res$latest_rs_60) && !is.null(pipe_res$latest_eff_ratio) && !is.null(pipe_res$latest_sortino_mom) && !is.null(pipe_res$latest_net_wick), "M2: latest_idio_alpha, latest_rs_60, latest_eff_ratio, latest_sortino_mom, and latest_net_wick exposed for Quality_Score & Sizing")
@@ -201,6 +209,53 @@ bt_event <- run_event_driven_backtest(
 )
 assert_true(!is.null(bt_event$equity_curve), "B3/L2: Event-driven backtest produces equity curve")
 assert_true(!is.null(bt_event$summary_table), "B3/L2: Event-driven backtest produces summary table")
+
+# ------------------------------------------------------------------------------
+# TEST GROUP 6: Clean Zero-Lookahead Discrete Portfolio Engine (R/09)
+# ------------------------------------------------------------------------------
+cat("\n[Group 6] Testing Clean Zero-Lookahead Discrete Portfolio Engine (R/09)...\n")
+source("R/09_portfolio_backtest_clean.R")
+
+clean_dates <- seq(as.Date("2024-01-01"), by = "day", length.out = 40)
+mock_stk <- list(
+  dates     = clean_dates,
+  open      = 100 + cumsum(rnorm(40)),
+  high      = 102 + cumsum(rnorm(40)),
+  low       = 98 + cumsum(rnorm(40)),
+  close     = 100 + cumsum(rnorm(40)),
+  atr       = rep(2.0, 40),
+  prob      = c(rep(0.50, 10), rep(0.70, 5), rep(0.50, 25)),
+  rs        = c(rep(0.00, 10), rep(0.05, 5), rep(0.00, 25)),
+  vol       = rep(0.25, 40),
+  atr_ext   = rep(1.0, 40),
+  sortino   = rep(1.0, 40),
+  eff_ratio = rep(0.5, 40),
+  net_wick  = rep(0.1, 40),
+  sector    = "Tech"
+)
+mock_stocks <- list(MOCK = mock_stk)
+mock_macro <- list(
+  spy_close = xts(450 + cumsum(rnorm(40)), order.by = clean_dates),
+  qqq_close = xts(380 + cumsum(rnorm(40)), order.by = clean_dates),
+  gld_close = xts(180 + cumsum(rnorm(40)), order.by = clean_dates),
+  rf_daily  = xts(rep(0.05 / 252, 40), order.by = clean_dates)
+)
+
+clean_res <- run_clean_portfolio_backtest(
+  stocks_list      = mock_stocks,
+  macro_data       = mock_macro,
+  eval_dates       = clean_dates,
+  initial_capital  = 10000,
+  max_positions    = 2,
+  max_per_sector   = 1,
+  leverage         = 1.5,
+  min_history_bars = 5
+)
+
+assert_true(!is.null(clean_res$equity_curve), "R09: Clean discrete engine produces equity curve")
+assert_true(length(clean_res$daily_returns) == 40, "R09: Exact daily return alignment (40 bars)")
+assert_true(all(clean_res$equity_curve > 0), "R09: Equity curve remains positive throughout")
+assert_true(!is.null(clean_res$trade_log), "R09: Detailed trade log produced")
 
 # ------------------------------------------------------------------------------
 # TEST SUMMARY

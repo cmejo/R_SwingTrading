@@ -1,0 +1,27 @@
+"Feature","Category","RetentionRatePct","ActiveEpochs","TotalEpochs","MeanStdBeta","MeanAbsWeight","MeanRelWeightPct","DominantDirection","BullishEpochs","BearishEpochs","ZeroEpochs"
+"CMF_20D","Microstructure_Demand",47.4,9,19,-0.00585,0.00585,18.32,"MIXED / ADAPTIVE",0,9,10
+"Prox52WHigh","Trend_Quality",31.6,6,19,0.00531,0.00531,10.84,"MIXED / ADAPTIVE",6,0,13
+"RS_60","Alpha_RelStrength",47.4,9,19,0.00455,0.00455,9.06,"MIXED / ADAPTIVE",9,0,10
+"GARCH_Vol","Macro_Volatility",26.3,5,19,0.01057,0.01057,8.1,"MIXED / ADAPTIVE",5,0,14
+"LowerWickDemand_10D","Microstructure_Demand",31.6,6,19,-0.00802,0.00802,6.86,"MIXED / ADAPTIVE",0,6,13
+"GARCH_VolPct","Macro_Volatility",26.3,5,19,0.00569,0.00569,6.63,"MIXED / ADAPTIVE",5,0,14
+"RangeToCloseVol_20D","Volatility_Squeeze",26.3,5,19,-0.00389,0.00389,5.59,"MIXED / ADAPTIVE",0,5,14
+"IntradayVsGap_10D","Microstructure_Demand",47.4,9,19,-0.00419,0.00419,5.12,"MIXED / ADAPTIVE",0,9,10
+"ATR_Comp_5v20","Volatility_Squeeze",15.8,3,19,0.00352,0.00352,3.24,"MIXED / ADAPTIVE",3,0,16
+"SlopeFast","Trend_Quality",15.8,3,19,-0.00242,0.00242,2.08,"MIXED / ADAPTIVE",0,3,16
+"VolumeExp_5v20","Alpha_RelStrength",26.3,5,19,-0.00302,0.00302,2.01,"MIXED / ADAPTIVE",0,5,14
+"SlopeSlow","Trend_Quality",15.8,3,19,0.00217,0.00217,1.61,"MIXED / ADAPTIVE",3,0,16
+"SqueezeRelease","Volatility_Squeeze",15.8,3,19,-0.00097,0.00097,1.19,"MIXED / ADAPTIVE",0,3,16
+"TrendQuality","Trend_Quality",5.3,1,19,-0.00077,0.00077,1.17,"MIXED / ADAPTIVE",0,1,18
+"MSGARCH_ProbHighVol","Macro_Volatility",10.5,2,19,-0.00095,0.00195,1.08,"MIXED / ADAPTIVE",1,1,17
+"NetWickDemand_10D","Microstructure_Demand",15.8,3,19,0.00111,0.00111,0.51,"MIXED / ADAPTIVE",3,0,16
+"VolSqueeze","Volatility_Squeeze",10.5,2,19,-0.00084,0.00084,0.34,"MIXED / ADAPTIVE",0,2,17
+"IdioAlpha_20D","Alpha_RelStrength",5.3,1,19,-0.00032,0.00032,0.29,"MIXED / ADAPTIVE",0,1,18
+"AsymVolRatio","Volatility_Squeeze",5.3,1,19,-0.00018,0.00018,0.16,"MIXED / ADAPTIVE",0,1,18
+"ZScore","Trend_Quality",5.3,1,19,0,0,0,"MIXED / ADAPTIVE",0,1,18
+"RS_20","Alpha_RelStrength",0,0,19,0,0,0,"NEUTRAL (Zero)",0,0,19
+"SectorSpread","Alpha_RelStrength",0,0,19,0,0,0,"NEUTRAL (Zero)",0,0,19
+"CLV_5D","Microstructure_Demand",0,0,19,0,0,0,"NEUTRAL (Zero)",0,0,19
+"EfficiencyRatio_20D","Trend_Quality",0,0,19,0,0,0,"NEUTRAL (Zero)",0,0,19
+"UpDownVolRatio_20D","Microstructure_Demand",0,0,19,0,0,0,"NEUTRAL (Zero)",0,0,19
+"LeftTailShock_20D","Volatility_Squeeze",0,0,19,0,0,0,"NEUTRAL (Zero)",0,0,19

@@ -26,6 +26,8 @@ source("R/03_volatility_garch.R")
 #'
 #' @param ohlcv xts object containing OHLCV price series.
 #' @param benchmark_ohlcv Optional xts object of benchmark OHLCV (e.g. SPY) for Relative Strength.
+#' @param sector_ohlcv Optional xts object of sector ETF OHLCV for sector momentum spread.
+#' @param breadth_series Optional xts object of 10-day smoothed intraday breadth ratio.
 #' @param fast_n Window length for fast lmMA trend (default: 20 for swing trading, or 50).
 #' @param slow_n Window length for slow lmMA trend (default: 50 for swing trading, or 200).
 #' @param look_ahead Forward prediction horizon in days (default: 7 days for swing trading).
@@ -40,6 +42,7 @@ source("R/03_volatility_garch.R")
 build_feature_dataset <- function(ohlcv, 
                                   benchmark_ohlcv = NULL,
                                   sector_ohlcv = NULL,
+                                  breadth_series = NULL,
                                   fast_n = 20, 
                                   slow_n = 50, 
                                   look_ahead = 7,
@@ -512,6 +515,45 @@ build_feature_dataset <- function(ohlcv,
   colnames(feat_sortino_20)  <- "SortinoMom_20D"
   colnames(feat_tail_shk_20) <- "LeftTailShock_20D"
 
+  # 6m. Intraday Breadth Ratio (10D Smoothed Market / Tech Net Advance-Decline Momentum)
+  feat_breadth_10d <- xts(rep(0.0, nrow(price)), order.by = index(price))
+  tryCatch({
+    if (!is.null(breadth_series)) {
+      m_br <- merge(price, breadth_series)
+      m_br <- na.locf(na.locf(m_br, na.rm = FALSE), fromLast = TRUE)
+      br_aligned <- as.numeric(m_br[index(price), 2])
+      br_aligned[is.na(br_aligned)] <- 0.0
+      feat_breadth_10d <- xts(pmin(pmax(br_aligned, -1.0), 1.0), order.by = index(price))
+    } else if (file.exists("data/intraday_breadth_10d.rds")) {
+      b_cached <- readRDS("data/intraday_breadth_10d.rds")
+      m_br <- merge(price, b_cached)
+      m_br <- na.locf(na.locf(m_br, na.rm = FALSE), fromLast = TRUE)
+      br_aligned <- as.numeric(m_br[index(price), 2])
+      br_aligned[is.na(br_aligned)] <- 0.0
+      feat_breadth_10d <- xts(pmin(pmax(br_aligned, -1.0), 1.0), order.by = index(price))
+    } else if (!is.null(benchmark_ohlcv)) {
+      b_op <- as.numeric(Op(benchmark_ohlcv))
+      b_cl <- as.numeric(Cl(benchmark_ohlcv))
+      b_sign <- ifelse(b_cl > b_op, 1, ifelse(b_cl < b_op, -1, 0))
+      b_10d <- as.numeric(TTR::runMean(b_sign, n = 10))
+      b_10d[is.na(b_10d)] <- 0.0
+      m_br <- merge(price, xts(b_10d, order.by = index(benchmark_ohlcv)))
+      m_br <- na.locf(na.locf(m_br, na.rm = FALSE), fromLast = TRUE)
+      br_aligned <- as.numeric(m_br[index(price), 2])
+      br_aligned[is.na(br_aligned)] <- 0.0
+      feat_breadth_10d <- xts(pmin(pmax(br_aligned, -1.0), 1.0), order.by = index(price))
+    } else {
+      # Single-asset intraday advance/decline momentum fallback
+      op_v <- as.numeric(Op(ohlcv))
+      cl_v <- as.numeric(price)
+      s_sign <- ifelse(cl_v > op_v, 1, ifelse(cl_v < op_v, -1, 0))
+      s_10d <- as.numeric(TTR::runMean(s_sign, n = 10))
+      s_10d[is.na(s_10d)] <- 0.0
+      feat_breadth_10d <- xts(pmin(pmax(s_10d, -1.0), 1.0), order.by = index(price))
+    }
+  }, error = function(e) NULL)
+  colnames(feat_breadth_10d) <- "IntradayBreadthRatio_10D"
+
   # 7. Forward Target & Path-Dependent Triple-Barrier Label (Look-Ahead k Days)
   # Upper Profit Barrier: +1.5R (+3.0 * sigma_daily)
   # Lower Stop Barrier:   -1.0R (-2.0 * sigma_daily)
@@ -612,23 +654,26 @@ build_feature_dataset <- function(ohlcv,
     VolumeExp_5v20      = feat_vol_5v20,
     UpDownVolRatio_20D  = feat_ud_vol_20,
     SortinoMom_20D      = feat_sortino_20,
-    LeftTailShock_20D   = feat_tail_shk_20
+    LeftTailShock_20D   = feat_tail_shk_20,
+    IntradayBreadthRatio_10D = feat_breadth_10d
   )
   
-  # Orthogonalized 26-Feature Continuous Predictor Set for ElasticNet:
+  # Orthogonalized 27-Feature Continuous Predictor Set for ElasticNet:
   # Prunes collinear duplicates (SlopeWeeklyPct, ATRExt, BB_PctB, GARCH_Shock, DistPct, RSI_14, MACD_Hist),
   # noisy 1-day/cumulative volume outliers (VolumeRatio, OBV_Slope), and step-function flags.
   # Weakness 1 Resolution: Replaces collinear SortinoMom_20D in the GLM with NetWickDemand_10D
   # (net institutional shadow demand absorption, r < 0.22 vs r = 0.87 collinear cluster),
   # while SortinoMom_20D remains unconstrained in the Quality_Score ranker and Ralph Vince sizing engine.
   # Weakness 2 Resolution: Non-linearly normalized SlopeSlow and RS_60 penalize parabolic overextensions > 3.0x ATR.
+  # Feature 27: IntradayBreadthRatio_10D provides orthogonal market-wide intraday advance-decline momentum.
   feature_names <- c("SlopeFast", "SlopeSlow", "TrendQuality",
                      "ZScore", "GARCH_Vol", "GARCH_VolPct", "MSGARCH_ProbHighVol",
                      "RS_20", "SectorSpread", "AsymVolRatio",
                      "VolSqueeze", "SqueezeRelease", "CLV_5D", "IntradayVsGap_10D",
                      "Prox52WHigh", "IdioAlpha_20D", "RangeToCloseVol_20D", "LowerWickDemand_10D",
                      "CMF_20D", "RS_60", "EfficiencyRatio_20D",
-                     "ATR_Comp_5v20", "VolumeExp_5v20", "UpDownVolRatio_20D", "NetWickDemand_10D", "LeftTailShock_20D")
+                     "ATR_Comp_5v20", "VolumeExp_5v20", "UpDownVolRatio_20D", "NetWickDemand_10D", "LeftTailShock_20D",
+                     "IntradayBreadthRatio_10D")
   
   # Clean warm-up NAs across features
   clean_feats_xts <- na.omit(features_xts)
@@ -698,7 +743,8 @@ build_feature_dataset <- function(ohlcv,
     VolumeExp_5v20      = as.numeric(clean_model_xts[, "VolumeExp_5v20"]),
     UpDownVolRatio_20D  = as.numeric(clean_model_xts[, "UpDownVolRatio_20D"]),
     SortinoMom_20D      = as.numeric(clean_model_xts[, "SortinoMom_20D"]),
-    LeftTailShock_20D   = as.numeric(clean_model_xts[, "LeftTailShock_20D"])
+    LeftTailShock_20D   = as.numeric(clean_model_xts[, "LeftTailShock_20D"]),
+    IntradayBreadthRatio_10D = as.numeric(clean_model_xts[, "IntradayBreadthRatio_10D"])
   )
   
   cat(sprintf("[Pipeline] Complete. Result: %d valid observation rows across %d features.\n",
@@ -736,6 +782,7 @@ build_feature_dataset <- function(ohlcv,
     latest_atr_ext          = as.numeric(tail(feat_atr_ext, 1)),
     latest_sector_spread    = as.numeric(tail(feat_sector_spread, 1)),
     latest_asym_vol         = as.numeric(tail(feat_asym_vol, 1)),
+    latest_breadth_10d      = as.numeric(tail(feat_breadth_10d, 1)),
     feature_names           = feature_names,
     features_xts            = clean_feats_xts,
     garch_out               = if (use_garch) garch_out else NULL

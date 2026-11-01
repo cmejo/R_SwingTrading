@@ -1,0 +1,8 @@
+"Feature_Config","Terminal_Wealth","CAGR","Max_Drawdown","Sharpe_Ratio","Sortino_Ratio","Calmar_Ratio","Annual_Vol","Win_Rate","Total_Trades","Margin_Paid"
+"1. Baseline Clean (3 Slots, 1.0x Cash, Unhedged)","$40,638.62","+15.05%","-79.05%","0.53","0.80","0.19","62.18%","58.2%",1252,"$1349.50"
+"2. Diversified (5 Slots, 1.0x Cash, Unhedged)","$42,740.61","+15.63%","-75.90%","0.54","0.79","0.21","50.83%","58.3%",2057,"$937.06"
+"3. Diversified (6 Slots, 1.0x Cash, Unhedged)","$60,796.78","+19.78%","-68.71%","0.62","0.91","0.29","47.60%","59.0%",2458,"$1037.43"
+"4. Diversified (5 Slots + Smart Dual-Bear, 1.0x Cash)","$57,430.08","+19.10%","-74.29%","0.60","0.89","0.26","50.28%","58.3%",2057,"$1183.93"
+"5. Diversified (5 Slots + Smart Dual-Bear, 1.25x Lev)","$42,032.23","+15.44%","-83.38%","0.54","0.80","0.19","63.12%","58.3%",2057,"$2534.21"
+"6. Diversified (5 Slots + Dual-Bear + DD Cushion 1.0x)","$22,495.06","+8.44%","-44.37%","0.43","0.62","0.19","28.60%","58.3%",2057,"$64.20"
+"7. Diversified (5 Slots + Dual-Bear + DD Cushion 1.25x)","$24,050.38","+9.17%","-52.22%","0.43","0.62","0.18","33.70%","58.3%",2057,"$188.74"

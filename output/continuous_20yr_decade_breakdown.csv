@@ -1,0 +1,5 @@
+"Strategy_Benchmark","Decade1_CAGR","Decade1_MaxDD","Decade1_Sharpe","Decade2_CAGR","Decade2_MaxDD","Decade2_Sharpe"
+"Flagship (5-Slots + Hedge)","-0.42%","-48.97%","0.09","+13.21%","-41.93%","0.58"
+"Clean (3-Slots + Hedge)","-4.86%","-62.71%","-0.04","+9.04%","-44.72%","0.42"
+"QQQ (100% Nasdaq)","+11.32%","-53.55%","0.57","+20.43%","-35.62%","0.90"
+"SPY (100% S&P 500)","+4.94%","-56.47%","0.30","+13.70%","-34.10%","0.76"

@@ -1,0 +1,578 @@
+{
+  "1995-01-01": {
+    "start_date": "1995-01-01",
+    "end_date": "2026-10-23",
+    "trading_days": 8006,
+    "calendar_years": 31.8,
+    "current": {
+      "gross": {
+        "wealth": 391444873706174.81,
+        "m": {
+          "cagr": 116.8113,
+          "cum_ret": 4756316812854.7559,
+          "max_dd": 48.0351,
+          "sharpe": 2.4187,
+          "sortino": 3.9249,
+          "calmar": 2.4318,
+          "ann_vol": 34.4915,
+          "win_pct": 56.7449
+        }
+      },
+      "tts": {
+        "wealth": 2488370309011.5498,
+        "m": {
+          "cagr": 84.8996,
+          "cum_ret": 30235362099.4111,
+          "max_dd": 53.6411,
+          "sharpe": 1.8209,
+          "sortino": 2.6342,
+          "calmar": 1.5827,
+          "ann_vol": 37.7838,
+          "win_pct": 56.5326
+        }
+      },
+      "nyc": {
+        "wealth": 19931945127.5986,
+        "m": {
+          "cagr": 58.8364,
+          "cum_ret": 242186353.5553,
+          "max_dd": 61.1349,
+          "sharpe": 1.2906,
+          "sortino": 1.645,
+          "calmar": 0.9624,
+          "ann_vol": 44.2087,
+          "win_pct": 56.5326
+        }
+      }
+    },
+    "baseline": {
+      "gross": {
+        "wealth": 52383044169015.477,
+        "m": {
+          "cagr": 103.511,
+          "cum_ret": 636488993448.1805,
+          "max_dd": 32.4318,
+          "sharpe": 2.6024,
+          "sortino": 4.3114,
+          "calmar": 3.1916,
+          "ann_vol": 28.9447,
+          "win_pct": 56.1829
+        }
+      },
+      "tts": {
+        "wealth": 503967483712.9802,
+        "m": {
+          "cagr": 75.8356,
+          "cum_ret": 6123541621.9074,
+          "max_dd": 39.6239,
+          "sharpe": 1.9103,
+          "sortino": 2.7379,
+          "calmar": 1.9139,
+          "ann_vol": 32.3841,
+          "win_pct": 55.9705
+        }
+      },
+      "nyc": {
+        "wealth": 6084550822.8468,
+        "m": {
+          "cagr": 53.0134,
+          "cum_ret": 73931258.7223,
+          "max_dd": 52.3552,
+          "sharpe": 1.3108,
+          "sortino": 1.636,
+          "calmar": 1.0126,
+          "ann_vol": 38.9505,
+          "win_pct": 55.9705
+        }
+      }
+    },
+    "qqq": {
+      "gross": {
+        "wealth": 567701.7768,
+        "m": {
+          "cagr": 14.2553,
+          "cum_ret": 6797.956,
+          "max_dd": 82.9639,
+          "sharpe": 0.63,
+          "sortino": 0.9082,
+          "calmar": 0.1718,
+          "ann_vol": 26.8918,
+          "win_pct": 54.8444
+        }
+      },
+      "nyc": {
+        "wealth": 349610.0762,
+        "m": {
+          "cagr": 12.5251,
+          "cum_ret": 4147.9961,
+          "max_dd": 83.0666,
+          "sharpe": 0.568,
+          "sortino": 0.7987,
+          "calmar": 0.1508,
+          "ann_vol": 27.5461,
+          "win_pct": 54.5841
+        }
+      }
+    },
+    "vti": {
+      "gross": {
+        "wealth": 143914.1548,
+        "m": {
+          "cagr": 9.4248,
+          "cum_ret": 1648.6532,
+          "max_dd": 56.6532,
+          "sharpe": 0.5737,
+          "sortino": 0.8115,
+          "calmar": 0.1664,
+          "ann_vol": 18.7776,
+          "win_pct": 54.2367
+        }
+      },
+      "nyc": {
+        "wealth": {},
+        "m": {
+          "cagr": 7.5628,
+          "cum_ret": 913.668,
+          "max_dd": 56.9652,
+          "sharpe": 0.4721,
+          "sortino": 0.6406,
+          "calmar": 0.1328,
+          "ann_vol": 19.6267,
+          "win_pct": 54.047
+        }
+      }
+    }
+  },
+  "1999-01-01": {
+    "start_date": "1999-01-01",
+    "end_date": "2026-10-23",
+    "trading_days": 6995,
+    "calendar_years": 27.8,
+    "current": {
+      "gross": {
+        "wealth": 15290354330965.416,
+        "m": {
+          "cagr": 115.7363,
+          "cum_ret": 185788023362.52,
+          "max_dd": 48.0351,
+          "sharpe": 2.4088,
+          "sortino": 3.9318,
+          "calmar": 2.4094,
+          "ann_vol": 34.4126,
+          "win_pct": 56.7548
+        }
+      },
+      "tts": {
+        "wealth": 188634088462.3505,
+        "m": {
+          "cagr": 84.1439,
+          "cum_ret": 2292030136.4806,
+          "max_dd": 53.6411,
+          "sharpe": 1.8112,
+          "sortino": 2.6265,
+          "calmar": 1.5686,
+          "ann_vol": 37.7501,
+          "win_pct": 56.569
+        }
+      },
+      "nyc": {
+        "wealth": 2850760814.4907,
+        "m": {
+          "cagr": 58.3313,
+          "cum_ret": 34638549.0218,
+          "max_dd": 61.1349,
+          "sharpe": 1.2843,
+          "sortino": 1.6394,
+          "calmar": 0.9541,
+          "ann_vol": 44.1602,
+          "win_pct": 56.569
+        }
+      }
+    },
+    "baseline": {
+      "gross": {
+        "wealth": 5548991021220.6582,
+        "m": {
+          "cagr": 108.0006,
+          "cum_ret": 67423949125.038,
+          "max_dd": 32.4318,
+          "sharpe": 2.6746,
+          "sortino": 4.4692,
+          "calmar": 3.3301,
+          "ann_vol": 28.9851,
+          "win_pct": 56.426
+        }
+      },
+      "tts": {
+        "wealth": 89046573006.0163,
+        "m": {
+          "cagr": 79.2309,
+          "cum_ret": 1081975270.6685,
+          "max_dd": 39.6239,
+          "sharpe": 1.959,
+          "sortino": 2.8074,
+          "calmar": 1.9996,
+          "ann_vol": 32.5987,
+          "win_pct": 56.2402
+        }
+      },
+      "nyc": {
+        "wealth": 1717311424.6738,
+        "m": {
+          "cagr": 55.4666,
+          "cum_ret": 20866381.4663,
+          "max_dd": 52.3552,
+          "sharpe": 1.3429,
+          "sortino": 1.6718,
+          "calmar": 1.0594,
+          "ann_vol": 39.3878,
+          "win_pct": 56.2402
+        }
+      }
+    },
+    "qqq": {
+      "gross": {
+        "wealth": 126007.5853,
+        "m": {
+          "cagr": 10.3292,
+          "cum_ret": 1431.0764,
+          "max_dd": 82.9639,
+          "sharpe": 0.4991,
+          "sortino": 0.7169,
+          "calmar": 0.1245,
+          "ann_vol": 26.9694,
+          "win_pct": 54.6644
+        }
+      },
+      "nyc": {
+        "wealth": 80522.9741,
+        "m": {
+          "cagr": 8.5636,
+          "cum_ret": 878.4079,
+          "max_dd": 83.0666,
+          "sharpe": 0.4371,
+          "sortino": 0.6124,
+          "calmar": 0.1031,
+          "ann_vol": 27.6357,
+          "win_pct": 54.3674
+        }
+      }
+    },
+    "vti": {
+      "gross": {
+        "wealth": 54334.6389,
+        "m": {
+          "cagr": 7.0359,
+          "cum_ret": 560.2022,
+          "max_dd": 56.6532,
+          "sharpe": 0.4501,
+          "sortino": 0.6348,
+          "calmar": 0.1242,
+          "ann_vol": 19.2132,
+          "win_pct": 53.94
+        }
+      },
+      "nyc": {
+        "wealth": {},
+        "m": {
+          "cagr": 5.2293,
+          "cum_ret": 311.5956,
+          "max_dd": 56.9652,
+          "sharpe": 0.3571,
+          "sortino": 0.4858,
+          "calmar": 0.0918,
+          "ann_vol": 19.9621,
+          "win_pct": 53.7241
+        }
+      }
+    }
+  },
+  "2005-01-01": {
+    "start_date": "2005-01-01",
+    "end_date": "2026-10-23",
+    "trading_days": 5487,
+    "calendar_years": 21.8,
+    "current": {
+      "gross": {
+        "wealth": 79943258883.0575,
+        "m": {
+          "cagr": 109.3667,
+          "cum_ret": 971363920.4503,
+          "max_dd": 48.0351,
+          "sharpe": 2.3642,
+          "sortino": 3.817,
+          "calmar": 2.2768,
+          "ann_vol": 33.6879,
+          "win_pct": 56.8799
+        }
+      },
+      "tts": {
+        "wealth": 2685086291.7146,
+        "m": {
+          "cagr": 79.1512,
+          "cum_ret": 32625492.8519,
+          "max_dd": 53.6411,
+          "sharpe": 1.7673,
+          "sortino": 2.5443,
+          "calmar": 1.4756,
+          "ann_vol": 36.9539,
+          "win_pct": 56.6976
+        }
+      },
+      "nyc": {
+        "wealth": 107713401.8946,
+        "m": {
+          "cagr": 54.5519,
+          "cum_ret": 1308689.8165,
+          "max_dd": 61.1349,
+          "sharpe": 1.2439,
+          "sortino": 1.5806,
+          "calmar": 0.8923,
+          "ann_vol": 43.2537,
+          "win_pct": 56.6976
+        }
+      }
+    },
+    "baseline": {
+      "gross": {
+        "wealth": 61932175580.308,
+        "m": {
+          "cagr": 106.9264,
+          "cum_ret": 752517221.7534,
+          "max_dd": 32.4318,
+          "sharpe": 2.6625,
+          "sortino": 4.439,
+          "calmar": 3.297,
+          "ann_vol": 28.9143,
+          "win_pct": 56.4607
+        }
+      },
+      "tts": {
+        "wealth": 2464558510.8928,
+        "m": {
+          "cagr": 78.4475,
+          "cum_ret": 29945932.9392,
+          "max_dd": 39.6239,
+          "sharpe": 1.9493,
+          "sortino": 2.7888,
+          "calmar": 1.9798,
+          "ann_vol": 32.5249,
+          "win_pct": 56.2785
+        }
+      },
+      "nyc": {
+        "wealth": 113561746.2909,
+        "m": {
+          "cagr": 54.9277,
+          "cum_ret": 1379751.1092,
+          "max_dd": 52.3552,
+          "sharpe": 1.3367,
+          "sortino": 1.6633,
+          "calmar": 1.0491,
+          "ann_vol": 39.2705,
+          "win_pct": 56.2785
+        }
+      }
+    },
+    "qqq": {
+      "gross": {
+        "wealth": 145220.7532,
+        "m": {
+          "cagr": 14.0916,
+          "cum_ret": 1664.5292,
+          "max_dd": 53.5526,
+          "sharpe": 0.7185,
+          "sortino": 1.0228,
+          "calmar": 0.2631,
+          "ann_vol": 21.6041,
+          "win_pct": 55.3562
+        }
+      },
+      "nyc": {
+        "wealth": 93662.0186,
+        "m": {
+          "cagr": 11.8166,
+          "cum_ret": 1038.0561,
+          "max_dd": 53.6703,
+          "sharpe": 0.6091,
+          "sortino": 0.8287,
+          "calmar": 0.2202,
+          "ann_vol": 22.675,
+          "win_pct": 55.0939
+        }
+      }
+    },
+    "vti": {
+      "gross": {
+        "wealth": 52009.6959,
+        "m": {
+          "cagr": 8.8361,
+          "cum_ret": 531.9526,
+          "max_dd": 56.6532,
+          "sharpe": 0.5395,
+          "sortino": 0.7559,
+          "calmar": 0.156,
+          "ann_vol": 19.0767,
+          "win_pct": 54.6769
+        }
+      },
+      "nyc": {
+        "wealth": {},
+        "m": {
+          "cagr": 6.6549,
+          "cum_ret": 306.6748,
+          "max_dd": 56.9652,
+          "sharpe": 0.4243,
+          "sortino": 0.5692,
+          "calmar": 0.1168,
+          "ann_vol": 20.0284,
+          "win_pct": 54.4378
+        }
+      }
+    }
+  },
+  "2010-01-01": {
+    "start_date": "2010-01-01",
+    "end_date": "2026-10-23",
+    "trading_days": 4228,
+    "calendar_years": 16.8,
+    "current": {
+      "gross": {
+        "wealth": 5411427485.6888,
+        "m": {
+          "cagr": 122.2097,
+          "cum_ret": 65752360.3364,
+          "max_dd": 27.7216,
+          "sharpe": 2.4804,
+          "sortino": 4.0208,
+          "calmar": 4.4085,
+          "ann_vol": 34.6484,
+          "win_pct": 56.8354
+        }
+      },
+      "tts": {
+        "wealth": 328858586.9321,
+        "m": {
+          "cagr": 88.0477,
+          "cum_ret": 3995751.6031,
+          "max_dd": 27.7216,
+          "sharpe": 1.8536,
+          "sortino": 2.6704,
+          "calmar": 3.1761,
+          "ann_vol": 38.0908,
+          "win_pct": 56.6462
+        }
+      },
+      "nyc": {
+        "wealth": 22910809.2503,
+        "m": {
+          "cagr": 60.4389,
+          "cum_ret": 278281.6434,
+          "max_dd": 40.0292,
+          "sharpe": 1.3032,
+          "sortino": 1.6536,
+          "calmar": 1.5099,
+          "ann_vol": 44.7331,
+          "win_pct": 56.6462
+        }
+      }
+    },
+    "baseline": {
+      "gross": {
+        "wealth": 5414467400.8207,
+        "m": {
+          "cagr": 122.2171,
+          "cum_ret": 65789297.3368,
+          "max_dd": 32.4318,
+          "sharpe": 2.8603,
+          "sortino": 4.8295,
+          "calmar": 3.7684,
+          "ann_vol": 29.4699,
+          "win_pct": 56.8354
+        }
+      },
+      "tts": {
+        "wealth": 369649150.0006,
+        "m": {
+          "cagr": 89.3628,
+          "cum_ret": 4491384.2041,
+          "max_dd": 39.6239,
+          "sharpe": 2.0864,
+          "sortino": 2.9862,
+          "calmar": 2.2553,
+          "ann_vol": 33.386,
+          "win_pct": 56.6225
+        }
+      },
+      "nyc": {
+        "wealth": 28096536.0344,
+        "m": {
+          "cagr": 62.4019,
+          "cum_ret": 341291.6894,
+          "max_dd": 52.3552,
+          "sharpe": 1.4252,
+          "sortino": 1.7669,
+          "calmar": 1.1919,
+          "ann_vol": 40.6276,
+          "win_pct": 56.6225
+        }
+      }
+    },
+    "qqq": {
+      "gross": {
+        "wealth": 126715.0208,
+        "m": {
+          "cagr": 17.6993,
+          "cum_ret": 1439.6722,
+          "max_dd": 35.6172,
+          "sharpe": 0.8929,
+          "sortino": 1.2701,
+          "calmar": 0.4969,
+          "ann_vol": 20.6473,
+          "win_pct": 55.7455
+        }
+      },
+      "nyc": {
+        "wealth": 83035.2366,
+        "m": {
+          "cagr": 14.7712,
+          "cum_ret": 908.9336,
+          "max_dd": 36.7641,
+          "sharpe": 0.7389,
+          "sortino": 0.99,
+          "calmar": 0.4018,
+          "ann_vol": 22.065,
+          "win_pct": 55.5345
+        }
+      }
+    },
+    "vti": {
+      "gross": {
+        "wealth": 54459.3301,
+        "m": {
+          "cagr": 11.9217,
+          "cum_ret": 561.7173,
+          "max_dd": 35.0003,
+          "sharpe": 0.7334,
+          "sortino": 1.0279,
+          "calmar": 0.3406,
+          "ann_vol": 17.4389,
+          "win_pct": 54.7766
+        }
+      },
+      "nyc": {
+        "wealth": {},
+        "m": {
+          "cagr": 9.1479,
+          "cum_ret": 334.3225,
+          "max_dd": 35.0312,
+          "sharpe": 0.5629,
+          "sortino": 0.74,
+          "calmar": 0.2611,
+          "ann_vol": 18.8113,
+          "win_pct": 54.5175
+        }
+      }
+    }
+  }
+}

@@ -1,8 +1,8 @@
 {
-  "total_capital": 8230,
-  "cash_balance": 8230,
+  "total_capital": 10000,
+  "cash_balance": 10000,
   "max_positions": 5,
-  "last_updated": "2026-10-27 14:15:23.432052",
+  "last_updated": "2026-10-31 19:59:54.22467",
   "positions": [],
   "closed_trades": [
     {
@@ -101,16 +101,13 @@
       "reason": "SCHWAB_SYNC_CLOSED"
     }
   ],
-  "peak_equity": 8230,
+  "peak_equity": 10000,
   "hedge_positions": [],
   "hedge_state": {
-    "regime": "DUAL_BEAR_HEDGE",
-    "entry_date": "2026-10-25",
-    "days_held": 3,
-    "entry_fngd_px": 28.15,
-    "entry_sqqq_px": 39.68,
-    "peak_ratio": 1,
-    "rotated_to_sgov": false,
-    "rotation_reason": ""
+    "regime": "DEFENSIVE_SGOV",
+    "entry_date": "2026-10-31",
+    "days_held": 0,
+    "rotated_to_sgov": true,
+    "rotation_reason": "Capital Preservation: Inverse hedge disabled; parked in risk-free SGOV"
   }
 }

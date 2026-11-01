@@ -1,0 +1,4 @@
+"Candidate_Feature","Type","Gate1_Statistical","Gate2_Orthogonality","Gate3_Stability","Gate4_ModelAdopt","Final_Verdict"
+"Synthetic_Gaussian_Noise","Pure Random Noise","FAIL","PASS","FAIL","FAIL","REJECT (Noise)"
+"SlopeWeeklyPct","Collinear Redundant","PASS","FAIL","FAIL","PASS","REJECT (Collinear)"
+"IntradayVsGap_10D","Genuine Microstructure Alpha","PASS","PASS","FAIL","PASS","ACCEPT (Alpha Driver)"

@@ -14,6 +14,17 @@
 # ==============================================================================
 
 set -e
+
+# ==============================================================================
+# CANCELLED / DEPRECATED SAFEGUARD
+# ==============================================================================
+echo "=========================================================================================="
+echo " [NOTICE] auto_trade_schwab.sh HAS BEEN CANCELLED AND DEPRECATED."
+echo " The daily swing trading engine has been superseded by the Triple-Engine 30/70 model."
+echo " To run the active 30/70 model, execute: ./run_coresat_30_70.sh or Rscript core_satellite_signal.R"
+echo "=========================================================================================="
+exit 0
+
 export PATH="$HOME/.pyenv/shims:/opt/homebrew/Caskroom/miniforge/base/bin:$HOME/miniforge3/bin:$PATH:/opt/homebrew/bin:/usr/local/bin"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -1,0 +1,6 @@
+"Step_Configuration","CAGR_Pct","MaxDD_Pct","Sharpe","Sortino","Calmar","Trades","WinRate_Pct","AvgTrade_Pct","ProfitFactor"
+"1. Original 19-Feature Baseline (With UNH, 162 syms)",1.9,-71.08,0.15,0.21,0.03,910,51.76,0.27,1.08
+"2. Prior 26-Feature Model (With UNH, 162 syms)",2.29,-76.58,0.16,0.23,0.03,902,52.33,0.25,1.07
+"3. Prior 26-Feature Model (UNH Removed, 161 syms)",2.29,-76.58,0.16,0.23,0.03,902,52.33,0.25,1.07
+"4. + 4 Orthogonal Features & Pruned Collinear (161 syms)",0.23,-72.19,0.1,0.14,0,908,52.42,0.18,1.05
+"5. LATEST Full Upgrade (+ 20D Adaptive Runner + Quality Ranker)",-0.46,-67.68,0.07,0.11,-0.01,852,51.64,0.15,1.05

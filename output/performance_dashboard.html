@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quantitative Swing Strategy — Live Performance Dashboard</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --green: #10b981;
+      --red: #ef4444;
+      --border: #334155;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 1.5rem;
+    }
+    .container {
+      max-width: 1350px;
+      margin: 0 auto;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .header h1 {
+      font-size: 1.6rem;
+      margin: 0;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+    }
+    .badge {
+      background: #065f46;
+      color: #6ee7b7;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .grid-kpi {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.2rem;
+    }
+    .card-title {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.4rem;
+    }
+    .card-val {
+      font-size: 1.7rem;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    .card-sub {
+      font-size: 0.85rem;
+      margin-top: 0.3rem;
+    }
+    .chart-container {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      text-align: center;
+    }
+    .chart-container img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      text-align: left;
+    }
+    th {
+      background: #0f172a;
+      color: var(--text-muted);
+      padding: 0.75rem 1rem;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    .table-container {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow-x: auto;
+      margin-bottom: 1.5rem;
+    }
+    .table-title {
+      padding: 1rem 1.2rem;
+      font-size: 1.1rem;
+      font-weight: 700;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div>
+        <h1>📈 QUANTITATIVE SWING SYSTEM DASHBOARD</h1>
+        <div style="color:var(--text-muted); font-size:0.85rem; margin-top:4px;">
+          Engine: Ralph Vince Leverage Space (8% Heat Budget) | Margin: 1.5x | Synced with Charles Schwab
+        </div>
+      </div>
+      <div>
+        <span class="badge">● SYSTEM ACTIVE</span>
+      </div>
+    </div>
+
+    <!-- Top KPI Cards -->
+    <div class="grid-kpi">
+      <div class="card">
+        <div class="card-title">Total Account Value</div>
+        <div class="card-val">$17,849.46</div>
+        <div class="card-sub" style="color: var(--green);">
+          +78.49% Cumulative Return
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Cash & Purchasing Power</div>
+        <div class="card-val">$8,230.00</div>
+        <div class="card-sub" style="color: var(--text-muted);">
+          1.5x Margin Power: $12,345.00
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Win Rate & Expectancy</div>
+        <div class="card-val">0.0%</div>
+        <div class="card-sub" style="color: var(--red);">
+          Profit Factor: 0.00 | Exp: $-132.55
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Peak & Drawdown</div>
+        <div class="card-val">116.88%</div>
+        <div class="card-sub" style="color: var(--text-muted);">
+          Peak: $8,230.00 (Max DD: -20.75%)
+        </div>
+      </div>
+    </div>
+
+    <!-- Chart Panel -->
+    <div class="chart-container"><img src="performance_dashboard.png" alt="Performance Dashboard Chart"></div>
+
+    <!-- Active Positions Table -->
+    <div class="table-container">
+      <div class="table-title">
+        <span>Active Portfolio Holdings (1 Swings + 1 Hedge)</span>
+        <span style="font-size:0.85rem; color:var(--text-muted);">Protected by 2.0x ATR GTC Brackets</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Shares</th>
+            <th>Entry Price</th>
+            <th>Current Price</th>
+            <th>Market Value</th>
+            <th>Hard Stop</th>
+            <th>Profit Targets (T1 / T2)</th>
+            <th>Unrealized P&L</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+            <tr>
+              <td><strong>UNH</strong><span style='background:#1e3a8a; color:#93c5fd; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:600; margin-left:6px;'>SWING</span></td>
+              <td>22.000</td>
+              <td>$408.91</td>
+              <td>$410.39</td>
+              <td>$9028.58</td>
+              <td>$393.34</td>
+              <td>$433.67 / $457.87</td>
+              <td style='color:#10b981; font-weight:bold;'>+32.61 (+0.36%)</td>
+            </tr>
+            
+            <tr>
+              <td><strong>SQQQ</strong><span style='background:#7c2d12; color:#fed7aa; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:600; margin-left:6px;'>HEDGE</span></td>
+              <td>16.000</td>
+              <td>$36.26</td>
+              <td>$36.93</td>
+              <td>$590.88</td>
+              <td>15-Day / -10%</td>
+              <td>Regime Rotation</td>
+              <td style='color:#10b981; font-weight:bold;'>+10.80 (+1.86%)</td>
+            </tr>
+            
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Closed Trades History -->
+    <div class="table-container">
+      <div class="table-title">
+        <span>Closed Trade Journal (4 Completed)</span>
+        <span style="font-size:0.85rem; color:var(--text-muted);">Realized P&L: $-530.20</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Shares</th>
+            <th>Entry</th>
+            <th>Exit</th>
+            <th>Realized P&L</th>
+            <th>Exit Reason</th>
+            <th>Exit Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+            <tr>
+              <td><strong>XLK</strong></td>
+              <td>65</td>
+              <td>$190.37</td>
+              <td>$187.81</td>
+              <td style='color:#ef4444; font-weight:bold;'>$-166.04 (-1.34%)</td>
+              <td><span style='background:#f1f5f9; padding:2px 8px; border-radius:4px; font-size:12px;'>SCHWAB_SYNC_CLOSED</span></td>
+              <td>2026-10-15</td>
+            </tr>
+            
+            <tr>
+              <td><strong>PENG</strong></td>
+              <td>7</td>
+              <td>$72.50</td>
+              <td>$59.88</td>
+              <td style='color:#ef4444; font-weight:bold;'>$-88.38 (-17.41%)</td>
+              <td><span style='background:#f1f5f9; padding:2px 8px; border-radius:4px; font-size:12px;'>SCHWAB_SYNC_CLOSED</span></td>
+              <td>2026-10-15</td>
+            </tr>
+            
+            <tr>
+              <td><strong>PANW</strong></td>
+              <td>9</td>
+              <td>$403.69</td>
+              <td>$379.13</td>
+              <td style='color:#ef4444; font-weight:bold;'>$-221.00 (-6.08%)</td>
+              <td><span style='background:#f1f5f9; padding:2px 8px; border-radius:4px; font-size:12px;'>SCHWAB_SYNC_CLOSED</span></td>
+              <td>2026-10-14</td>
+            </tr>
+            
+            <tr>
+              <td><strong>QQQ</strong></td>
+              <td>3</td>
+              <td>$754.01</td>
+              <td>$735.75</td>
+              <td style='color:#ef4444; font-weight:bold;'>$-54.78 (-2.42%)</td>
+              <td><span style='background:#f1f5f9; padding:2px 8px; border-radius:4px; font-size:12px;'>SCHWAB_SYNC_CLOSED</span></td>
+              <td>2026-10-14</td>
+            </tr>
+            
+        </tbody>
+      </table>
+    </div>
+
+    <div style="text-align:center; color:var(--text-muted); font-size:0.8rem; margin:2rem 0;">
+      Dashboard Generated: 2026-10-28 03:28:27 ET • Multi-Asset Machine Learning Swing Engine
+    </div>
+  </div>
+</body>
+</html>

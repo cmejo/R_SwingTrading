@@ -1,0 +1,8 @@
+"Configuration","Full_CAGR","Full_MaxDD","Full_Sharpe","HoldOut_CAGR","HoldOut_MaxDD","HoldOut_Sharpe","HoldOut_WinRate"
+"0. Control Baseline (Asymmetric 35/35/30)","+45.58%","-62.97%","0.92","+72.12%","-64.79%","1.06","57.6%"
+"B3. Gap-Up Entry Guard (Skip if Open > Close + 1.0x ATR)","+38.73%","-68.23%","0.83","+61.76%","-64.78%","0.97","56.7%"
+"B4. Bull-Market Idle-Cash QQQ Overlay (80% idle to QQQ in Bull)","+43.64%","-63.32%","0.89","+69.93%","-64.72%","1.04","57.6%"
+"B5. QQQ-State Exposure Throttle (Cut size if QQQ < 50 SMA & Vol > 25%)","+36.93%","-60.74%","0.85","+56.88%","-59.55%","0.96","57.6%"
+"B7. Sector Loss-Cluster Cooldown (10D pause after 2 sector stops)","+26.78%","-69.92%","0.67","+25.64%","-71.55%","0.61","56.3%"
+"B_Combo. Drawdown Shield: QQQ-State Throttle + Sector Cooldown","+21.20%","-66.48%","0.60","+17.78%","-66.60%","0.50","56.3%"
+"B_Combo2. Max Alpha: Bull QQQ Overlay + Gap Guard","+36.58%","-69.19%","0.80","+60.51%","-64.60%","0.96","56.7%"

@@ -1,0 +1,6 @@
+"Configuration","Terminal_Wealth","CAGR","Max_Drawdown","Sharpe_Ratio","Sortino_Ratio","Calmar_Ratio","Annual_Vol","Win_Rate","Total_Trades","Margin_Paid"
+"1. Unthrottled Wide Target Flagship (T1=2.0R, T2=4.0R, 1.0x Cash)","$414,400.5","+45.12%","-62.84%","0.92","1.35","0.72","53.35%","55.1%",2007,"$6415.55"
+"2. Managed Wide Target (T1=2.0R, T2=4.0R, Vol Target 45%)","$390,611.1","+44.27%","-55.05%","0.97","1.51","0.80","46.11%","55.1%",2007,"$4960.46"
+"3. Managed Wide Target (T1=2.0R, T2=4.0R, Vol Target 40%)","$346,802.1","+42.56%","-52.10%","0.98","1.52","0.82","43.57%","55.1%",2007,"$3556.97"
+"4. Managed Wide Target (T1=2.0R, T2=4.0R, Vol Target 35%)","$291,644.6","+40.12%","-49.69%","0.97","1.51","0.81","40.85%","55.1%",2007,"$2357.83"
+"5. Previous Flagship Baseline (T1=1.5R, T2=3.0R, 1.0x Cash)","$231,201.8","+36.90%","-64.45%","0.81","1.17","0.57","53.05%","57.7%",2147,"$3767.10"

@@ -235,6 +235,27 @@ record_exit <- function(portfolio, symbol, exit_price, exit_date = as.character(
   return(portfolio)
 }
 
+#' Calculate Market Breadth Conviction Sizing Multiplier
+#'
+#' Modulates capital allocation based on 10-day smoothed intraday breadth momentum:
+#' - Oversold washouts (Breadth <= -0.15): Boost conviction by 1.20x to capture mean-reverting swing thrusts.
+#' - Overextended market (Breadth >= +0.30): Dampen sizing to 0.80x to guard against late-cycle exhaustion traps.
+#' - Neutral regime (-0.15 < Breadth < +0.30): Neutral 1.00x multiplier.
+#'
+#' @param breadth_10d Numeric value of 10-day smoothed intraday breadth ratio (advance-decline ratio).
+#' @return Numeric sizing multiplier in [0.80, 1.20].
+#' @export
+calculate_breadth_conviction_multiplier <- function(breadth_10d) {
+  if (is.null(breadth_10d) || is.na(breadth_10d)) return(1.0)
+  if (breadth_10d <= -0.15) {
+    return(1.20)
+  } else if (breadth_10d >= 0.30) {
+    return(0.80)
+  } else {
+    return(1.00)
+  }
+}
+
 #' Sync Portfolio Holdings with Live Market Prices & Check Triggers
 #'
 #' @param portfolio Portfolio state list.
@@ -243,12 +264,16 @@ record_exit <- function(portfolio, symbol, exit_price, exit_date = as.character(
 #' @param is_friday Logical; if TRUE, evaluates conditional weekend holding vs Friday liquidation.
 #' @param model_scan_df Optional data.frame from daily_signal scanner with columns (Symbol, Prob_Up, Weekly_Slope, Days_To_Earn).
 #' @param macro_bullish Logical; whether QQQ Macro Gate is Bullish (Risk-On).
+#' @param enable_circuit_breaker Logical; whether account-level drawdown cushion is active.
+#' @param circuit_breaker_threshold Hard drawdown floor threshold (default: -12.0%).
+#' @param breadth_10d Optional 10-day smoothed intraday breadth ratio for conviction sizing.
 #' @return List containing updated position summaries, total equity, available slots, and alerts.
 #' @export
 sync_portfolio_with_market <- function(portfolio, current_prices, current_date = Sys.Date(), 
                                        is_friday = FALSE, model_scan_df = NULL, macro_bullish = TRUE,
                                        enable_circuit_breaker = TRUE,
-                                       circuit_breaker_threshold = -12.0) {
+                                       circuit_breaker_threshold = -12.0,
+                                       breadth_10d = NULL) {
   current_date <- as.Date(current_date)
   if (is.null(portfolio$hedge_positions)) portfolio$hedge_positions <- list()
   
@@ -552,6 +577,7 @@ sync_portfolio_with_market <- function(portfolio, current_prices, current_date =
     circuit_breaker_active = circuit_breaker_active,
     soft_cb_active         = soft_cb_active,
     cb_multiplier          = cb_multiplier,
+    breadth_multiplier     = calculate_breadth_conviction_multiplier(breadth_10d),
     available_slots        = available_slots,
     active_count           = nrow(pos_df),
     alerts                 = alerts,

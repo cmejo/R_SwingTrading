@@ -1,0 +1,4 @@
+"Step_Configuration","CAGR_Pct","MaxDD_Pct","Sharpe","Sortino","Calmar","WinRate_Pct","AvgTrade_Pct","ProfitFactor"
+"Prior 26-Feature Model (1.5x Margin, With UNH)",-4.84,-92.38,0.16,0.23,-0.05,52.33,0.25,1.07
+"Prior 26-Feature Model (1.5x Margin, UNH Removed)",-4.84,-92.38,0.16,0.23,-0.05,52.33,0.25,1.07
+"LATEST Full Upgrade (1.5x Margin, UNH Removed)",-8.04,-87.2,0.07,0.1,-0.09,51.64,0.15,1.05

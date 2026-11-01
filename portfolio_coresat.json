@@ -1,0 +1,73 @@
+{
+  "total_capital": 8000,
+  "cash_balance": 0.01,
+  "core_weight": 0.3,
+  "satellite_weight": 0.7,
+  "vol_target": 0.16,
+  "core_bull_leverage": 1.25,
+  "use_core_trend": true,
+  "last_rebalance_date": "2026-10-31",
+  "core_position": {
+    "symbol": "QQQ",
+    "shares": 2.434,
+    "entry_price": 690.49,
+    "entry_date": "2026-10-31"
+  },
+  "sgov_position": {
+    "symbol": "SGOV",
+    "shares": 23.809,
+    "entry_price": 100.73,
+    "entry_date": "2026-10-31"
+  },
+  "satellite_positions": [
+    {
+      "symbol": "CRWD",
+      "shares": 3.132,
+      "entry_price": 250.43,
+      "current_price": 250.43,
+      "entry_date": "2026-10-31",
+      "market_value": 784.35,
+      "unrealized_pnl": 0
+    },
+    {
+      "symbol": "PANW",
+      "shares": 2.143,
+      "entry_price": 365.87,
+      "current_price": 365.87,
+      "entry_date": "2026-10-31",
+      "market_value": 784.06,
+      "unrealized_pnl": 0
+    },
+    {
+      "symbol": "MU",
+      "shares": 0.886,
+      "entry_price": 884.74,
+      "current_price": 884.74,
+      "entry_date": "2026-10-31",
+      "market_value": 783.88,
+      "unrealized_pnl": 0
+    },
+    {
+      "symbol": "AMD",
+      "shares": 1.554,
+      "entry_price": 504.8,
+      "current_price": 504.8,
+      "entry_date": "2026-10-31",
+      "market_value": 784.46,
+      "unrealized_pnl": 0
+    },
+    {
+      "symbol": "PLTR",
+      "shares": 4.26,
+      "entry_price": 184.11,
+      "current_price": 184.11,
+      "entry_date": "2026-10-31",
+      "market_value": 784.31,
+      "unrealized_pnl": 0
+    }
+  ],
+  "closed_trades": [],
+  "realized_vol_20d": 0.2285,
+  "vol_scale": 0.7002,
+  "last_updated": "2026-10-31 23:30:11.386745"
+}
