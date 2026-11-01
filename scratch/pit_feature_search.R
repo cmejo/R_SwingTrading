@@ -46,8 +46,12 @@ BREADTH <- sapply(seq_along(cal), function(i) { m <- MEM[i, ] & !is.na(SMA200[i,
 
 sim <- function(margin = 1.5, w_long = 0.5, top_n = 5, skip = 0, buffer = 0, weighting = "equal",
                 gate_sma = "200", breadth_gate = NA, stop_to = "cash", exit_sma50 = FALSE,
-                semi_monthly = FALSE, dd_brake = NA, rank_skip = 0, vol_cap = NA, spike_cap = NA, ext_cap = NA, riskadj = FALSE, core_pct = 0.30, vt = 0.22, stop_pct = 0.20,
+                semi_monthly = FALSE, dd_brake = NA, rank_skip = 0, vol_cap = NA, spike_cap = NA, ext_cap = NA, riskadj = FALSE, hi52 = NA, smooth = NA, corr_cap = NA, core_pct = 0.30, vt = 0.22, stop_pct = 0.20,
                 start = EVAL_START, end = EVAL_END) {
+  if ((!is.na(hi52) || !is.na(smooth)) && (!exists("XTRA_KEY") || !identical(XTRA_KEY, colnames(P)))) {
+    HI252 <<- apply(P, 2, function(v) { o <- rep(NA_real_, length(v)); ok <- !is.na(v); if (sum(ok) > 252) o[ok] <- TTR::runMax(v[ok], 252); o })
+    POSFRAC <<- apply(R, 2, function(v) as.numeric(TTR::runMean(as.numeric(v > 0), 126)))
+    XTRA_KEY <<- colnames(P) }
   U <- syms; ev <- which(cal >= start & cal <= end); sat_pct <- 1 - core_pct; sma_g <- SMAQ[[gate_sma]]
   cw <- 0; sw <- setNames(rep(0, length(U)), U); dw <- 0; ep <- setNames(rep(NA_real_, length(U)), U)
   eq <- 1; peak <- 1; braked <- FALSE; out <- numeric(length(ev)); bull_now <- TRUE
@@ -85,7 +89,14 @@ sim <- function(margin = 1.5, w_long = 0.5, top_n = 5, skip = 0, buffer = 0, wei
         if (!is.na(spike_cap)) keep(P[s0, ok] / P[s0 - 21, ok] - 1 <= spike_cap)       # 1-month jump cap
         if (!is.na(ext_cap))   keep(P[s0, ok] / SMA200[s0, ok] - 1 <= ext_cap)         # extension above 200 SMA
         if (riskadj) rs <- rs / pmax(VOL63[s0, ok], 0.15)                              # risk-adjusted RS
+        if (!is.na(hi52)) keep(P[s0, ok] / HI252[s0, ok] >= 1 - hi52)                 # near 52-week high
+        if (!is.na(smooth)) { pf <- POSFRAC[s0, ok]; keep(pf >= quantile(pf, smooth, na.rm = TRUE)) } # smooth (frog-in-pan)
         rk <- names(sort(rs, decreasing = TRUE)); if (rank_skip > 0) rk <- rk[-seq_len(rank_skip)]
+        if (!is.na(corr_cap)) {                                                       # correlation-aware selection
+          cand <- rk[seq_len(min(length(rk), 25))]; C <- suppressWarnings(cor(R[(s0 - 125):s0, cand, drop = FALSE]))
+          sel <- character(); for (cnd in cand) { if (length(sel) >= top_n) break
+            if (!length(sel) || all(is.na(C[cnd, sel])) || max(C[cnd, sel], na.rm = TRUE) < corr_cap) sel <- c(sel, cnd) }
+          rk <- unique(c(sel, rk)) }
         held <- intersect(names(sw)[sw > 0], rk[seq_len(min(length(rk), top_n + buffer))])
         top <- unique(c(held, rk))[1:top_n]; top <- top[!is.na(top)]
         wts <- if (weighting == "invvol") { iv <- 1 / pmax(VOL63[s0, top], 0.15); iv[is.na(iv)] <- mean(iv, na.rm = TRUE); iv / sum(iv) } else rep(1 / top_n, length(top))
