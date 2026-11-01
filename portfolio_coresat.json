@@ -38,7 +38,7 @@
       "current_price": 365.87,
       "entry_date": "2026-11-01",
       "market_value": 1617.51,
-      "unrealized_pnl": 0
+      "unrealized_pnl": -0
     },
     {
       "symbol": "MU",
@@ -47,7 +47,7 @@
       "current_price": 884.74,
       "entry_date": "2026-11-01",
       "market_value": 1617.3,
-      "unrealized_pnl": 0
+      "unrealized_pnl": -0
     },
     {
       "symbol": "AMD",
@@ -71,5 +71,5 @@
   "closed_trades": [],
   "realized_vol_20d": 0.2285,
   "vol_scale": 0.9628,
-  "last_updated": "2026-11-01 00:03:13.141228"
+  "last_updated": "2026-11-01 00:22:09.180763"
 }

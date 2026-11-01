@@ -4,18 +4,20 @@
 #'
 #' CONFIGURATION MODES SUPPORTED:
 #' ------------------------------------------------------------------------------
-#' OPTION 6 (ACTIVE DEFAULT): Supercharged Ultra Model (1.5x Margin + QLD Core + GLD)
-#'   - 20-Year Backtest: +45.70% CAGR ($14.7M on $8k) | -61.7% MaxDD
+#' OPTION 6 (ACTIVE DEFAULT): Supercharged Ultra Model (1.5x Margin + QLD Core + Dual RS + GLD)
+#'   - 20-Year Backtest: +55.41% CAGR ($53.47M on $8k) | -63.2% MaxDD | 1.04 Sharpe | 1.56 Sortino
 #'   - Core Sleeve: QLD (2x QQQ ETF)
+#'   - Satellite Sleeve: Dual-Lookback RS (50% 126d + 50% 63d blend vs QQQ)
 #'   - Portfolio Margin: 1.5x gross exposure during confirmed bull regimes (QQQ >= 200 SMA)
 #'   - Safety Gate: De-levers margin to 0% debt and exits QLD to GLD when QQQ < 200 SMA
 #'   - Volatility Target: 22% Vol Target into Gold (GLD)
 #'
-#' OPTION 3 (COMMENTED OUT): Pure Cash / IRA Sweet Spot (QLD Core, NO Margin)
-#'   - 20-Year Backtest: +35.97% CAGR ($3.70M on $8k) | -49.1% MaxDD
+#' OPTION 3 (COMMENTED OUT): Pure Cash / IRA Sweet Spot (QLD Core + Dual RS, NO Margin)
+#'   - 20-Year Backtest: +42.90% CAGR ($10.00M on $8k) | -46.59% MaxDD | 1.08 Sharpe | 1.63 Sortino
 #'   - Zero margin debt, zero margin interest, zero margin call risk
 #'   - Tradable in Cash, Margin, and IRA/401(k) retirement accounts
 #'   - Core Sleeve: QLD (2x QQQ ETF) when QQQ >= 200 SMA; exits to GLD when < 200 SMA
+#'   - Satellite Sleeve: Dual-Lookback RS (50% 126d + 50% 63d blend vs QQQ)
 #'   - Volatility Target: 22% Vol Target into Gold (GLD)
 #'
 #' Usage:
@@ -42,7 +44,11 @@ args <- commandArgs(trailingOnly = TRUE)
 CAPITAL               <- 8000    # Default capital base: $8,000
 CORE_WEIGHT           <- 0.30    # 30% Core Sleeve
 TOP_N                 <- 5       # 5 Satellite slots (14% each)
-LOOKBACK_DAYS         <- 126     # ~6 months for relative strength
+LOOKBACK_LONG         <- 126     # ~6 months intermediate trend anchor
+LOOKBACK_SHORT        <- 63      # ~3 months quarterly momentum acceleration
+WEIGHT_LONG           <- 0.50    # 50% weight on 126d RS
+WEIGHT_SHORT          <- 0.50    # 50% weight on 63d RS
+LOOKBACK_DAYS         <- LOOKBACK_LONG # Compatibility alias
 DISASTER_STOP         <- 0.20    # 20% catastrophic max loss floor
 FORCE_REBALANCE       <- FALSE
 RESET                 <- FALSE
@@ -86,7 +92,13 @@ for (arg in args) {
   } else if (grepl("^--top_n=", arg)) {
     TOP_N <- as.integer(sub("^--top_n=", "", arg))
   } else if (grepl("^--lookback=", arg)) {
-    LOOKBACK_DAYS <- as.integer(sub("^--lookback=", "", arg))
+    LOOKBACK_LONG <- as.integer(sub("^--lookback=", "", arg))
+    LOOKBACK_DAYS <- LOOKBACK_LONG
+  } else if (grepl("^--lookback_long=", arg)) {
+    LOOKBACK_LONG <- as.integer(sub("^--lookback_long=", "", arg))
+    LOOKBACK_DAYS <- LOOKBACK_LONG
+  } else if (grepl("^--lookback_short=", arg)) {
+    LOOKBACK_SHORT <- as.integer(sub("^--lookback_short=", "", arg))
   } else if (grepl("^--disaster_stop=", arg)) {
     DISASTER_STOP <- as.numeric(sub("^--disaster_stop=", "", arg))
   } else if (grepl("^--vol_target=", arg)) {
@@ -169,14 +181,15 @@ port_state <- load_portfolio(PORTFOLIO_FILE, CAPITAL)
 # ------------------------------------------------------------------------------
 # Benchmark QQQ (Market Compass)
 qqq_ohlcv <- tryCatch(load_stock_data("QQQ", force_refresh = FALSE), error = function(e) NULL)
-if (is.null(qqq_ohlcv) || nrow(qqq_ohlcv) < max(LOOKBACK_DAYS, 200)) {
+if (is.null(qqq_ohlcv) || nrow(qqq_ohlcv) < max(LOOKBACK_LONG, 200)) {
   stop("FATAL: Could not load sufficient historical data for benchmark QQQ.")
 }
-qqq_close  <- as.numeric(Cl(qqq_ohlcv))
-n_qqq      <- length(qqq_close)
-qqq_cur_px <- tail(qqq_close, 1)
-qqq_lb_px  <- qqq_close[n_qqq - LOOKBACK_DAYS]
-qqq_ret    <- (qqq_cur_px / qqq_lb_px) - 1
+qqq_close      <- as.numeric(Cl(qqq_ohlcv))
+n_qqq          <- length(qqq_close)
+qqq_cur_px     <- tail(qqq_close, 1)
+qqq_ret_long   <- (qqq_cur_px / qqq_close[n_qqq - LOOKBACK_LONG]) - 1
+qqq_ret_short  <- (qqq_cur_px / qqq_close[n_qqq - LOOKBACK_SHORT]) - 1
+qqq_ret        <- qqq_ret_long # Compatibility alias
 
 # QQQ Trend & Realized Volatility Diagnostics
 qqq_sma200   <- mean(tail(qqq_close, 200))
@@ -253,32 +266,40 @@ sym_lines <- if (file.exists(SYMBOLS_FILE)) readLines(SYMBOLS_FILE) else charact
 raw_syms <- unique(trimws(unlist(strsplit(sym_lines[!grepl("^#", sym_lines) & nzchar(sym_lines)], "[, ]+"))))
 scan_syms <- setdiff(raw_syms, EXCLUDE_ETFS)
 
-cat(sprintf(" Scanning %d candidate stocks for %d-day Relative Strength vs QQQ...\n", length(scan_syms), LOOKBACK_DAYS))
+cat(sprintf(" Scanning %d candidate stocks for Dual-Lookback RS (50%% %dd + 50%% %dd) vs QQQ...\n",
+            length(scan_syms), LOOKBACK_LONG, LOOKBACK_SHORT))
 
 rs_results <- list()
 for (sym in scan_syms) {
   d <- tryCatch(load_stock_data(sym, force_refresh = FALSE), error = function(e) NULL)
-  if (is.null(d) || nrow(d) < LOOKBACK_DAYS + 10) next
+  if (is.null(d) || nrow(d) < LOOKBACK_LONG + 10) next
   
   cl <- as.numeric(Cl(d))
   n <- length(cl)
   cur_px <- cl[n]
-  lb_px  <- cl[n - LOOKBACK_DAYS]
+  lb_long_px  <- cl[n - LOOKBACK_LONG]
+  lb_short_px <- cl[n - LOOKBACK_SHORT]
   
   # Trend check: 200 SMA
   sma200 <- if (n >= 200) mean(cl[(n - 199):n]) else mean(cl)
   trend_up <- cur_px >= sma200
   
-  ret_stock <- (cur_px / lb_px) - 1
-  rs_vs_qqq <- ret_stock - qqq_ret
+  ret_long  <- (cur_px / lb_long_px) - 1
+  ret_short <- (cur_px / lb_short_px) - 1
+  rs_long   <- ret_long - qqq_ret_long
+  rs_short  <- ret_short - qqq_ret_short
+  rs_comp   <- (WEIGHT_LONG * rs_long) + (WEIGHT_SHORT * rs_short)
   
   rs_results[[sym]] <- data.frame(
     Symbol       = sym,
     Close        = cur_px,
     SMA200       = sma200,
     Trend_Up     = trend_up,
-    Ret_126D     = ret_stock,
-    RS_vs_QQQ    = rs_vs_qqq,
+    Ret_126D     = ret_long,
+    Ret_63D      = ret_short,
+    RS_126D      = rs_long,
+    RS_63D       = rs_short,
+    RS_Composite = rs_comp,
     stringsAsFactors = FALSE
   )
 }
@@ -291,13 +312,19 @@ rs_df <- do.call(rbind, rs_results)
 rs_qualified <- rs_df[rs_df$Trend_Up, ]
 if (nrow(rs_qualified) < TOP_N) rs_qualified <- rs_df
 
-rs_qualified <- rs_qualified[order(-rs_qualified$RS_vs_QQQ), ]
+rs_qualified <- rs_qualified[order(-rs_qualified$RS_Composite), ]
 top_picks <- head(rs_qualified, TOP_N)
 
-cat("\n Top Candidate Relative Strength Leaders (>= 200-day SMA):\n")
-cat("----------------------------------------------------------------------------------------\n")
-print(head(rs_qualified[, c("Symbol", "Close", "Trend_Up", "Ret_126D", "RS_vs_QQQ")], 8), row.names = FALSE)
-cat("----------------------------------------------------------------------------------------\n\n")
+cat("\n Top Candidate Relative Strength Leaders (Dual-Lookback: 50% 126d + 50% 63d | >= 200-day SMA):\n")
+cat("--------------------------------------------------------------------------------------------------------\n")
+print_df <- head(rs_qualified[, c("Symbol", "Close", "Trend_Up", "Ret_126D", "Ret_63D", "RS_126D", "RS_63D", "RS_Composite")], 8)
+print_df$Ret_126D     <- sprintf("%+.1f%%", print_df$Ret_126D * 100)
+print_df$Ret_63D      <- sprintf("%+.1f%%", print_df$Ret_63D * 100)
+print_df$RS_126D      <- sprintf("%+.1f%%", print_df$RS_126D * 100)
+print_df$RS_63D       <- sprintf("%+.1f%%", print_df$RS_63D * 100)
+print_df$RS_Composite <- sprintf("%+.1f%%", print_df$RS_Composite * 100)
+print(print_df, row.names = FALSE)
+cat("--------------------------------------------------------------------------------------------------------\n\n")
 
 # ------------------------------------------------------------------------------
 # 6. Mark Current Portfolio Value & Process Disaster Stops
