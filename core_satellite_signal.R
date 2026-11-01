@@ -51,7 +51,7 @@ args <- commandArgs(trailingOnly = TRUE)
 
 CAPITAL               <- 8000    # Default capital base: $8,000
 CORE_WEIGHT           <- 0.30    # 30% Core Sleeve
-TOP_N                 <- 3       # 3 Satellite slots (23.3% each) - higher CAGR, deeper drawdowns than 5
+TOP_N                 <- 5       # 5 Satellite slots (14% each) - beat top 3 on every broad list (see scratch/compare_top3_vs_top5.R)
 LOOKBACK_LONG         <- 126     # ~6 months intermediate trend anchor
 LOOKBACK_SHORT        <- 63      # ~3 months quarterly momentum acceleration
 WEIGHT_LONG           <- 0.50    # 50% weight on 126d RS
@@ -63,6 +63,8 @@ STOP_PROCEEDS_TO_CORE <- TRUE    # (A) Redeploy stopped-out satellite cash into 
                                  #     PIT N100 backtest: +1.6 pts CAGR, improved in both 2007-16 and 2017-26.
 USE_BREADTH_GATE      <- FALSE   # (B) OPTIONAL, OFF BY DEFAULT: drop margin to 1.0x when fewer than
 BREADTH_THRESHOLD     <- 0.50    #     BREADTH_THRESHOLD of scanned stocks are above their 200 SMA.
+VOL_CAP               <- 1.00    # (C) Speculative-spike filter: skip stocks whose 63-day realized volatility
+                                 #     exceeds VOL_CAP (1.00 = 100% annualized, ~6.3%/day). Set NA to disable.
                                  #     Cuts MaxDD ~6 pts in backtest, but the 50% threshold is fragile
                                  #     (40% had no effect, 60% was worse). Needs a broad list (e.g. N100).
 FORCE_REBALANCE       <- FALSE
@@ -118,6 +120,8 @@ for (arg in args) {
     STOP_PROCEEDS_TO_CORE <- as.logical(sub("^--stop_to_core=", "", arg))
   } else if (grepl("^--breadth_gate=", arg)) {
     USE_BREADTH_GATE <- as.logical(sub("^--breadth_gate=", "", arg))
+  } else if (grepl("^--vol_cap=", arg)) {
+    VOL_CAP <- suppressWarnings(as.numeric(sub("^--vol_cap=", "", arg)))
   } else if (grepl("^--breadth_threshold=", arg)) {
     BREADTH_THRESHOLD <- as.numeric(sub("^--breadth_threshold=", "", arg))
   } else if (grepl("^--disaster_stop=", arg)) {
@@ -318,6 +322,7 @@ for (sym in scan_syms) {
   rs_long   <- ret_long - qqq_ret_long
   rs_short  <- ret_short - qqq_ret_short
   rs_comp   <- (WEIGHT_LONG * rs_long) + (WEIGHT_SHORT * rs_short)
+  vol_63d   <- sd(diff(log(tail(cl, 64)))) * sqrt(252)
   
   rs_results[[sym]] <- data.frame(
     Symbol       = sym,
@@ -329,6 +334,7 @@ for (sym in scan_syms) {
     RS_126D      = rs_long,
     RS_63D       = rs_short,
     RS_Composite = rs_comp,
+    Vol_63D      = vol_63d,
     stringsAsFactors = FALSE
   )
 }
@@ -352,17 +358,33 @@ if (USE_BREADTH_GATE && active_margin > 1.0 && breadth_pct < BREADTH_THRESHOLD) 
 rs_qualified <- rs_df[rs_df$Trend_Up, ]
 if (nrow(rs_qualified) < TOP_N) rs_qualified <- rs_df
 
+# (C) Speculative-spike filter: drop extreme-volatility names (only if enough names remain)
+if (!is.na(VOL_CAP)) {
+  vc_ok <- rs_qualified[!is.na(rs_qualified$Vol_63D) & rs_qualified$Vol_63D <= VOL_CAP, ]
+  dropped <- setdiff(rs_qualified$Symbol, vc_ok$Symbol)
+  if (nrow(vc_ok) >= TOP_N) {
+    rs_qualified <- vc_ok
+    if (length(dropped) > 0) {
+      dd <- rs_df[rs_df$Symbol %in% dropped, ]
+      dd <- dd[order(-dd$RS_Composite), ]
+      cat(sprintf("\n Volatility cap (%.0f%%) excluded %d high-volatility candidate(s): %s\n", VOL_CAP * 100, nrow(dd),
+                  paste(sprintf("%s (%.0f%%)", head(dd$Symbol, 8), head(dd$Vol_63D, 8) * 100), collapse = ", ")))
+    }
+  }
+}
+
 rs_qualified <- rs_qualified[order(-rs_qualified$RS_Composite), ]
 top_picks <- head(rs_qualified, TOP_N)
 
 cat("\n Top Candidate Relative Strength Leaders (Dual-Lookback: 50% 126d + 50% 63d | >= 200-day SMA):\n")
 cat("--------------------------------------------------------------------------------------------------------\n")
-print_df <- head(rs_qualified[, c("Symbol", "Close", "Trend_Up", "Ret_126D", "Ret_63D", "RS_126D", "RS_63D", "RS_Composite")], 8)
+print_df <- head(rs_qualified[, c("Symbol", "Close", "Trend_Up", "Ret_126D", "Ret_63D", "RS_126D", "RS_63D", "RS_Composite", "Vol_63D")], 8)
 print_df$Ret_126D     <- sprintf("%+.1f%%", print_df$Ret_126D * 100)
 print_df$Ret_63D      <- sprintf("%+.1f%%", print_df$Ret_63D * 100)
 print_df$RS_126D      <- sprintf("%+.1f%%", print_df$RS_126D * 100)
 print_df$RS_63D       <- sprintf("%+.1f%%", print_df$RS_63D * 100)
 print_df$RS_Composite <- sprintf("%+.1f%%", print_df$RS_Composite * 100)
+print_df$Vol_63D      <- sprintf("%.0f%%", print_df$Vol_63D * 100)
 print(print_df, row.names = FALSE)
 cat("--------------------------------------------------------------------------------------------------------\n\n")
 

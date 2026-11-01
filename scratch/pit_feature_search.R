@@ -46,7 +46,7 @@ BREADTH <- sapply(seq_along(cal), function(i) { m <- MEM[i, ] & !is.na(SMA200[i,
 
 sim <- function(margin = 1.5, w_long = 0.5, top_n = 5, skip = 0, buffer = 0, weighting = "equal",
                 gate_sma = "200", breadth_gate = NA, stop_to = "cash", exit_sma50 = FALSE,
-                semi_monthly = FALSE, dd_brake = NA, rank_skip = 0, core_pct = 0.30, vt = 0.22, stop_pct = 0.20,
+                semi_monthly = FALSE, dd_brake = NA, rank_skip = 0, vol_cap = NA, spike_cap = NA, ext_cap = NA, riskadj = FALSE, core_pct = 0.30, vt = 0.22, stop_pct = 0.20,
                 start = EVAL_START, end = EVAL_END) {
   U <- syms; ev <- which(cal >= start & cal <= end); sat_pct <- 1 - core_pct; sma_g <- SMAQ[[gate_sma]]
   cw <- 0; sw <- setNames(rep(0, length(U)), U); dw <- 0; ep <- setNames(rep(NA_real_, length(U)), U)
@@ -79,6 +79,12 @@ sim <- function(margin = 1.5, w_long = 0.5, top_n = 5, skip = 0, buffer = 0, wei
         rs <- w_long * r126 + (1 - w_long) * r63
         okf <- ok[!is.na(SMA200[s0, ok]) & P[s0, ok] >= SMA200[s0, ok]]
         if (length(okf) >= top_n) { ok <- okf; rs <- rs[ok] }
+        # --- speculative-spike filters (applied only if enough names survive) ---
+        keep <- function(cond) { k2 <- ok[!is.na(cond) & cond]; if (length(k2) >= top_n) { ok <<- k2; rs <<- rs[k2] } }
+        if (!is.na(vol_cap))   keep(VOL63[s0, ok] <= vol_cap)                          # 63d realized vol cap
+        if (!is.na(spike_cap)) keep(P[s0, ok] / P[s0 - 21, ok] - 1 <= spike_cap)       # 1-month jump cap
+        if (!is.na(ext_cap))   keep(P[s0, ok] / SMA200[s0, ok] - 1 <= ext_cap)         # extension above 200 SMA
+        if (riskadj) rs <- rs / pmax(VOL63[s0, ok], 0.15)                              # risk-adjusted RS
         rk <- names(sort(rs, decreasing = TRUE)); if (rank_skip > 0) rk <- rk[-seq_len(rank_skip)]
         held <- intersect(names(sw)[sw > 0], rk[seq_len(min(length(rk), top_n + buffer))])
         top <- unique(c(held, rk))[1:top_n]; top <- top[!is.na(top)]

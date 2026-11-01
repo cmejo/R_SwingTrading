@@ -28,7 +28,7 @@ set_universe <- function(tickers) {
   P <<- Pm; syms <<- colnames(Pm); MEM <<- matrix(TRUE, length(cal), ncol(Pm), dimnames = list(NULL, syms))
   R <<- rbind(NA, Pm[-1, , drop = FALSE] / Pm[-nrow(Pm), , drop = FALSE] - 1); R[is.na(R)] <<- 0
   SMA200 <<- apply(Pm, 2, function(v) as.numeric(stats::filter(v, rep(1/200, 200), sides = 1)))
-  SMA50 <<- SMA200; VOL63 <<- SMA200; BREADTH <<- rep(NA_real_, length(cal))
+  SMA50 <<- SMA200; VOL63 <<- apply(R, 2, function(v) as.numeric(zoo::rollapply(v, 63, sd, align = 'right', fill = NA)) * sqrt(252)); BREADTH <<- rep(NA_real_, length(cal))
   c(listed = length(tickers), with_data = ncol(Pm),
     pre2007 = sum(apply(Pm, 2, function(v) { f <- which(!is.na(v))[1]; !is.na(f) && cal[f] <= as.Date("2006-01-31") })))
 }
