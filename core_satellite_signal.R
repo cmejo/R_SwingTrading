@@ -51,7 +51,7 @@ args <- commandArgs(trailingOnly = TRUE)
 
 CAPITAL               <- 8000    # Default capital base: $8,000
 CORE_WEIGHT           <- 0.30    # 30% Core Sleeve
-TOP_N                 <- 5       # 5 Satellite slots (14% each)
+TOP_N                 <- 3       # 3 Satellite slots (23.3% each) - higher CAGR, deeper drawdowns than 5
 LOOKBACK_LONG         <- 126     # ~6 months intermediate trend anchor
 LOOKBACK_SHORT        <- 63      # ~3 months quarterly momentum acceleration
 WEIGHT_LONG           <- 0.50    # 50% weight on 126d RS
@@ -67,7 +67,7 @@ BREADTH_THRESHOLD     <- 0.50    #     BREADTH_THRESHOLD of scanned stocks are a
                                  #     (40% had no effect, 60% was worse). Needs a broad list (e.g. N100).
 FORCE_REBALANCE       <- FALSE
 RESET                 <- FALSE
-SYMBOLS_FILE          <- "symbols_n100.txt" # Current Nasdaq-100 members (matches PIT backtest universe)
+SYMBOLS_FILE          <- "symbols_broad.txt" # Broad 170-name growth/momentum list (alt: symbols_n100.txt = PIT-tested universe)
 PORTFOLIO_FILE        <- "portfolio_coresat.json"
 
 # ==============================================================================
@@ -281,7 +281,9 @@ should_rebalance <- FORCE_REBALANCE || is_new_month || is_uninvested
 # 5. Universe Relative Strength Scan
 # ------------------------------------------------------------------------------
 EXCLUDE_ETFS <- c("QQQ", "QLD", "TQQQ", "SQQQ", "SPY", "VTI", "SOXL", "SOXS", "FNGD", 
-                  "FNGU", "SGOV", "BIL", "GLD", "SMH", "XLK", "^VIX", "^IRX")
+                  "FNGU", "SGOV", "BIL", "GLD", "SMH", "XLK", "^VIX", "^IRX",
+                  # Leveraged single-stock / sector ETFs (excluded in backtests too)
+                  "AMUU", "NVDU", "PLTU", "SNDQ", "SMHC", "SKHY", "NVDL", "TSLL", "CONL", "MSTU")
 
 sym_lines <- if (file.exists(SYMBOLS_FILE)) readLines(SYMBOLS_FILE) else character()
 raw_syms <- unique(trimws(unlist(strsplit(sym_lines[!grepl("^#", sym_lines) & nzchar(sym_lines)], "[, ]+"))))
@@ -294,6 +296,10 @@ rs_results <- list()
 for (sym in scan_syms) {
   d <- tryCatch(load_stock_data(sym, force_refresh = FALSE), error = function(e) NULL)
   if (is.null(d) || nrow(d) < LOOKBACK_LONG + 10) next
+  # Data-quality guard: skip tickers with zero/negative/missing closes in the lookback
+  # window (e.g. thin OTC listings such as SSNLF report long runs of 0.00 prices)
+  cl_chk <- tail(as.numeric(Cl(d)), max(200, LOOKBACK_LONG + 1))
+  if (any(is.na(cl_chk)) || any(cl_chk <= 0)) next
   
   cl <- as.numeric(Cl(d))
   n <- length(cl)
