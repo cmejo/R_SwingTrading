@@ -122,6 +122,12 @@ fi
 
 Rscript core_satellite_signal.R "${R_ARGS[@]}"
 
+# Step 4b: Optional FMP Institutional Consensus Enrichment
+if [ -n "$FMP_API_KEY" ] || grep -q "FMP_API_KEY" .env 2>/dev/null; then
+  echo -e "\n[Step 4b] Fetching Wall Street consensus targets and fundamental metrics (FMP)..."
+  python3 fmp_client.py || true
+fi
+
 # Step 5: Execute Machine-Readable Orders via Schwab Desk
 echo -e "\n[Step 5/5] Processing order queue via Charles Schwab Trader API..."
 python3 schwab_bridge.py execute \
