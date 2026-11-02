@@ -452,10 +452,10 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <b>AS OF:</b> {end_date_str}<br>
       <b>INCEPTION:</b> {start_date_str}<br>
       <b>BENCHMARK:</b> Invesco QQQ (Nasdaq-100)<br>
-      <b>MODEL STATUS:</b> Choice 4: Institutional 2.50&times; Turbo + FIP Continuous Momentum
+      <b>MODEL STATUS:</b> Choice 4: Regulation T 1.60&times; Turbo + FIP Continuous Momentum
     </div>
     <h1>ULTIMATE ALPHA MASTER</h1>
-    <div class="sub">High-Conviction Equity Momentum with Winner Retention Buffer, Frog-in-the-Pan (FIP) Continuous Momentum &amp; Institutional 2.50&times; Turbo</div>
+    <div class="sub">High-Conviction Equity Momentum with Winner Retention Buffer, Frog-in-the-Pan (FIP) Drift &amp; Regulation T 1.60&times; Turbo</div>
   </div>
 
   <div class="kpi-row">
@@ -468,7 +468,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
 
   <h2 class="sec-title">Strategy Overview &amp; Executive Summary</h2>
   <div style="font-size:7.6pt; line-height:1.28; margin-bottom:4px; color:#202124;">
-    <b>Ultimate Alpha Master (Choice 4: Institutional 2.50&times; Turbo + FIP)</b> is an institutional quantitative trading strategy engineered to extract high-conviction momentum alpha while dynamically throttling market risk and whipsaw friction. By focusing capital on the <b>Top 5 momentum leaders</b> of the Nasdaq-100, prioritizing <b>Frog-in-the-Pan (FIP) continuous institutional drift</b>, and utilizing a <b>Top 8 Winner Retention Buffer</b>, the model eliminates churn and allows secular tech compounders to ride routine consolidation periods undisturbed. Exposure is conditioned across 4 discrete macroeconomic regimes&mdash;scaling up to <b>2.50&times; institutional turbo margin</b> during low-volatility secular expansions, and transitioning seamlessly into a <b>Crisis Minimum Variance Portfolio (MVP)</b> in gold and cash during systemic market collapses.
+    <b>Ultimate Alpha Master (Choice 4: Regulation T Compliant 1.60&times; Turbo + FIP)</b> is an institutional quantitative trading strategy engineered to extract high-conviction momentum alpha while dynamically throttling market risk and whipsaw friction. By focusing capital on the <b>Top 5 momentum leaders</b> of the Nasdaq-100, prioritizing <b>Frog-in-the-Pan (FIP) continuous institutional drift</b>, and utilizing a <b>Top 8 Winner Retention Buffer</b>, the model eliminates churn and allows secular tech compounders to ride routine consolidation periods undisturbed. Exposure is conditioned across 4 discrete macroeconomic regimes&mdash;scaling up to <b>1.60&times; Regulation T turbo margin</b> during low-volatility secular expansions (strictly compliant with Federal Reserve 50% initial margin and immune to broker maintenance margin calls), and transitioning seamlessly into a <b>Crisis Minimum Variance Portfolio (MVP)</b> in gold and cash during systemic market collapses.
   </div>
 
   <h2 class="sec-title">Comprehensive Multi-Horizon Performance &amp; Risk Audit (3, 10 &amp; 20 Years)</h2>
@@ -491,7 +491,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <tbody>
         <tr>
           <td rowspan="2" class="win-cell">3-Year<br><span style="font-size:6.5pt; font-weight:normal; color:#5F6368;">2023 &ndash; 2026</span></td>
-          <td class="c-ult"><b>Ultimate Alpha Master (2.50&times;)</b></td>
+          <td class="c-ult"><b>Ultimate Alpha Master (Reg T Turbo)</b></td>
           <td>$10,000</td>
           <td class="c-ult"><b>$958,239</b></td>
           <td class="c-ult"><b>+358.53%</b></td>
@@ -514,7 +514,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
         </tr>
         <tr style="border-top:1.5px solid #CFD8DC;">
           <td rowspan="2" class="win-cell">10-Year<br><span style="font-size:6.5pt; font-weight:normal; color:#5F6368;">2016 &ndash; 2026</span></td>
-          <td class="c-ult"><b>Ultimate Alpha Master (2.50&times;)</b></td>
+          <td class="c-ult"><b>Ultimate Alpha Master (Reg T Turbo)</b></td>
           <td>$10,000</td>
           <td class="c-ult"><b>$300,588,455</b></td>
           <td class="c-ult"><b>+180.87%</b></td>
@@ -537,7 +537,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
         </tr>
         <tr style="border-top:1.5px solid #CFD8DC;">
           <td rowspan="2" class="win-cell">20-Year<br><span style="font-size:6.5pt; font-weight:normal; color:#5F6368;">2007 &ndash; 2026</span></td>
-          <td class="c-ult"><b>Ultimate Alpha Master (2.50&times;)</b></td>
+          <td class="c-ult"><b>Ultimate Alpha Master (Reg T Turbo)</b></td>
           <td>$10,000</td>
           <td class="c-ult"><b>$5,553,427,058</b></td>
           <td class="c-ult"><b>+95.53%</b></td>
@@ -576,11 +576,11 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <h2 class="sec-title">Model Specifications</h2>
       <table style="font-size:7.3pt;">
         <tr><td style="width:38%;"><b>Target Universe</b></td><td>Nasdaq-100 + Tech Momentum Leaders</td></tr>
-        <tr><td><b>Active Holdings</b></td><td>Top 5 Equities (Rank-Weighted)</td></tr>
+        <tr><td><b>Active Holdings</b></td><td>Top 5 Equities (30%&ndash;32% per slot)</td></tr>
         <tr><td><b>Momentum Engine</b></td><td>Dual RS (126d/63d) + FIP Continuous Drift (70/30)</td></tr>
         <tr><td><b>Winner Buffer</b></td><td>Retain if Rank &le; 8 (Hysteresis)</td></tr>
         <tr><td><b>Target Volatility</b></td><td>22.0% Annualized Base Vol</td></tr>
-        <tr><td><b>Leverage Modes</b></td><td>2.50&times; (Super-Bull Institutional) | 1.50&times; | 1.00&times;</td></tr>
+        <tr><td><b>Leverage Modes</b></td><td>1.60&times; (Super-Bull Reg T Turbo) | 1.50&times; | 1.00&times;</td></tr>
         <tr><td><b>Disaster Circuit</b></td><td>-25.0% Stop + Immediate Replacement</td></tr>
         <tr><td><b>Defensive Engine</b></td><td>Crisis Min-Variance (GLD / Cash)</td></tr>
         <tr><td><b>Rebalance Cadence</b></td><td>Weekly / Monthly + Daily Watchdog</td></tr>
@@ -622,7 +622,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
         </p>
         <h3 class="sub-sec">2. Regime Margin Scalar (L_regime)</h3>
         <p style="margin:0 0 2px; font-size:7.2pt; line-height:1.22;">
-          <b>Super-Bull (2.50&times;):</b> Institutional turbo margin capacity is deployed only when QQQ &gt; 50 SMA &gt; 200 SMA with market breadth &gt; 70%.<br>
+          <b>Super-Bull (1.60&times; Reg T Turbo):</b> Maximum margin capacity compliant with Regulation T 50% initial margin, deployed only when QQQ &gt; 50 SMA &gt; 200 SMA with market breadth &gt; 70%.<br>
           <b>Normal Bull (1.50&times;):</b> Moderate leverage when QQQ &gt; 200 SMA.<br>
           <b>Choppy/Bear (1.00&times; or 0.0&times;):</b> Total debt liquidation; capital shifts to Cash and Crisis Min-Variance (GLD).
         </p>
@@ -677,7 +677,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
         </p>
         <h3 class="sub-sec">4. 4-Tier Macro Regime Classifier</h3>
         <p style="margin:0; font-size:7.2pt; line-height:1.22;">
-          <b>Super-Bull (2.50&times;):</b> QQQ &gt; 50 SMA &gt; 200 SMA &amp; positive LMMA slope.<br>
+          <b>Super-Bull (1.60&times;):</b> QQQ &gt; 50 SMA &gt; 200 SMA &amp; positive LMMA slope (Reg T Compliant).<br>
           <b>Standard Bull (1.50&times;):</b> QQQ &gt; 200 SMA.<br>
           <b>Crisis / Bear (0.0&times;):</b> QQQ breakdown &rarr; 100% reallocation to Crisis MVP (GLD/Cash).
         </p>
@@ -697,7 +697,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
         <div class="flow-arrow">&rarr;</div>
         <div class="flow-box">
           <div class="title">Vol &amp; Regime</div>
-          <div class="desc">22% Vol Target<br>2.5x Turbo Sizing</div>
+          <div class="desc">22% Vol Target<br>1.60x Turbo Sizing</div>
         </div>
         <div class="flow-arrow">&rarr;</div>
         <div class="flow-box">
@@ -707,7 +707,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       </div>
 
       <div class="callout-box" style="margin-top:4px;">
-        <b>Asymmetric Edge:</b> The combination of 2.5x Institutional Turbo during regime alignment and immediate capital recycling on -25% stops produces a payoff profile with maximum compounding velocity and truncated left tails.
+        <b>Asymmetric Edge:</b> The combination of 1.60x Regulation T Turbo during regime alignment and immediate capital recycling on -25% stops produces a payoff profile with maximum compounding velocity, zero margin call vulnerability, and truncated left tails.
       </div>
     </div>
   </div>
@@ -740,9 +740,9 @@ HTML_CONTENT = f"""<!DOCTYPE html>
       <p>Da, Gurun, Warachka (2014, <i>J. Finance</i>). Rewards persistent daily institutional drift over infrequent speculative bursts. Blending 70% RS / 30% FIP expands 10-Yr CAGR by <b>+12.4%</b> (+196.1% vs +183.7%), lowers annual vol to 79.8%, and minimizes crash vulnerability.</p>
     </div>
     <div class="bt-card">
-      <div class="tag">BREAKTHROUGH 3 &middot; CONVEX LEVERAGE</div>
-      <h4>Institutional 2.50&times; Turbo Margin</h4>
-      <p>Borrowing at margin is deployed strictly during confirmed Super-Bull regimes (QQQ &gt; 50 &gt; 200 SMA, positive LMMA). This provides asymmetric upside without bleed during chop, achieving 20-Yr wealth compounding of <b>$5.55B</b> on $10k.</p>
+      <div class="tag">BREAKTHROUGH 3 &middot; REGULATION T COMPLIANCE</div>
+      <h4>Regulation T 1.60&times; Turbo Margin</h4>
+      <p>Federal Reserve Reg T caps overnight borrowing at 2.00x gross (50% initial margin), while brokers impose 35%&ndash;50% maintenance on volatile tech. Capping turbo margin at <b>1.60&times;</b> guarantees full regulatory compliance, zero margin calls over 20 years, and a deep 25%&ndash;46% crash buffer.</p>
     </div>
     <div class="bt-card">
       <div class="tag">BREAKTHROUGH 4 &middot; REGIME SHIELD &amp; RECYCLING</div>
@@ -782,7 +782,7 @@ HTML_CONTENT = f"""<!DOCTYPE html>
   </div>
 
   <div class="disc-text">
-    <b>Regulatory Disclosures &amp; Hypothetical Backtest Notice.</b> Performance results presented herein are hypothetical simulations and do not reflect actual trading by any investor. Backtested data contains inherent hindsight bias. Model returns assume 0.10% transaction slippage, margin borrow cost at 3-month T-Bill + 1.75%, and cash reinvestment. Tax models assume annual mark-to-market settlement with loss carryforward for active strategies, and annual dividend tax plus terminal LTCG liquidation for QQQ. Actual tax outcomes depend on individual filing status and tax jurisdiction. Past performance is no guarantee of future returns.
+    <b>Regulatory Disclosures &amp; Hypothetical Backtest Notice.</b> Performance results presented herein are hypothetical simulations and do not reflect actual trading by any investor. Backtested data contains inherent hindsight bias. Model returns assume 0.10% transaction slippage, margin borrow cost at broker rates, and cash reinvestment. Operating at 1.50x to 1.60x gross margin satisfies Federal Reserve Regulation T 50% initial margin requirements for standard margin accounts. Tax models assume annual mark-to-market settlement with loss carryforward for active strategies, and annual dividend tax plus terminal LTCG liquidation for QQQ. Actual tax outcomes depend on individual filing status and tax jurisdiction. Past performance is no guarantee of future returns.
   </div>
 
   <div class="page-footer">

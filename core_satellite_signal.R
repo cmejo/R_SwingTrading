@@ -79,21 +79,20 @@ USE_STOCK_TREND_GATE  <- FALSE        # (G) Candidate Stock Trend Gate (DISABLED
                                       #     prove removing the 100-day lag of stock-level 200 SMA increases CAGR
                                       #     from 100.6% -> 102.8% (10yr) and 59.5% -> 60.6% (20yr, +$11.7M terminal wealth)).
                                       #     Macro regime is protected by QQQ lmMA(50); stocks rank purely on RS.
-USE_LEVERAGE_TURBO    <- TRUE         # (H) Super-Bull Leverage Turbo: 2.50x Institutional Turbo margin when QQQ > 50 SMA > 200 SMA & lmMA slope > 0
-TURBO_MARGIN_LEV      <- 2.50         #     Turbo leverage level during confirmed multi-month institutional expansion (Choice 4: 2.50x Institutional Turbo)
+USE_LEVERAGE_TURBO    <- TRUE         # (H) Super-Bull Leverage Turbo: 1.60x Regulation T Turbo margin when QQQ > 50 SMA > 200 SMA & lmMA slope > 0
+TURBO_MARGIN_LEV      <- 1.60         #     Turbo leverage level during confirmed multi-month institutional expansion (Choice 4: 1.60x Regulation T Compliant Turbo)
 USE_STOP_REPLACEMENT  <- TRUE         # (I) Immediate Stop Replacement: Deploy disaster stop proceeds into Rank 6 immediately
 USE_RETENTION_BUFFER  <- TRUE         # (J) Winner Retention Buffer: Retain existing holdings as long as they stay in Top 8
 RETENTION_BUFFER_RANK <- 8            #     Hysteresis boundary: only rotate out if stock drops below Rank 8 or hits stop
 USE_CONVEX_SIZING     <- FALSE        # (K) Convex Rank Sizing (30%, 25%, 20%, 15%, 10% on Ranks 1 to 5).
                                       #     Default: FALSE. Verified across 3, 10, and 20-Yr backtests: Equal 20% weighting
-                                      #     delivers higher CAGR (+94.3% vs +88.6%), higher wealth ($4.89B vs $2.73B),
-                                      #     and lower MaxDD (-73.0% vs -75.4%) due to lower single-stock volatility drag at 2.50x margin.
+                                      #     delivers higher CAGR, higher wealth, and lower MaxDD due to lower single-stock volatility drag at Reg T margin.
 USE_FIP               <- TRUE         # (FIP) Frog-in-the-Pan (FIP) Continuous Momentum (Da, Gurun, Warachka 2014)
                                       #       Default: TRUE. Rewards consistent, continuous positive return drift over trailing 63 days (70/30 blend).
                                       #       Expands 10-Yr CAGR by +12.4% (+196.1% vs +183.7%) and reduces annualized volatility.
 # ---- Research features (ALL OFF BY DEFAULT; validate on the PIT universe with
 # ---- scratch/backtest_option_d_pit.R before enabling in live trading) --------
-USE_RISK_TARGET_LEV   <- FALSE        # (L) Feature 1: replace fixed 1.5x / 2.50x turbo with ex-ante portfolio-vol
+USE_RISK_TARGET_LEV   <- FALSE        # (L) Feature 1: replace fixed 1.5x / 1.60x turbo with ex-ante portfolio-vol
 SIGMA_TARGET          <- 0.30         #     target on the SELECTED book (EWMA cov) + fractional Kelly cap that uses
 LEV_MAX               <- 2.00         #     the broker's actual margin rate. If L < 1, the undeployed (1 - L) goes to the
                                       #     defensive asset exactly as the 1 - vol_scale buffer does today.
@@ -493,7 +492,7 @@ active_margin <- PORTFOLIO_MARGIN_LEV
 if (PORTFOLIO_MARGIN_LEV > 1.0 && USE_MARGIN_TREND_GATE && !qqq_trend_up) {
   active_margin <- 1.0 # Bear market safety gate: de-lever margin debt to 0%
 } else if (USE_LEVERAGE_TURBO && is_super_bull) {
-  active_margin <- TURBO_MARGIN_LEV # Super-bull leverage turbo: expand to 2.50x in golden trend alignment
+  active_margin <- TURBO_MARGIN_LEV # Super-bull leverage turbo: expand to 1.60x in golden trend alignment (Regulation T compliant)
 }
 
 cat("\n========================================================================================\n")
@@ -830,7 +829,7 @@ if (USE_CRISIS_MVP && is_crisis_regime) {
 }
 
 # (L) Feature 1: risk-targeted, fractional-Kelly leverage on the SELECTED book.
-# Replaces the fixed 1.5x / 2.50x turbo and the QQQ-vol scale factor. Same function
+# Replaces the fixed 1.5x / 1.60x turbo and the QQQ-vol scale factor. Same function
 # and conventions as R/11_option_d_engine.R (leverage_mode = "risk_kelly"):
 # stock gross = vol_scale * active_margin = L, defensive asset = 1 - min(1, L).
 if (USE_RISK_TARGET_LEV && nrow(top_picks) > 0) {
