@@ -255,6 +255,39 @@ sim_option_d <- function(D, cfg = option_d_config(), start = min(D$cal), end = m
   out
 }
 
+#' After-tax CAGR of a daily return stream.
+#'   mode = "annual":   gains are realized every year (monthly rotation) and taxed at
+#'                      `rate` each calendar year-end on the year's net P&L, with losses
+#'                      carried forward. Net P&L already includes margin interest, so the
+#'                      interest is effectively deducted against the same gains. The final
+#'                      (partial) year is taxed at the last date, as if liquidated.
+#'   mode = "deferred": buy-and-hold; a single tax on the total gain at `rate` when the
+#'                      position is liquidated on the last date (long-term treatment).
+#'                      Ignores tax on distributions (QQQ yields well under 1%).
+after_tax_cagr <- function(r, dates, rate, mode = c("annual", "deferred")) {
+  mode <- match.arg(mode)
+  r <- as.numeric(r); n <- length(r)
+  if (n == 0) return(NA_real_)
+  if (mode == "deferred") {
+    W <- prod(1 + r)
+    W <- W - rate * max(0, W - 1)
+    return((W^(252 / n) - 1) * 100)
+  }
+  yr <- format(as.Date(dates), "%Y")
+  last_of_year <- c(yr[-1] != yr[-n], TRUE)
+  W <- 1; start <- 1; carry <- 0
+  for (k in seq_len(n)) {
+    W <- W * (1 + r[k])
+    if (W <= 0) return(-100)
+    if (last_of_year[k]) {
+      taxable <- (W - start) - carry
+      if (taxable > 0) { W <- W - rate * taxable; carry <- 0 } else carry <- -taxable
+      start <- W
+    }
+  }
+  (W^(252 / n) - 1) * 100
+}
+
 #' Standard scorecard for a daily return stream.
 option_d_metrics <- function(r, rf_daily = 0) {
   c_r <- cumprod(1 + r); n <- length(r)

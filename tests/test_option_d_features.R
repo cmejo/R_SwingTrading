@@ -210,6 +210,20 @@ live <- vapply(okk, function(s) {
 check(near(eng, live, 1e-12), "engine FIP rank score == live USE_FIP formula")
 r_fip <- run(fip_weight = 0.30)
 check(fin(r_fip) && !near(as.numeric(r_fip), as.numeric(base)), "FIP blend runs and changes selections")
+# After-tax CAGR arithmetic
+yd <- function(y) seq(as.Date(sprintf("%d-01-01", y)), by = "day", length.out = 252)
+dts <- c(yd(2020), yd(2021), yd(2022))
+one <- function(total) c(rep(0, 251), total)           # whole year's move on its last day
+r3 <- c(one(1.0), one(-0.5), one(1.0))                    # +100%, -50%, +100%
+check(near(after_tax_cagr(r3, dts, 0), option_d_metrics(r3)[["CAGR"]]), "zero tax rate == pre-tax CAGR")
+# annual: Y1 2 -> tax .45 -> 1.55; Y2 0.775 (loss .775 carried); Y3 1.55, gain .775 fully offset -> 1.55
+check(near(after_tax_cagr(r3, dts, 0.45), (1.55^(252 / 756) - 1) * 100), "annual tax with loss carry-forward")
+check(near(after_tax_cagr(one(1.0), yd(2020), 0.30, "deferred"), (1.7^(252 / 252) - 1) * 100),
+      "deferred: single tax on liquidation")
+r2 <- c(one(1.0), one(1.0))                               # +100%, +100%: annual 2.4025 vs deferred 2.65
+check(near(after_tax_cagr(r2, dts[1:504], 0.45), (2.4025^(252 / 504) - 1) * 100) &&
+        after_tax_cagr(r2, dts[1:504], 0.45) < after_tax_cagr(r2, dts[1:504], 0.45, "deferred"),
+      "annual realization costs more than deferral on a rising path")
 m_base <- option_d_metrics(base, D$rf_daily[D$cal >= START & D$cal <= END])
 check(all(is.finite(m_base[c("CAGR", "MaxDD", "Vol", "Sharpe")])), "metrics are finite")
 
