@@ -1,6 +1,6 @@
 {
   "total_capital": 8000,
-  "cash_balance": -3928.19,
+  "cash_balance": -4082.95,
   "core_weight": 0,
   "satellite_weight": 1,
   "core_asset": "NONE",
@@ -12,7 +12,7 @@
   "core_position": {},
   "defensive_position": {
     "symbol": "GLD",
-    "shares": 0.402,
+    "shares": 0.837,
     "entry_price": 355.78,
     "entry_date": "2026-11-01"
   },
@@ -24,7 +24,7 @@
       "current_price": 50.75,
       "entry_date": "2026-11-01",
       "market_value": 2357.08,
-      "unrealized_pnl": 0
+      "unrealized_pnl": -0
     },
     {
       "symbol": "CRWD",
@@ -42,7 +42,7 @@
       "current_price": 306.08,
       "entry_date": "2026-11-01",
       "market_value": 2357.12,
-      "unrealized_pnl": 0
+      "unrealized_pnl": -0
     },
     {
       "symbol": "PANW",
@@ -51,7 +51,7 @@
       "current_price": 365.87,
       "entry_date": "2026-11-01",
       "market_value": 2356.93,
-      "unrealized_pnl": 0
+      "unrealized_pnl": -0
     },
     {
       "symbol": "DELL",
@@ -67,7 +67,7 @@
   "trend_engine": "lmMA_slope",
   "lmma_window": 50,
   "lmma_rsq_threshold": 0.15,
-  "realized_vol_20d": 0.224,
-  "vol_scale": 0.9821,
-  "last_updated": "2026-11-01 23:34:08.943929"
+  "realized_vol_20d": 0.2285,
+  "vol_scale": 0.9628,
+  "last_updated": "2026-11-01 23:39:56.365997"
 }

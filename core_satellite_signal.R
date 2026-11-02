@@ -71,6 +71,9 @@ TREND_ENGINE          <- "lmMA_slope" # (E) Macro Trend Engine: "lmMA_slope" (lo
                                       #     alt: "sma200" (classic 200 SMA), "lmMA_fit" (price vs lmMA level)
 LMMA_WINDOW           <- 50           # Rolling window for linear regression trend velocity (default: 50)
 LMMA_RSQ_THRESHOLD    <- 0.15         # Statistical conviction threshold (R^2 > 0.15 confirms directional trend)
+USE_EARNINGS_SHIELD   <- TRUE         # (F) Option A Earnings Shield: Skip candidate entrants reporting earnings within <=5d
+EARNINGS_BLACKOUT_DAYS<- 5            # Pre-earnings blackout window in trading days (default: 5 days)
+EARNINGS_FILE         <- "data/historical_earnings_dates.json" # Historical & forward earnings dates database
 FORCE_REBALANCE       <- FALSE
 RESET                 <- FALSE
 SYMBOLS_FILE          <- "symbols_broad.txt" # Broad 170-name growth/momentum list (alt: symbols_n100.txt = PIT-tested universe)
@@ -162,6 +165,12 @@ for (arg in args) {
     LMMA_WINDOW <- as.integer(sub("^--lmma_window=", "", arg))
   } else if (grepl("^--lmma_rsq=", arg)) {
     LMMA_RSQ_THRESHOLD <- as.numeric(sub("^--lmma_rsq=", "", arg))
+  } else if (grepl("^--earnings_shield=", arg)) {
+    USE_EARNINGS_SHIELD <- as.logical(sub("^--earnings_shield=", "", arg))
+  } else if (grepl("^--blackout_days=", arg)) {
+    EARNINGS_BLACKOUT_DAYS <- as.integer(sub("^--blackout_days=", "", arg))
+  } else if (grepl("^--earnings_file=", arg)) {
+    EARNINGS_FILE <- sub("^--earnings_file=", "", arg)
   }
 }
 
@@ -570,6 +579,49 @@ if (!is.na(VOL_CAP)) {
       dd <- dd[order(-dd$RS_Composite), ]
       cat(sprintf("\n Volatility cap (%.0f%%) excluded %d high-volatility candidate(s): %s\n", VOL_CAP * 100, nrow(dd),
                   paste(sprintf("%s (%.0f%%)", head(dd$Symbol, 8), head(dd$Vol_63D, 8) * 100), collapse = ", ")))
+    }
+  }
+}
+
+# (D) Option A Earnings Blackout Shield: Exclude candidate entrants reporting earnings within <=5 trading days
+# Existing held positions continue holding through earnings protected by disaster stop
+currently_held_syms <- sapply(port_state$satellite_positions, function(p) p$symbol)
+
+if (USE_EARNINGS_SHIELD && file.exists(EARNINGS_FILE)) {
+  earn_data <- tryCatch(jsonlite::fromJSON(EARNINGS_FILE), error = function(e) NULL)
+  if (!is.null(earn_data)) {
+    now_date <- as.Date(Sys.Date())
+    earn_blocked <- character()
+    next_earn_map <- list()
+    
+    for (sym in rs_qualified$Symbol) {
+      # Option A Rule: Existing holdings are exempt (hold through protected by stops)
+      if (sym %in% currently_held_syms) next
+      
+      ed_list <- earn_data[[sym]]
+      if (!is.null(ed_list) && length(ed_list) > 0) {
+        ed_dates <- as.Date(ed_list)
+        upcoming <- ed_dates[ed_dates >= now_date]
+        if (length(upcoming) > 0) {
+          next_ed <- min(upcoming)
+          days_to_earn <- as.numeric(next_ed - now_date)
+          # Approximately 5 trading days corresponds to <= 7 calendar days
+          if (days_to_earn <= round(EARNINGS_BLACKOUT_DAYS * (7/5))) {
+            earn_blocked <- c(earn_blocked, sym)
+            next_earn_map[[sym]] <- as.character(next_ed)
+          }
+        }
+      }
+    }
+    
+    if (length(earn_blocked) > 0) {
+      eb_ok <- rs_qualified[!(rs_qualified$Symbol %in% earn_blocked), ]
+      if (nrow(eb_ok) >= TOP_N) {
+        rs_qualified <- eb_ok
+        cat(sprintf("\n 🛡️ Option A Earnings Shield (<=%d days) bypassed %d candidate entrant(s): %s\n",
+                    EARNINGS_BLACKOUT_DAYS, length(earn_blocked),
+                    paste(sprintf("%s (Earn: %s)", earn_blocked, unlist(next_earn_map[earn_blocked])), collapse = ", ")))
+      }
     }
   }
 }
