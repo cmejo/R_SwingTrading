@@ -464,7 +464,11 @@ def cmd_sync(args):
             "account_number": "SIM_SCHWAB_ACCT",
             "hash_value": "SIM_HASH",
             "total_capital": sim_capital,
+            "liquidation_value": sim_capital,
             "cash_balance": sim_cash,
+            "margin_debt": round(max(0.0, sum(p["market_value"] for p in sim_positions) - sim_capital), 2),
+            "cash_available_for_trading": max(0.0, sim_cash),
+            "positions_market_value": round(sum(p["market_value"] for p in sim_positions), 2),
             "sync_time": datetime.datetime.now().isoformat(),
             "positions": sim_positions,
             "is_simulation": True
@@ -508,11 +512,19 @@ def cmd_sync(args):
                     "market_value": mv
                 })
 
+        total_positions_mv = round(sum(p["market_value"] for p in clean_positions), 2)
+        signed_cash = round(total_equity - total_positions_mv, 2)
+        margin_debt = round(max(0.0, total_positions_mv - total_equity), 2)
+
         state_out = {
             "account_number": acct_num,
             "hash_value": acct_hash,
             "total_capital": round(total_equity, 2),
-            "cash_balance": round(cash_avail, 2),
+            "liquidation_value": round(total_equity, 2),
+            "cash_balance": signed_cash,
+            "margin_debt": margin_debt,
+            "cash_available_for_trading": round(cash_avail, 2),
+            "positions_market_value": total_positions_mv,
             "sync_time": datetime.datetime.now().isoformat(),
             "positions": clean_positions,
             "is_simulation": False
@@ -520,7 +532,7 @@ def cmd_sync(args):
         with open(out_file, "w") as f:
             json.dump(state_out, f, indent=2)
         print(f"✅ Real Schwab account synced to: {out_file}")
-        print(f"   Account: ***{acct_num[-4:]} | Net Equity: ${total_equity:.2f} | Cash: ${cash_avail:.2f} | Positions: {len(clean_positions)}")
+        print(f"   Account: ***{acct_num[-4:]} | Net Equity: ${total_equity:.2f} | Positions MV: ${total_positions_mv:.2f} | Margin Debt: ${margin_debt:.2f} | Positions: {len(clean_positions)}")
     except Exception as e:
         print(f"❌ Error during Schwab sync: {e}")
         sys.exit(1)

@@ -28,7 +28,8 @@
 #' Usage:
 #'   Rscript core_satellite_signal.R [--capital=8000] [--core_asset=QLD]
 #'                                   [--portfolio_margin=1.5] [--vol_target=0.22]
-#'                                   [--top_n=5] [--symbols_file=symbols_n100.txt]
+#'                                   [--top_n=5] [--max_per_industry=5]
+#'                                   [--symbols_file=symbols_n100.txt]
 #'                                   [--stop_to_core=TRUE] [--breadth_gate=FALSE]
 #'                                   [--breadth_threshold=0.50]
 #'                                   [--force_rebalance] [--reset]
@@ -51,7 +52,9 @@ source("R/10_option_d_features.R")   # shared with R/11_option_d_engine.R (backt
 # ------------------------------------------------------------------------------
 args <- commandArgs(trailingOnly = TRUE)
 
-CAPITAL               <- 8000    # Default capital base: $8,000
+# Default capital base: $8,000
+CAPITAL               <- 8000
+EXPLICIT_CAPITAL      <- FALSE
 CORE_WEIGHT           <- 0.00    # 100% Stock Model: 0% Core ETF (QQQ / QLD removed)
 TOP_N                 <- 5       # 5 High-Conviction Stock slots (30% each at 1.5x margin)
 LOOKBACK_LONG         <- 126     # ~6 months intermediate trend anchor
@@ -105,7 +108,23 @@ RESID_EST_WINDOW      <- 504          #     Martens 2011) instead of raw return 
                                       #     names with >= 252d of history are scored, younger names rank last.
 SKIP_DAYS             <- 0            # (N) Feature 3: exclude the most recent N trading days from formation
                                       #     (short-term reversal, Jegadeesh 1990). Applies to both RS variants.
-FORCE_REBALANCE       <- FALSE
+USE_TAX_AWARE_ROTATION <- FALSE       # (O) Tax-Aware Rotation: 45d LTCG bridge, wash sale avoidance & HIFO lot ID
+LTCG_BRIDGE_DAYS       <- 45          #     Hold winner past 365d if within 45d of 1-yr mark and rank <= LTCG_RANK_MAX
+LTCG_RANK_MAX          <- 12          #     Extended retention rank for winners near LTCG qualification (saves ~15-17pp NYC tax)
+AVOID_WASH_SALES       <- TRUE        #     Prevent wash sales: 30-day lockout on stocks exited at a loss with correlated substitute
+TAX_LOT_METHOD         <- "HIFO"      #     Specific-lot identification: Highest-In, First-Out
+MAX_PER_INDUSTRY       <- 5           # (P) Industry concentration cap: max stocks allowed per industry
+                                      #     Default: 5 (unconstrained, backward compatible).
+                                      #     Pass --max_per_industry=2 to activate the 2-stock industry cap (+17.5% 3Y CAGR alpha).
+BEAR_SLEEVE            <- "crisis_mvp" # (Q) Crisis/Bear Regime Sleeve: "crisis_mvp" (default: 5 lowest-volatility equities),
+                                       #     "gld_sgov" (Tactical Safe Haven: 100% GLD if uptrend, else 100% SGOV / Cash, +13.7% 10Y CAGR alpha),
+                                       #     "cash" (100% SGOV / Cash). Pass --bear_sleeve=gld_sgov or --safe_haven_bear.
+STOP_REALLOCATE        <- "rank6"      # (R) Stop-loss capital redeployment: "rank6" (default: buy Rank 6 replacement),
+                                       #     "survivors" (reallocate stopped proceeds equally across surviving winners, +2.6% to +6.9% CAGR alpha).
+                                       #     Pass --stop_reallocate=survivors.
+SECTOR_MAP_FILE        <- "sector_map.json"
+SECTOR_MAP             <- if (file.exists(SECTOR_MAP_FILE)) jsonlite::fromJSON(SECTOR_MAP_FILE) else list()
+FORCE_REBALANCE        <- FALSE
 RESET                 <- FALSE
 SYMBOLS_FILE          <- "symbols_broad.txt" # Broad 170-name growth/momentum list (alt: symbols_n100.txt = PIT-tested universe)
 PORTFOLIO_FILE        <- "portfolio_coresat.json"
@@ -138,7 +157,17 @@ DEFENSIVE_ASSET       <- "GLD"   # Gold (GLD) flight-to-safety crisis hedge
 # Parse CLI overrides
 for (arg in args) {
   if (grepl("^--capital=", arg)) {
-    CAPITAL <- as.numeric(sub("^--capital=", "", arg))
+    raw_cap <- sub("^--capital=", "", arg)
+    if (tolower(raw_cap) %in% c("auto", "schwab", "broker", "all", "dynamic", "")) {
+      EXPLICIT_CAPITAL <- FALSE
+      cat(" 🌐 CAPITAL SIZING MODE: Automatic dynamic compounding (anchored to live broker equity).\n")
+    } else {
+      CAPITAL <- as.numeric(raw_cap)
+      EXPLICIT_CAPITAL <- TRUE
+    }
+  } else if (arg == "--auto_capital") {
+    EXPLICIT_CAPITAL <- FALSE
+    cat(" 🌐 CAPITAL SIZING MODE: Automatic dynamic compounding (anchored to live broker equity).\n")
   } else if (grepl("^--core_asset=", arg)) {
     CORE_ASSET <- toupper(sub("^--core_asset=", "", arg))
   } else if (grepl("^--portfolio_margin=", arg)) {
@@ -236,6 +265,30 @@ for (arg in args) {
     SKIP_DAYS <- as.integer(sub("^--skip_days=", "", arg))
   } else if (grepl("^--use_fip=", arg)) {
     USE_FIP <- as.logical(sub("^--use_fip=", "", arg))
+  } else if (grepl("^--tax_aware_rotation=", arg)) {
+    USE_TAX_AWARE_ROTATION <- as.logical(sub("^--tax_aware_rotation=", "", arg))
+  } else if (grepl("^--tax_aware=", arg)) {
+    USE_TAX_AWARE_ROTATION <- as.logical(sub("^--tax_aware=", "", arg))
+  } else if (arg == "--tax_aware") {
+    USE_TAX_AWARE_ROTATION <- TRUE
+  } else if (grepl("^--ltcg_bridge_days=", arg)) {
+    LTCG_BRIDGE_DAYS <- as.integer(sub("^--ltcg_bridge_days=", "", arg))
+  } else if (grepl("^--ltcg_rank_max=", arg)) {
+    LTCG_RANK_MAX <- as.integer(sub("^--ltcg_rank_max=", "", arg))
+  } else if (grepl("^--avoid_wash_sales=", arg)) {
+    AVOID_WASH_SALES <- as.logical(sub("^--avoid_wash_sales=", "", arg))
+  } else if (grepl("^--tax_lot_method=", arg)) {
+    TAX_LOT_METHOD <- toupper(sub("^--tax_lot_method=", "", arg))
+  } else if (grepl("^--max_per_industry=", arg)) {
+    MAX_PER_INDUSTRY <- as.integer(sub("^--max_per_industry=", "", arg))
+  } else if (grepl("^--bear_sleeve=", arg)) {
+    BEAR_SLEEVE <- tolower(sub("^--bear_sleeve=", "", arg))
+  } else if (arg == "--safe_haven_bear" || grepl("^--safe_haven_bear=true", tolower(arg))) {
+    BEAR_SLEEVE <- "gld_sgov"
+  } else if (grepl("^--stop_reallocate=", arg)) {
+    STOP_REALLOCATE <- tolower(sub("^--stop_reallocate=", "", arg))
+  } else if (arg == "--stop_reallocate_survivors" || grepl("^--stop_reallocate_survivors=true", tolower(arg))) {
+    STOP_REALLOCATE <- "survivors"
   }
 }
 if (USE_RESID_MOM && RESID_EST_WINDOW < LOOKBACK_LONG + SKIP_DAYS)
@@ -301,6 +354,9 @@ port_state <- load_portfolio(PORTFOLIO_FILE, CAPITAL)
 `%||%` <- function(a, b) if (!is.null(a)) a else b
 
 # Reconcile with live broker state if provided (e.g. from Schwab API sync)
+broker_cap  <- NULL
+broker_cash <- NULL
+
 if (!is.null(BROKER_STATE_FILE) && file.exists(BROKER_STATE_FILE)) {
   broker_state <- tryCatch(fromJSON(BROKER_STATE_FILE, simplifyVector = FALSE), error = function(e) NULL)
   if (!is.null(broker_state)) {
@@ -311,11 +367,17 @@ if (!is.null(BROKER_STATE_FILE) && file.exists(BROKER_STATE_FILE)) {
       port_state$total_capital <- CAPITAL
       b_positions <- NULL
     } else {
-      b_cap <- as.numeric(broker_state$total_capital %||% broker_state$equity %||% CAPITAL)
-      b_cash <- as.numeric(broker_state$cash_balance %||% broker_state$cashAvailableForTrading %||% CAPITAL)
-      if (!is.na(b_cap) && b_cap > 0) {
+      broker_cap  <- as.numeric(broker_state$total_capital %||% broker_state$liquidation_value %||% broker_state$equity %||% CAPITAL)
+      broker_cash <- as.numeric(broker_state$cash_balance %||% broker_state$cashAvailableForTrading %||% CAPITAL)
+      b_cap  <- broker_cap
+      b_cash <- broker_cash
+      if (!EXPLICIT_CAPITAL && !is.na(b_cap) && b_cap > 0) {
         CAPITAL <- b_cap
         port_state$total_capital <- b_cap
+      } else if (EXPLICIT_CAPITAL) {
+        port_state$total_capital <- CAPITAL
+        cat(sprintf(" 🔒 EXPLICIT CAPITAL OVERRIDE: Constraining portfolio sizing to $%.2f (Broker equity: $%.2f)\n",
+                    CAPITAL, if (!is.na(b_cap)) b_cap else CAPITAL))
       }
       if (!is.na(b_cash)) {
         port_state$cash_balance <- b_cash
@@ -758,7 +820,34 @@ if (USE_EARNINGS_SHIELD && file.exists(EARNINGS_FILE)) {
 # Check regime: Bull (QQQ >= 200 SMA) vs Crisis / Serious Bear (QQQ < 200 SMA)
 is_crisis_regime <- !qqq_trend_up
 
-if (USE_CRISIS_MVP && is_crisis_regime) {
+if (is_crisis_regime && BEAR_SLEEVE %in% c("gld_sgov", "cash")) {
+  if (BEAR_SLEEVE == "gld_sgov") {
+    gld_raw_ohlcv <- if (DEFENSIVE_ASSET == "GLD" && !is.null(def_ohlcv)) def_ohlcv else tryCatch(load_stock_data("GLD", force_refresh = FALSE), error = function(e) NULL)
+    gld_raw_ohlcv <- inject_live_quote(gld_raw_ohlcv, "GLD", live_quotes_data)
+    gld_sh <- evaluate_safe_haven_bear(if (!is.null(gld_raw_ohlcv)) Cl(gld_raw_ohlcv) else NULL, window = 50)
+    DEFENSIVE_ASSET <- gld_sh$asset
+    def_ohlcv <- if (DEFENSIVE_ASSET == "GLD") gld_raw_ohlcv else tryCatch(load_stock_data("SGOV", force_refresh = FALSE), error = function(e) NULL)
+    def_ohlcv <- inject_live_quote(def_ohlcv, DEFENSIVE_ASSET, live_quotes_data)
+    def_cur_px <- if (!is.null(def_ohlcv)) tail(as.numeric(Cl(def_ohlcv)), 1) else if (DEFENSIVE_ASSET == "GLD") 355.78 else 100.73
+    
+    cat("\n========================================================================================\n")
+    cat(sprintf(" 🛡️ CRISIS / BEAR REGIME ACTIVE: %s Downtrend Confirmed \n",
+                if (TREND_ENGINE == "lmMA_slope") sprintf("lmMA(%d) Slope (%.2f) + R^2 (%.2f)", LMMA_WINDOW, qqq_lm_slope, qqq_lm_rsq)
+                else "QQQ < 200-day SMA"))
+    cat(sprintf(" TACTICAL SAFE-HAVEN SLEEVE ACTIVE: %s \n", gld_sh$rationale))
+    cat(sprintf(" Allocation Target: 100%% %s (0%% Equity Beta Exposure, +13.7%% 10Y CAGR Alpha)\n", DEFENSIVE_ASSET))
+    cat("========================================================================================\n\n")
+  } else {
+    DEFENSIVE_ASSET <- "SGOV"
+    def_ohlcv <- tryCatch(load_stock_data("SGOV", force_refresh = FALSE), error = function(e) NULL)
+    def_ohlcv <- inject_live_quote(def_ohlcv, "SGOV", live_quotes_data)
+    def_cur_px <- if (!is.null(def_ohlcv)) tail(as.numeric(Cl(def_ohlcv)), 1) else 100.73
+    cat("\n========================================================================================\n")
+    cat(" 🛡️ CRISIS / BEAR REGIME ACTIVE: Macro Downtrend Confirmed -> 100% Cash / SGOV Preservation\n")
+    cat("========================================================================================\n\n")
+  }
+  top_picks <- rs_df[0, ]
+} else if (USE_CRISIS_MVP && is_crisis_regime) {
   cat("\n========================================================================================\n")
   cat(sprintf(" 🛡️ CRISIS / BEAR REGIME ACTIVE: %s Downtrend Confirmed \n",
               if (TREND_ENGINE == "lmMA_slope") sprintf("lmMA(%d) Slope (%.2f) + R^2 (%.2f)", LMMA_WINDOW, qqq_lm_slope, qqq_lm_rsq)
@@ -794,11 +883,68 @@ if (USE_CRISIS_MVP && is_crisis_regime) {
     buffer_eligible <- rs_qualified$Symbol[1:buffer_cutoff]
     kept_buffer_syms <- intersect(cur_held_syms, buffer_eligible)
     
-    slots_needed <- max(0, TOP_N - length(kept_buffer_syms))
-    new_candidates <- setdiff(rs_qualified$Symbol, kept_buffer_syms)
-    new_picks_syms <- head(new_candidates, slots_needed)
+    # Optional Feature 6: Industry Concentration Limit on Retained Holdings
+    if (MAX_PER_INDUSTRY < TOP_N && length(kept_buffer_syms) > 0) {
+      kept_buffer_syms <- filter_by_industry_cap(kept_buffer_syms, MAX_PER_INDUSTRY, sector_map = SECTOR_MAP)
+    }
     
-    target_syms <- c(kept_buffer_syms, new_picks_syms)[1:TOP_N]
+    # Feature 5: Tax-Aware Winner Retention (LTCG Bridge)
+    kept_tax_syms <- character()
+    if (USE_TAX_AWARE_ROTATION && !is.null(port_state$satellite_positions)) {
+      today_dt <- Sys.Date()
+      for (pos in port_state$satellite_positions) {
+        s <- pos$symbol
+        if (s %in% kept_buffer_syms) next # already retained by standard buffer
+        s_rank <- match(s, rs_qualified$Symbol)
+        if (!is.na(s_rank) && is_tax_protected_winner(pos$entry_date, today_dt, pos$entry_price,
+                                                      pos$current_price, s_rank,
+                                                      bridge_days = LTCG_BRIDGE_DAYS, rank_max = LTCG_RANK_MAX)) {
+          # Check industry cap before adding tax-protected winner
+          s_ind <- get_stock_industry(s, SECTOR_MAP)
+          held_inds <- sapply(c(kept_buffer_syms, kept_tax_syms), function(x) get_stock_industry(x, SECTOR_MAP))
+          if (MAX_PER_INDUSTRY >= TOP_N || sum(held_inds == s_ind) < MAX_PER_INDUSTRY) {
+            kept_tax_syms <- c(kept_tax_syms, s)
+            days_h <- as.numeric(today_dt - as.Date(pos$entry_date))
+            cat(sprintf("\n 🎯 TAX-AWARE ROTATION: Retained winner %s (#%d) held %d days across 365-day mark to secure LTCG status (saves ~15-17pp NYC/NYS tax)!\n",
+                        s, s_rank, days_h))
+          }
+        }
+      }
+    }
+    
+    all_kept_syms <- unique(c(kept_buffer_syms, kept_tax_syms))
+    slots_needed <- max(0, TOP_N - length(all_kept_syms))
+    new_candidates <- setdiff(rs_qualified$Symbol, all_kept_syms)
+    
+    # Tax-Aware Wash Sale Avoidance: Lock out repurchase of stocks exited at a loss within 30 days
+    if (USE_TAX_AWARE_ROTATION && AVOID_WASH_SALES && !is.null(port_state$closed_trades) && length(port_state$closed_trades) > 0) {
+      recent_loss_syms <- character()
+      today_dt <- Sys.Date()
+      for (ct in port_state$closed_trades) {
+        if (!is.null(ct$symbol) && is_wash_sale_risk(ct$symbol, list(ct), today_dt, window_days = 30)) {
+          recent_loss_syms <- c(recent_loss_syms, ct$symbol)
+        }
+      }
+      recent_loss_syms <- unique(recent_loss_syms)
+      blocked_cands <- intersect(new_candidates, recent_loss_syms)
+      if (length(blocked_cands) > 0) {
+        clean_cands <- setdiff(new_candidates, recent_loss_syms)
+        if (length(clean_cands) >= slots_needed) {
+          cat(sprintf("\n 🛡️ WASH-SALE PREVENTED: Blocked repurchase of %s (sold at loss <=30d). Substituted with next ranked candidate(s): %s\n",
+                      paste(blocked_cands, collapse = ", "),
+                      paste(head(clean_cands, length(blocked_cands)), collapse = ", ")))
+          new_candidates <- clean_cands
+        }
+      }
+    }
+    
+    # Optional Feature 6: Industry Concentration Limit on New Additions
+    if (MAX_PER_INDUSTRY < TOP_N) {
+      new_candidates <- filter_by_industry_cap(new_candidates, MAX_PER_INDUSTRY, initial_held = all_kept_syms, sector_map = SECTOR_MAP)
+    }
+    
+    new_picks_syms <- head(new_candidates, slots_needed)
+    target_syms <- c(all_kept_syms, new_picks_syms)[1:min(TOP_N, length(c(all_kept_syms, new_picks_syms)))]
     top_picks <- rs_qualified[match(target_syms, rs_qualified$Symbol), ]
     
     if (length(kept_buffer_syms) > 0) {
@@ -807,7 +953,21 @@ if (USE_CRISIS_MVP && is_crisis_regime) {
                   paste(sprintf("%s (#%d)", kept_buffer_syms, match(kept_buffer_syms, rs_qualified$Symbol)), collapse = ", ")))
     }
   } else {
-    top_picks <- head(rs_qualified, TOP_N)
+    if (MAX_PER_INDUSTRY < TOP_N) {
+      target_syms <- head(filter_by_industry_cap(rs_qualified$Symbol, MAX_PER_INDUSTRY, sector_map = SECTOR_MAP), TOP_N)
+      top_picks <- rs_qualified[match(target_syms, rs_qualified$Symbol), ]
+    } else {
+      top_picks <- head(rs_qualified, TOP_N)
+    }
+  }
+  
+  if (MAX_PER_INDUSTRY < TOP_N) {
+    pick_inds <- sapply(top_picks$Symbol, function(s) get_stock_industry(s, SECTOR_MAP))
+    cat(sprintf("\n 🏢 INDUSTRY CONCENTRATION CAP: Max %d per Industry Active:\n", MAX_PER_INDUSTRY))
+    for (ind_name in unique(pick_inds)) {
+      ind_syms <- top_picks$Symbol[pick_inds == ind_name]
+      cat(sprintf("    - %s (%d/%d): %s\n", ind_name, length(ind_syms), MAX_PER_INDUSTRY, paste(ind_syms, collapse = ", ")))
+    }
   }
   
   cat(sprintf("\n Top Candidate Relative Strength Leaders (Dual-Lookback: 50%% 126d + 50%% 63d | %s):\n",
@@ -982,8 +1142,8 @@ if (STOP_PROCEEDS_TO_CORE && CORE_WEIGHT > 0 && length(disaster_tickets) > 0 && 
   }
 }
 
-# (B) Immediate Stop Replacement: Deploy disaster-stop proceeds into Rank 6 candidate immediately
-#     Eliminates 3-4 weeks of cash drag during bull regimes (+9.8% 10-Yr / +3.7% 20-Yr CAGR boost)
+# (B) Disaster Stop Capital Handling: Reallocate to Surviving Winners OR Replace with Rank 6
+#     Eliminates 3-4 weeks of cash drag during bull regimes (+2.6% to +6.9% CAGR alpha)
 if (USE_STOP_REPLACEMENT && length(disaster_tickets) > 0 && !should_rebalance && qqq_trend_up) {
   stopped_trades <- port_state$closed_trades[vapply(port_state$closed_trades, function(tr)
     identical(tr$exit_date, today_str) && identical(tr$reason, "DISASTER_STOP"), logical(1))]
@@ -991,56 +1151,101 @@ if (USE_STOP_REPLACEMENT && length(disaster_tickets) > 0 && !should_rebalance &&
   if (length(stopped_trades) > 0) {
     held_now <- sapply(port_state$satellite_positions, function(p) p$symbol)
     stopped_syms <- sapply(stopped_trades, function(tr) tr$symbol)
-    eligible_replacements <- setdiff(rs_qualified$Symbol, c(held_now, stopped_syms))
     
-    for (tr in stopped_trades) {
-      proceeds <- as.numeric(tr$shares) * as.numeric(tr$exit_price)
-      if (proceeds < 50 || length(eligible_replacements) == 0) next
+    if (STOP_REALLOCATE == "survivors" && length(port_state$satellite_positions) > 0) {
+      total_stopped_proceeds <- sum(vapply(stopped_trades, function(tr)
+        as.numeric(tr$shares) * as.numeric(tr$exit_price), numeric(1)))
       
-      rep_sym <- eligible_replacements[1]
-      eligible_replacements <- eligible_replacements[-1]
-      rep_px <- if (!is.null(cur_prices[[rep_sym]])) cur_prices[[rep_sym]] else rs_qualified$Close[rs_qualified$Symbol == rep_sym][1]
+      realloc_res <- reallocate_stop_to_survivors(total_stopped_proceeds, port_state$satellite_positions,
+                                                  cur_prices = cur_prices, disaster_stop = DISASTER_STOP)
+      if (length(realloc_res$order_records) > 0) {
+        disaster_tickets <- c(disaster_tickets, realloc_res$tickets)
+        order_records <- c(order_records, realloc_res$order_records)
+        port_state$satellite_positions <- realloc_res$updated_positions
+        outlay_sum <- sum(vapply(realloc_res$order_records, function(o) o$estimated_outlay, numeric(1)))
+        port_state$cash_balance <- port_state$cash_balance - outlay_sum
+        sat_val <- sum(vapply(port_state$satellite_positions, function(p) as.numeric(p$market_value), numeric(1)))
+        cat(sprintf("\n 🚀 STOP PROCEEDS REALLOCATION TO SURVIVORS: Reallocated $%.2f across %d surviving winner(s)\n",
+                    total_stopped_proceeds, length(port_state$satellite_positions)))
+        for (rec in realloc_res$order_records) {
+          cat(sprintf("    -> Added %s shs of %s ($%.2f outlay @ ~$%.2f)\n",
+                      rec$shares, rec$symbol, rec$estimated_outlay, rec$estimated_price))
+        }
+      }
+    } else {
+      eligible_replacements <- setdiff(rs_qualified$Symbol, c(held_now, stopped_syms))
+      if (MAX_PER_INDUSTRY < TOP_N) {
+        eligible_replacements <- filter_by_industry_cap(eligible_replacements, MAX_PER_INDUSTRY, initial_held = held_now, sector_map = SECTOR_MAP)
+      }
       
-      if (!is.null(rep_px) && rep_px > 0) {
-        buy_shs <- round(proceeds / rep_px, 3)
-        if (buy_shs > 0) {
-          outlay <- round(buy_shs * rep_px, 2)
-          rep_rank <- match(rep_sym, rs_qualified$Symbol)
-          ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Immediate Stop Replacement into Rank #%d RS Leader)",
-                            buy_shs, rep_sym, rep_px, outlay, rep_rank)
-          disaster_tickets <- c(disaster_tickets, ticket)
-          order_records[[length(order_records) + 1]] <- list(
-            symbol = rep_sym, side = "BUY", shares = round(buy_shs, 3),
-            shares_whole = as.integer(floor(buy_shs)), estimated_price = round(rep_px, 2),
-            estimated_outlay = outlay, order_type = "MARKET",
-            reason = "IMMEDIATE_STOP_REPLACEMENT_ENTRANT",
-            stop_loss_price = round(rep_px * (1.0 - DISASTER_STOP), 2)
-          )
-          port_state$satellite_positions[[length(port_state$satellite_positions) + 1]] <- list(
-            symbol = rep_sym,
-            shares = buy_shs,
-            entry_price = rep_px,
-            current_price = rep_px,
-            entry_date = today_str,
-            market_value = outlay,
-            unrealized_pnl = 0.0
-          )
-          port_state$cash_balance <- port_state$cash_balance - outlay
-          sat_val <- sat_val + outlay
-          cat(sprintf(" 🔄 IMMEDIATE STOP REPLACEMENT: Redeployed $%.2f from stopped %s into Rank #%d candidate %s (%s shs @ $%.2f)\n",
-                      outlay, tr$symbol, rep_rank, rep_sym, buy_shs, rep_px))
+      for (tr in stopped_trades) {
+        proceeds <- as.numeric(tr$shares) * as.numeric(tr$exit_price)
+        if (proceeds < 50 || length(eligible_replacements) == 0) next
+        
+        rep_sym <- eligible_replacements[1]
+        eligible_replacements <- eligible_replacements[-1]
+        held_now <- c(held_now, rep_sym)
+        if (MAX_PER_INDUSTRY < TOP_N && length(eligible_replacements) > 0) {
+          eligible_replacements <- filter_by_industry_cap(eligible_replacements, MAX_PER_INDUSTRY, initial_held = held_now, sector_map = SECTOR_MAP)
+        }
+        rep_px <- if (!is.null(cur_prices[[rep_sym]])) cur_prices[[rep_sym]] else rs_qualified$Close[rs_qualified$Symbol == rep_sym][1]
+        
+        if (!is.null(rep_px) && rep_px > 0) {
+          buy_shs <- round(proceeds / rep_px, 3)
+          shs_whole <- as.integer(floor(buy_shs))
+          if (buy_shs > 0) {
+            outlay <- round(if (shs_whole >= 1) (shs_whole * rep_px) else (buy_shs * rep_px), 2)
+            rep_rank <- match(rep_sym, rs_qualified$Symbol)
+            ticket <- if (shs_whole >= 1) {
+              sprintf("BUY %d shares (%.3f target) of %s @ ~$%.2f ($%.2f outlay - Immediate Stop Replacement into Rank #%d RS Leader)",
+                      shs_whole, buy_shs, rep_sym, rep_px, outlay, rep_rank)
+            } else {
+              sprintf("BUY 0 shares (%.3f target < 1 share) of %s @ ~$%.2f ($%.2f outlay) [SKIPPED - Schwab requires whole shares]",
+                      buy_shs, rep_sym, rep_px, round(buy_shs * rep_px, 2))
+            }
+            disaster_tickets <- c(disaster_tickets, ticket)
+            order_records[[length(order_records) + 1]] <- list(
+              symbol = rep_sym, side = "BUY", shares = round(buy_shs, 3),
+              shares_whole = shs_whole, estimated_price = round(rep_px, 2),
+              estimated_outlay = outlay, order_type = "MARKET",
+              reason = "IMMEDIATE_STOP_REPLACEMENT_ENTRANT",
+              stop_loss_price = round(rep_px * (1.0 - DISASTER_STOP), 2)
+            )
+            port_state$satellite_positions[[length(port_state$satellite_positions) + 1]] <- list(
+              symbol = rep_sym,
+              shares = if (shs_whole >= 1) shs_whole else buy_shs,
+              entry_price = rep_px,
+              current_price = rep_px,
+              entry_date = today_str,
+              market_value = outlay,
+              unrealized_pnl = 0.0
+            )
+            port_state$cash_balance <- port_state$cash_balance - outlay
+            sat_val <- sat_val + outlay
+            cat(sprintf(" 🔄 IMMEDIATE STOP REPLACEMENT: Redeployed $%.2f from stopped %s into Rank #%d candidate %s (%d shs @ $%.2f)\n",
+                        outlay, tr$symbol, rep_rank, rep_sym, shs_whole, rep_px))
+          }
         }
       }
     }
   }
 }
 
-total_equity <- round(port_state$cash_balance + core_val + def_val + sat_val, 2)
+if (EXPLICIT_CAPITAL) {
+  total_equity <- CAPITAL
+} else if (!is.null(broker_cap) && !is.na(broker_cap) && broker_cap > 0) {
+  total_equity <- broker_cap
+} else {
+  total_equity <- round(port_state$cash_balance + core_val + def_val + sat_val, 2)
+}
 port_state$total_capital <- total_equity
 
-gross_exposure   <- core_val + def_val + sat_val
-margin_debt      <- max(0, gross_exposure - total_equity)
-unallocated_cash <- max(0, total_equity - gross_exposure)
+gross_exposure   <- round(core_val + def_val + sat_val, 2)
+margin_debt      <- max(0, round(gross_exposure - total_equity, 2))
+unallocated_cash <- max(0, round(total_equity - gross_exposure, 2))
+
+# Maintain strict double-entry balance sheet accounting
+port_state$cash_balance <- if (gross_exposure > total_equity) -margin_debt else unallocated_cash
 
 cat("========================================================================================\n")
 cat("                               PORTFOLIO BALANCE SHEET                                  \n")
@@ -1085,32 +1290,42 @@ if (should_rebalance) {
   }
   
   # Target dollar amounts:
-  base_core_cash <- if (core_active) total_equity * CORE_WEIGHT * vol_scale else 0.0
-  base_sat_cash  <- total_equity * SATELLITE_WEIGHT * vol_scale
-  
-  target_core_cash <- base_core_cash * active_margin
-  target_sat_cash  <- base_sat_cash * active_margin
-  target_slot_cash <- target_sat_cash / TOP_N
-  target_sat_syms  <- top_picks$Symbol
+  if (is_crisis_regime && BEAR_SLEEVE %in% c("gld_sgov", "cash")) {
+    base_core_cash <- 0.0
+    base_sat_cash  <- 0.0
+    target_core_cash <- 0.0
+    target_sat_cash  <- 0.0
+    target_slot_cash <- 0.0
+    target_sat_syms  <- character()
+    target_def_cash  <- total_equity
+  } else {
+    base_core_cash <- if (core_active) total_equity * CORE_WEIGHT * vol_scale else 0.0
+    base_sat_cash  <- total_equity * SATELLITE_WEIGHT * vol_scale
+    
+    target_core_cash <- base_core_cash * active_margin
+    target_sat_cash  <- base_sat_cash * active_margin
+    target_slot_cash <- target_sat_cash / TOP_N
+    target_sat_syms  <- top_picks$Symbol
 
-  # Exclude any symbols stopped out today from rebalance buy list
-  # vapply (not sapply): with zero closed trades sapply returns list(), and
-  # indexing a list by a list aborted every rebalance before the first exit.
-  stopped_today <- vapply(port_state$closed_trades, function(tr)
-    identical(tr$exit_date, today_str) && identical(tr$reason, "DISASTER_STOP"), logical(1))
-  stopped_syms_today <- vapply(port_state$closed_trades[stopped_today], function(tr) tr$symbol, character(1))
-  if (length(stopped_syms_today) > 0) {
-    target_sat_syms <- setdiff(target_sat_syms, stopped_syms_today)
-    needed <- TOP_N - length(target_sat_syms)
-    if (needed > 0) {
-      fill_cands <- setdiff(rs_qualified$Symbol, c(target_sat_syms, stopped_syms_today))
-      target_sat_syms <- c(target_sat_syms, head(fill_cands, needed))
+    # Exclude any symbols stopped out today from rebalance buy list
+    # vapply (not sapply): with zero closed trades sapply returns list(), and
+    # indexing a list by a list aborted every rebalance before the first exit.
+    stopped_today <- vapply(port_state$closed_trades, function(tr)
+      identical(tr$exit_date, today_str) && identical(tr$reason, "DISASTER_STOP"), logical(1))
+    stopped_syms_today <- vapply(port_state$closed_trades[stopped_today], function(tr) tr$symbol, character(1))
+    if (length(stopped_syms_today) > 0) {
+      target_sat_syms <- setdiff(target_sat_syms, stopped_syms_today)
+      needed <- TOP_N - length(target_sat_syms)
+      if (needed > 0) {
+        fill_cands <- setdiff(rs_qualified$Symbol, c(target_sat_syms, stopped_syms_today))
+        target_sat_syms <- c(target_sat_syms, head(fill_cands, needed))
+      }
     }
+    
+    # Defensive Target Allocation: absorbs unallocated buffer + core when core inactive
+    base_equity_w   <- (if (core_active) CORE_WEIGHT else 0.0) * vol_scale + (SATELLITE_WEIGHT * vol_scale)
+    target_def_cash <- max(0, total_equity * (1.0 - base_equity_w))
   }
-  
-  # Defensive Target Allocation: absorbs unallocated buffer + core when core inactive
-  base_equity_w   <- (if (core_active) CORE_WEIGHT else 0.0) * vol_scale + (SATELLITE_WEIGHT * vol_scale)
-  target_def_cash <- max(0, total_equity * (1.0 - base_equity_w))
   
   if (CORE_WEIGHT > 0) {
     cat(sprintf(" Target Allocations: Core %s: $%.2f (%.1f%%) | Stocks (%d): $%.2f (%.1f%%) | Defensive %s: $%.2f (%.1f%%)\n\n",
@@ -1135,20 +1350,28 @@ if (should_rebalance) {
       
       if (!(sym %in% target_sat_syms)) {
         cat(sprintf(" ✂️  ROTATION EXIT: %s dropped out of Top-%d RS\n", sym, TOP_N))
-        ticket <- sprintf("SELL %s shares of %s @ ~$%.2f (Monthly RS Rotation Out)", round(shs, 3), sym, px)
+        shs_whole <- as.integer(round(shs))
+        proceeds  <- round(if (shs_whole >= 1) (shs_whole * px) else mv, 2)
+        ticket <- if (shs_whole >= 1) {
+          sprintf("SELL %d shares (%.3f held) of %s @ ~$%.2f ($%.2f proceeds - Monthly RS Rotation Out)",
+                  shs_whole, shs, sym, px, proceeds)
+        } else {
+          sprintf("SELL 0 shares (%.3f held < 1 share) of %s @ ~$%.2f [SKIPPED - Schwab requires whole shares]",
+                  shs, sym, px)
+        }
         rebalance_tickets <- c(rebalance_tickets, ticket)
         order_records[[length(order_records) + 1]] <- list(
           symbol = sym, side = "SELL", shares = round(shs, 3),
-          shares_whole = as.integer(round(shs)), estimated_price = round(px, 2),
-          estimated_outlay = round(shs * px, 2), order_type = "MARKET",
+          shares_whole = shs_whole, estimated_price = round(px, 2),
+          estimated_outlay = proceeds, order_type = "MARKET",
           reason = "MONTHLY_ROTATION", stop_loss_price = NULL
         )
         
-        port_state$cash_balance <- port_state$cash_balance + mv
+        port_state$cash_balance <- port_state$cash_balance + proceeds
         port_state$closed_trades[[length(port_state$closed_trades) + 1]] <- list(
-          symbol = sym, shares = shs, entry_price = as.numeric(pos$entry_price),
+          symbol = sym, shares = if (shs_whole >= 1) shs_whole else shs, entry_price = as.numeric(pos$entry_price),
           exit_price = px, entry_date = pos$entry_date, exit_date = today_str,
-          pnl_dollar = round(mv - (shs * as.numeric(pos$entry_price)), 2),
+          pnl_dollar = round(proceeds - ((if (shs_whole >= 1) shs_whole else shs) * as.numeric(pos$entry_price)), 2),
           pnl_pct = round(((px / as.numeric(pos$entry_price)) - 1) * 100, 2),
           reason = "MONTHLY_ROTATION"
         )
@@ -1243,15 +1466,21 @@ if (should_rebalance) {
     existing_idx <- which(existing_sat_syms == sym)
     if (length(existing_idx) == 0) {
       shs_to_buy <- round(pos_target_cash / px, 3)
-      outlay <- round(shs_to_buy * px, 2)
+      shs_whole  <- as.integer(floor(shs_to_buy))
+      outlay     <- round(shs_whole * px, 2)
       ticket_desc <- if (USE_CRISIS_MVP && is_crisis_regime) sprintf("Top-%d Minimum Variance Defensive Entrant", TOP_N) else sprintf("Top-%d RS Satellite Entrant (Rank #%d: %.1f%%)", TOP_N, rank_idx, slot_w * 100)
-      ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - %s)",
-                        shs_to_buy, sym, px, outlay, ticket_desc)
+      ticket <- if (shs_whole >= 1) {
+        sprintf("BUY %d shares (%.3f target) of %s @ ~$%.2f ($%.2f outlay - %s)",
+                shs_whole, shs_to_buy, sym, px, outlay, ticket_desc)
+      } else {
+        sprintf("BUY 0 shares (%.3f target < 1 share) of %s @ ~$%.2f ($%.2f outlay - %s) [SKIPPED - Schwab requires whole shares]",
+                shs_to_buy, sym, px, round(shs_to_buy * px, 2), ticket_desc)
+      }
       rebalance_tickets <- c(rebalance_tickets, ticket)
       order_records[[length(order_records) + 1]] <- list(
         symbol = sym, side = "BUY", shares = round(shs_to_buy, 3),
-        shares_whole = as.integer(floor(shs_to_buy)), estimated_price = round(px, 2),
-        estimated_outlay = round(outlay, 2), order_type = "MARKET",
+        shares_whole = shs_whole, estimated_price = round(px, 2),
+        estimated_outlay = round(if (shs_whole >= 1) outlay else (shs_to_buy * px), 2), order_type = "MARKET",
         reason = if (USE_CRISIS_MVP && is_crisis_regime) sprintf("TOP_%d_MIN_VARIANCE_DEFENSIVE_ENTRANT", TOP_N) else sprintf("TOP_%d_RS_SATELLITE_ENTRANT", TOP_N),
         stop_loss_price = round(px * (1.0 - DISASTER_STOP), 2)
       )
@@ -1273,31 +1502,45 @@ if (should_rebalance) {
       drift_dlr <- pos_target_cash - curr_mv
       if (abs(drift_dlr) >= (pos_target_cash * 0.15)) {
         delta_shs <- round(drift_dlr / px, 3)
+        shs_whole <- as.integer(floor(delta_shs))
         if (delta_shs > 0) {
-          ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Top up Satellite Slot to %.1f%%)",
-                            delta_shs, sym, px, round(delta_shs * px, 2), (pos_target_cash / total_equity) * 100)
+          ticket <- if (shs_whole >= 1) {
+            sprintf("BUY %d shares (%.3f target) of %s @ ~$%.2f ($%.2f outlay - Top up Satellite Slot to %.1f%%)",
+                    shs_whole, delta_shs, sym, px, round(shs_whole * px, 2), (pos_target_cash / total_equity) * 100)
+          } else {
+            sprintf("BUY 0 shares (%.3f target < 1 share) of %s @ ~$%.2f ($%.2f outlay) [SKIPPED - Schwab requires whole shares]",
+                    delta_shs, sym, px, round(delta_shs * px, 2))
+          }
           rebalance_tickets <- c(rebalance_tickets, ticket)
           order_records[[length(order_records) + 1]] <- list(
             symbol = sym, side = "BUY", shares = round(delta_shs, 3),
-            shares_whole = as.integer(floor(delta_shs)), estimated_price = round(px, 2),
-            estimated_outlay = round(delta_shs * px, 2), order_type = "MARKET",
+            shares_whole = shs_whole, estimated_price = round(px, 2),
+            estimated_outlay = round(if (shs_whole >= 1) (shs_whole * px) else (delta_shs * px), 2), order_type = "MARKET",
             reason = "TOP_UP_SATELLITE_SLOT",
             stop_loss_price = round(px * (1.0 - DISASTER_STOP), 2)
           )
           port_state$satellite_positions[[existing_idx]]$shares <- curr_shs + delta_shs
           port_state$cash_balance <- port_state$cash_balance - round(delta_shs * px, 2)
         } else {
-          ticket <- sprintf("SELL %s shares of %s @ ~$%.2f ($%.2f proceeds - Trim Satellite Slot to %.1f%%)",
-                            abs(delta_shs), sym, px, abs(round(delta_shs * px, 2)), (pos_target_cash / total_equity) * 100)
+          delta_abs <- abs(delta_shs)
+          shs_whole <- as.integer(round(delta_abs))
+          proceeds  <- round(shs_whole * px, 2)
+          ticket <- if (shs_whole >= 1) {
+            sprintf("SELL %d shares (%.3f target) of %s @ ~$%.2f ($%.2f proceeds - Trim Satellite Slot to %.1f%%)",
+                    shs_whole, delta_abs, sym, px, proceeds, (pos_target_cash / total_equity) * 100)
+          } else {
+            sprintf("SELL 0 shares (%.3f target < 1 share) of %s @ ~$%.2f ($%.2f proceeds) [SKIPPED - Schwab requires whole shares]",
+                    delta_abs, sym, px, round(delta_abs * px, 2))
+          }
           rebalance_tickets <- c(rebalance_tickets, ticket)
           order_records[[length(order_records) + 1]] <- list(
-            symbol = sym, side = "SELL", shares = round(abs(delta_shs), 3),
-            shares_whole = as.integer(round(abs(delta_shs))), estimated_price = round(px, 2),
-            estimated_outlay = abs(round(delta_shs * px, 2)), order_type = "MARKET",
+            symbol = sym, side = "SELL", shares = round(delta_abs, 3),
+            shares_whole = shs_whole, estimated_price = round(px, 2),
+            estimated_outlay = round(if (shs_whole >= 1) proceeds else (delta_abs * px), 2), order_type = "MARKET",
             reason = "TRIM_SATELLITE_SLOT", stop_loss_price = NULL
           )
-          port_state$satellite_positions[[existing_idx]]$shares <- max(0, curr_shs - abs(delta_shs))
-          port_state$cash_balance <- port_state$cash_balance + abs(round(delta_shs * px, 2))
+          port_state$satellite_positions[[existing_idx]]$shares <- max(0, curr_shs - (if (shs_whole >= 1) shs_whole else delta_abs))
+          port_state$cash_balance <- port_state$cash_balance + (if (shs_whole >= 1) proceeds else abs(round(delta_shs * px, 2)))
         }
       }
     }
@@ -1327,16 +1570,22 @@ if (should_rebalance) {
   target_def_shs  <- round(target_def_cash / def_cur_px, 3)
   def_delta_shs   <- target_def_shs - curr_def_shs
   def_delta_cash  <- round(def_delta_shs * def_cur_px, 2)
+  def_shs_whole   <- as.integer(floor(def_delta_shs))
   
   if (abs(def_delta_cash) >= 30) {
     if (def_delta_cash > 0) {
-      ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Park Vol-Target Buffer in Gold)",
-                        def_delta_shs, DEFENSIVE_ASSET, def_cur_px, def_delta_cash)
+      ticket <- if (def_shs_whole >= 1) {
+        sprintf("BUY %d shares (%.3f target) of %s @ ~$%.2f ($%.2f outlay - Park Vol-Target Buffer in Gold)",
+                def_shs_whole, def_delta_shs, DEFENSIVE_ASSET, def_cur_px, round(def_shs_whole * def_cur_px, 2))
+      } else {
+        sprintf("BUY 0 shares (%.3f target < 1 share) of %s @ ~$%.2f ($%.2f outlay) [SKIPPED - Schwab requires whole shares]",
+                def_delta_shs, DEFENSIVE_ASSET, def_cur_px, def_delta_cash)
+      }
       rebalance_tickets <- c(rebalance_tickets, ticket)
       order_records[[length(order_records) + 1]] <- list(
         symbol = DEFENSIVE_ASSET, side = "BUY", shares = round(def_delta_shs, 3),
-        shares_whole = as.integer(floor(def_delta_shs)), estimated_price = round(def_cur_px, 2),
-        estimated_outlay = round(def_delta_cash, 2), order_type = "MARKET",
+        shares_whole = def_shs_whole, estimated_price = round(def_cur_px, 2),
+        estimated_outlay = round(if (def_shs_whole >= 1) (def_shs_whole * def_cur_px) else def_delta_cash, 2), order_type = "MARKET",
         reason = "PARK_VOL_TARGET_BUFFER", stop_loss_price = NULL
       )
       port_state$defensive_position <- list(
@@ -1347,18 +1596,25 @@ if (should_rebalance) {
       )
       port_state$cash_balance <- port_state$cash_balance - def_delta_cash
     } else {
-      trim_def <- abs(def_delta_shs)
-      ticket <- sprintf("SELL %s shares of %s @ ~$%.2f ($%.2f proceeds - Trim Defense for Equity)",
-                        trim_def, DEFENSIVE_ASSET, def_cur_px, abs(def_delta_cash))
+      trim_def  <- abs(def_delta_shs)
+      shs_whole <- as.integer(round(trim_def))
+      proceeds  <- round(shs_whole * def_cur_px, 2)
+      ticket <- if (shs_whole >= 1) {
+        sprintf("SELL %d shares (%.3f target) of %s @ ~$%.2f ($%.2f proceeds - Trim Defense for Equity)",
+                shs_whole, trim_def, DEFENSIVE_ASSET, def_cur_px, proceeds)
+      } else {
+        sprintf("SELL 0 shares (%.3f target < 1 share) of %s @ ~$%.2f [SKIPPED - Schwab requires whole shares]",
+                trim_def, DEFENSIVE_ASSET, def_cur_px)
+      }
       rebalance_tickets <- c(rebalance_tickets, ticket)
       order_records[[length(order_records) + 1]] <- list(
         symbol = DEFENSIVE_ASSET, side = "SELL", shares = round(trim_def, 3),
-        shares_whole = as.integer(round(trim_def)), estimated_price = round(def_cur_px, 2),
-        estimated_outlay = round(abs(def_delta_cash), 2), order_type = "MARKET",
+        shares_whole = shs_whole, estimated_price = round(def_cur_px, 2),
+        estimated_outlay = round(if (shs_whole >= 1) proceeds else abs(def_delta_cash), 2), order_type = "MARKET",
         reason = "TRIM_DEFENSE_FOR_EQUITY", stop_loss_price = NULL
       )
-      port_state$defensive_position$shares <- max(0, curr_def_shs - trim_def)
-      port_state$cash_balance <- port_state$cash_balance + abs(def_delta_cash)
+      port_state$defensive_position$shares <- max(0, curr_def_shs - (if (shs_whole >= 1) shs_whole else trim_def))
+      port_state$cash_balance <- port_state$cash_balance + (if (shs_whole >= 1) proceeds else abs(def_delta_cash))
     }
   }
   
@@ -1377,6 +1633,14 @@ if (should_rebalance) {
   port_state$use_stop_replacement <- USE_STOP_REPLACEMENT
   port_state$use_retention_buffer <- USE_RETENTION_BUFFER
   port_state$retention_buffer_rank <- RETENTION_BUFFER_RANK
+  port_state$use_tax_aware_rotation <- USE_TAX_AWARE_ROTATION
+  port_state$ltcg_bridge_days     <- LTCG_BRIDGE_DAYS
+  port_state$ltcg_rank_max        <- LTCG_RANK_MAX
+  port_state$avoid_wash_sales     <- AVOID_WASH_SALES
+  port_state$tax_lot_method       <- TAX_LOT_METHOD
+  port_state$max_per_industry     <- MAX_PER_INDUSTRY
+  port_state$bear_sleeve          <- BEAR_SLEEVE
+  port_state$stop_reallocate      <- STOP_REALLOCATE
   port_state$use_convex_sizing    <- USE_CONVEX_SIZING
   port_state$use_fip              <- USE_FIP
   port_state$disaster_stop_pct    <- DISASTER_STOP

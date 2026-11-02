@@ -1,6 +1,6 @@
 {
-  "total_capital": 8000.01,
-  "cash_balance": -4082.95,
+  "total_capital": 7315.35,
+  "cash_balance": -3915.56,
   "core_weight": 0,
   "satellite_weight": 1,
   "core_asset": "NONE",
@@ -8,11 +8,11 @@
   "vol_target": 0.22,
   "defensive_asset": "GLD",
   "use_core_trend": false,
-  "last_rebalance_date": "2026-11-01",
+  "last_rebalance_date": "2026-11-02",
   "core_position": {},
   "defensive_position": {
     "symbol": "GLD",
-    "shares": 0.837,
+    "shares": 0.502,
     "entry_price": 355.78,
     "entry_date": "2026-11-02"
   },
@@ -21,53 +21,83 @@
       "symbol": "TENB",
       "shares": 46.445,
       "entry_price": 50.75,
-      "current_price": 50.75,
+      "current_price": 47.45,
       "entry_date": "2026-11-01",
-      "market_value": 2357.08,
-      "unrealized_pnl": -0
+      "market_value": 2203.82,
+      "unrealized_pnl": -153.26
     },
     {
       "symbol": "CRWD",
       "shares": 9.412,
       "entry_price": 250.43,
-      "current_price": 250.43,
+      "current_price": 241.81,
       "entry_date": "2026-11-01",
-      "market_value": 2357.05,
-      "unrealized_pnl": 0
+      "market_value": 2275.92,
+      "unrealized_pnl": -81.13
     },
     {
       "symbol": "SNOW",
       "shares": 7.701,
       "entry_price": 306.08,
-      "current_price": 306.08,
+      "current_price": 290.68,
       "entry_date": "2026-11-01",
-      "market_value": 2357.12,
-      "unrealized_pnl": -0
-    },
-    {
-      "symbol": "PANW",
-      "shares": 6.442,
-      "entry_price": 365.87,
-      "current_price": 365.87,
-      "entry_date": "2026-11-01",
-      "market_value": 2356.93,
-      "unrealized_pnl": -0
+      "market_value": 2238.53,
+      "unrealized_pnl": -118.59
     },
     {
       "symbol": "DELL",
       "shares": 5.555,
       "entry_price": 424.3,
-      "current_price": 424.3,
+      "current_price": 392.78,
       "entry_date": "2026-11-01",
-      "market_value": 2356.99,
-      "unrealized_pnl": 0
+      "market_value": 2181.89,
+      "unrealized_pnl": -175.1
+    },
+    {
+      "symbol": "NTAP",
+      "shares": 11.601,
+      "entry_price": 199.18,
+      "current_price": 185.26,
+      "entry_date": "2026-11-02",
+      "market_value": 2149.2,
+      "unrealized_pnl": -161.49
     }
   ],
-  "closed_trades": [],
+  "closed_trades": [
+    {
+      "symbol": "PANW",
+      "shares": 6.442,
+      "entry_price": 365.87,
+      "exit_price": 365.87,
+      "entry_date": "2026-11-01",
+      "exit_date": "2026-11-02",
+      "pnl_dollar": 0,
+      "pnl_pct": 0,
+      "reason": "MONTHLY_ROTATION"
+    }
+  ],
   "trend_engine": "lmMA_slope",
   "lmma_window": 50,
   "lmma_rsq_threshold": 0.15,
-  "realized_vol_20d": 0.2285,
-  "vol_scale": 0.9628,
-  "last_updated": "2026-11-02 06:10:58.403807"
+  "realized_vol_20d": 0.2256,
+  "vol_scale": 0.9752,
+  "last_updated": "2026-11-02 17:18:58.697541",
+  "use_stock_trend_gate": false,
+  "use_leverage_turbo": true,
+  "turbo_margin_lev": 1.6,
+  "use_stop_replacement": true,
+  "use_retention_buffer": true,
+  "retention_buffer_rank": 8,
+  "use_tax_aware_rotation": false,
+  "ltcg_bridge_days": 45,
+  "ltcg_rank_max": 12,
+  "avoid_wash_sales": true,
+  "tax_lot_method": "HIFO",
+  "max_per_industry": 5,
+  "use_convex_sizing": false,
+  "use_fip": true,
+  "disaster_stop_pct": 0.25,
+  "active_margin_today": 1.5,
+  "bear_sleeve": "gld_sgov",
+  "stop_reallocate": "survivors"
 }

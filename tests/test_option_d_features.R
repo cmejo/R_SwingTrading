@@ -227,5 +227,106 @@ check(near(after_tax_cagr(r2, dts[1:504], 0.45), (2.4025^(252 / 504) - 1) * 100)
 m_base <- option_d_metrics(base, D$rf_daily[D$cal >= START & D$cal <= END])
 check(all(is.finite(m_base[c("CAGR", "MaxDD", "Vol", "Sharpe")])), "metrics are finite")
 
+# ------------------------------------------------------------------------------
+cat("\n[10] Feature 5: Tax-Aware Winner Retention & Wash Sale Avoidance\n")
+# Test 1: Winner within 45 days of 365d and rank <= 12 is protected
+check(is_tax_protected_winner(entry_date = "2025-01-01", current_date = "2025-12-01",
+                              entry_price = 100, current_price = 150, current_rank = 10,
+                              bridge_days = 45, rank_max = 12),
+      "winner at 334 days with rank 10 is tax-protected across 365d")
+
+# Test 2: Loser is NOT protected
+check(!is_tax_protected_winner(entry_date = "2025-01-01", current_date = "2025-12-01",
+                               entry_price = 100, current_price = 80, current_rank = 10,
+                               bridge_days = 45, rank_max = 12),
+      "loser at 334 days is not protected")
+
+# Test 3: Holding < 320 days is NOT protected (outside bridge window)
+check(!is_tax_protected_winner(entry_date = "2025-06-01", current_date = "2025-12-01",
+                               entry_price = 100, current_price = 150, current_rank = 10,
+                               bridge_days = 45, rank_max = 12),
+      "winner at 183 days is not in the 45-day bridge window")
+
+# Test 4: Rank > 12 is NOT protected
+check(!is_tax_protected_winner(entry_date = "2025-01-01", current_date = "2025-12-01",
+                               entry_price = 100, current_price = 150, current_rank = 15,
+                               bridge_days = 45, rank_max = 12),
+      "winner with rank 15 is outside the rank 12 limit")
+
+# Test 5: Wash-sale risk detection
+closed_ex <- list(list(symbol = "NVDA", realized_pnl = -500, exit_date = "2026-10-15"))
+check(is_wash_sale_risk("NVDA", closed_ex, "2026-10-25", window_days = 30),
+      "repurchase within 10 days of loss sale triggers wash sale risk")
+check(!is_wash_sale_risk("NVDA", closed_ex, "2026-11-20", window_days = 30),
+      "repurchase after 36 days is wash-sale clear")
+check(!is_wash_sale_risk("AAPL", closed_ex, "2026-10-25", window_days = 30),
+      "different ticker has no wash sale risk")
+
+# ------------------------------------------------------------------------------
+cat("\n[11] Feature 6: Industry Concentration Limit (Correlation Cap)\n")
+test_sm <- list(NVDA = "Semiconductors", AMD = "Semiconductors", TSM = "Semiconductors",
+                AVGO = "Semiconductors", MSFT = "MegaCap_Tech", AAPL = "MegaCap_Tech",
+                CRWD = "CyberSecurity")
+
+# Test 1: Industry resolution
+check(identical(get_stock_industry("NVDA", test_sm), "Semiconductors"),
+      "get_stock_industry correctly resolves mapped ticker")
+check(identical(get_stock_industry("UNKNOWN_XYZ", test_sm), "Other"),
+      "get_stock_industry falls back to 'Other' for unmapped ticker")
+
+# Test 2: Unconstrained cap (>= 5) preserves order and picks all candidates
+cands_6 <- c("NVDA", "AMD", "TSM", "AVGO", "MSFT", "AAPL")
+check(identical(filter_by_industry_cap(cands_6, max_per_industry = 5, sector_map = test_sm), cands_6),
+      "max_per_industry >= 5 preserves full candidate list unconstrained")
+
+# Test 3: Cap = 2 filters out 3rd and 4th semiconductor names
+filtered_cap2 <- filter_by_industry_cap(cands_6, max_per_industry = 2, sector_map = test_sm)
+check(identical(filtered_cap2, c("NVDA", "AMD", "MSFT", "AAPL")),
+      "max_per_industry = 2 allows max 2 semiconductors, dropping TSM and AVGO")
+
+# Test 4: Initial held counts against the cap
+initial_held <- c("NVDA", "AMD") # Already 2 semiconductors held
+new_cands <- c("TSM", "MSFT", "AVGO", "CRWD")
+filtered_held <- filter_by_industry_cap(new_cands, max_per_industry = 2, initial_held = initial_held, sector_map = test_sm)
+check(identical(filtered_held, c("MSFT", "CRWD")),
+      "initial_held with 2 semiconductors blocks additional semiconductor additions when cap is 2")
+
+# ------------------------------------------------------------------------------
+cat("\n[12] Feature 7: Reallocate Stop Loss Proceeds to Surviving Winners\n")
+surv_test_positions <- list(
+  list(symbol = "AAPL", shares = 10, entry_price = 200, current_price = 200, market_value = 2000),
+  list(symbol = "MSFT", shares = 5, entry_price = 400, current_price = 400, market_value = 2000)
+)
+realloc_res <- reallocate_stop_to_survivors(total_proceeds = 1000, surviving_positions = surv_test_positions,
+                                           cur_prices = list(AAPL = 200, MSFT = 400))
+check(length(realloc_res$order_records) == 2, "generated 2 buy order records for 2 survivors")
+check(realloc_res$order_records[[1]]$symbol == "AAPL" && realloc_res$order_records[[1]]$shares == 2.5,
+      "AAPL received $500 / $200 = 2.5 additional shares")
+check(realloc_res$order_records[[2]]$symbol == "MSFT" && realloc_res$order_records[[2]]$shares == 1.25,
+      "MSFT received $500 / $400 = 1.25 additional shares")
+check(realloc_res$updated_positions[[1]]$shares == 12.5, "AAPL total shares updated to 12.5")
+check(realloc_res$updated_positions[[2]]$shares == 6.25, "MSFT total shares updated to 6.25")
+
+# Test empty survivors fallback
+realloc_empty <- reallocate_stop_to_survivors(total_proceeds = 1000, surviving_positions = list())
+check(length(realloc_empty$order_records) == 0 && length(realloc_empty$updated_positions) == 0,
+      "empty surviving positions handled gracefully without errors")
+
+# ------------------------------------------------------------------------------
+cat("\n[13] Feature 8: Tactical Safe-Haven Bear Regime Asset Selection (GLD / SGOV)\n")
+# Synthetic upward slope
+up_prices <- 100 + (1:60) * 0.5
+res_up <- evaluate_safe_haven_bear(up_prices, window = 50)
+check(res_up$asset == "GLD" && res_up$trend_up == TRUE, "upward trending GLD selects GLD safe haven")
+
+# Synthetic downward slope
+down_prices <- 150 - (1:60) * 0.5
+res_down <- evaluate_safe_haven_bear(down_prices, window = 50)
+check(res_down$asset == "SGOV" && res_down$trend_up == FALSE, "downward trending GLD selects SGOV cash preservation")
+
+# Short / NULL series fallback
+res_null <- evaluate_safe_haven_bear(NULL)
+check(res_null$asset == "SGOV" && res_null$trend_up == FALSE, "NULL GLD series safely falls back to SGOV")
+
 cat(sprintf("\n%d passed, %d failed\n", n_pass, n_fail))
 if (n_fail > 0) quit(status = 1)

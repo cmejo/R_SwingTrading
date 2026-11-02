@@ -195,3 +195,192 @@ calc_fip_ratio <- function(cl, lookback = 63) {
   if (length(ret) == 0) return(0.50)
   mean(ret > 0, na.rm = TRUE)
 }
+
+#' Feature 5: Tax-Aware Winner Retention (LTCG Bridge).
+#' Determines whether an existing winning holding should be retained past its 365-day mark
+#' when approaching 1-year holding period (within bridge_days) and still ranked <= rank_max.
+#'
+#' @param entry_date Date or string representation of lot acquisition.
+#' @param current_date Date of current rebalance evaluation.
+#' @param entry_price numeric acquisition cost per share.
+#' @param current_price numeric current mark-to-market price.
+#' @param current_rank integer momentum rank in current candidate universe.
+#' @param bridge_days integer number of days prior to 365-day mark to protect (default 45).
+#' @param rank_max integer maximum allowable momentum rank to retain (default 12).
+#' @return logical TRUE if holding should be preserved for LTCG tax qualification.
+is_tax_protected_winner <- function(entry_date, current_date, entry_price, current_price, current_rank,
+                                    bridge_days = 45, rank_max = 12) {
+  if (is.null(entry_date) || is.na(entry_date)) return(FALSE)
+  days_held <- as.numeric(as.Date(current_date) - as.Date(entry_date))
+  if (is.na(days_held) || is.na(entry_price) || is.na(current_price) || is.na(current_rank)) return(FALSE)
+  is_winner <- (current_price > entry_price)
+  within_bridge <- (days_held >= (365 - bridge_days) && days_held <= 365)
+  is_winner && within_bridge && (current_rank <= rank_max)
+}
+
+#' Check if a candidate symbol was sold at a loss within the IRS wash-sale window (30 days).
+#' @param symbol character ticker.
+#' @param closed_trades list of closed trade objects.
+#' @param current_date Date of current rebalance.
+#' @param window_days integer wash sale lockout days (default 30).
+#' @return logical TRUE if repurchase would trigger wash-sale loss disallowance under IRC § 1091.
+is_wash_sale_risk <- function(symbol, closed_trades, current_date, window_days = 30) {
+  if (is.null(closed_trades) || length(closed_trades) == 0) return(FALSE)
+  cur_dt <- as.Date(current_date)
+  for (tr in closed_trades) {
+    if (identical(tr$symbol, symbol) && !is.null(tr$realized_pnl) && as.numeric(tr$realized_pnl) < 0) {
+      if (!is.null(tr$exit_date)) {
+        diff_d <- as.numeric(cur_dt - as.Date(tr$exit_date))
+        if (!is.na(diff_d) && diff_d <= window_days) return(TRUE)
+      }
+    }
+  }
+  FALSE
+}
+
+#' Feature 6: Industry Concentration Limit (Correlation Cap)
+#'
+#' Retrieves the mapped industry for a stock ticker from sector_map.json.
+#' @param sym character stock symbol.
+#' @param sm named list or environment mapping symbol -> industry.
+#' @return character industry name, defaulting to "Other" if unmapped.
+get_stock_industry <- function(sym, sm = NULL) {
+  if (is.null(sm)) {
+    if (file.exists("sector_map.json")) {
+      sm <- jsonlite::fromJSON("sector_map.json")
+    } else {
+      return("Other")
+    }
+  }
+  if (!is.null(sm[[sym]]) && nzchar(sm[[sym]])) sm[[sym]] else "Other"
+}
+
+#' Filters candidate symbols to enforce a maximum number of positions per industry.
+#'
+#' @param candidates character vector of candidate symbols in priority/ranking order.
+#' @param max_per_industry integer maximum allowed positions per industry (default: 5).
+#' @param initial_held character vector of currently retained symbols (optional).
+#' @param sector_map named list mapping symbol -> industry (optional).
+#' @return filtered character vector of candidate symbols respecting max_per_industry.
+filter_by_industry_cap <- function(candidates, max_per_industry = 5, initial_held = character(), sector_map = NULL) {
+  if (max_per_industry >= (length(candidates) + length(initial_held))) {
+    return(candidates)
+  }
+  if (is.null(sector_map) && file.exists("sector_map.json")) {
+    sector_map <- jsonlite::fromJSON("sector_map.json")
+  }
+  
+  get_ind <- function(s) {
+    if (!is.null(sector_map[[s]]) && nzchar(sector_map[[s]])) sector_map[[s]] else "Other"
+  }
+  
+  # Initialize counts from initial_held
+  ind_counts <- list()
+  for (h in initial_held) {
+    ind <- get_ind(h)
+    cur <- if (!is.null(ind_counts[[ind]])) ind_counts[[ind]] else 0
+    ind_counts[[ind]] <- cur + 1
+  }
+  
+  selected <- character()
+  for (cand in candidates) {
+    ind <- get_ind(cand)
+    cur_count <- if (!is.null(ind_counts[[ind]])) ind_counts[[ind]] else 0
+    if (cur_count < max_per_industry) {
+      selected <- c(selected, cand)
+      ind_counts[[ind]] <- cur_count + 1
+    }
+  }
+  selected
+}
+
+#' Feature 7: Reallocate Stop Loss Proceeds to Surviving Winners
+#'
+#' Takes the total proceeds from stopped-out positions and calculates equal additions
+#' to each surviving holding.
+#'
+#' @param total_proceeds numeric total cash proceeds from stopped-out trades.
+#' @param surviving_positions list of active satellite position objects.
+#' @param cur_prices named list or numeric vector of current prices.
+#' @param disaster_stop numeric disaster stop loss percentage (default: 0.25).
+#' @return list containing updated_positions, order_records, and tickets.
+reallocate_stop_to_survivors <- function(total_proceeds, surviving_positions, cur_prices = list(), disaster_stop = 0.25) {
+  if (total_proceeds < 10 || length(surviving_positions) == 0) {
+    return(list(updated_positions = surviving_positions, order_records = list(), tickets = character()))
+  }
+  
+  n_survivors <- length(surviving_positions)
+  per_survivor_cash <- total_proceeds / n_survivors
+  
+  updated_positions <- surviving_positions
+  order_records <- list()
+  tickets <- character()
+  
+  for (i in seq_along(updated_positions)) {
+    pos <- updated_positions[[i]]
+    sym <- pos$symbol
+    px <- if (!is.null(cur_prices[[sym]]) && cur_prices[[sym]] > 0) as.numeric(cur_prices[[sym]]) else as.numeric(pos$current_price)
+    if (is.na(px) || px <= 0) px <- as.numeric(pos$entry_price)
+    
+    add_shs <- round(per_survivor_cash / px, 3)
+    if (add_shs > 0) {
+      outlay <- round(add_shs * px, 2)
+      prev_shs <- as.numeric(pos$shares)
+      prev_entry <- as.numeric(pos$entry_price)
+      new_shs <- prev_shs + add_shs
+      new_entry <- round((prev_shs * prev_entry + outlay) / new_shs, 4)
+      
+      ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Reallocate Disaster Stop Proceeds to Surviving Winner)",
+                        add_shs, sym, px, outlay)
+      tickets <- c(tickets, ticket)
+      
+      order_records[[length(order_records) + 1]] <- list(
+        symbol = sym, side = "BUY", shares = round(add_shs, 3),
+        shares_whole = as.integer(floor(add_shs)), estimated_price = round(px, 2),
+        estimated_outlay = outlay, order_type = "MARKET",
+        reason = "STOP_REALLOCATION_SURVIVING_WINNER",
+        stop_loss_price = round(px * (1.0 - disaster_stop), 2)
+      )
+      
+      updated_positions[[i]]$shares <- new_shs
+      updated_positions[[i]]$entry_price <- new_entry
+      updated_positions[[i]]$current_price <- px
+      updated_positions[[i]]$market_value <- round(new_shs * px, 2)
+    }
+  }
+  
+  list(
+    updated_positions = updated_positions,
+    order_records = order_records,
+    tickets = tickets
+  )
+}
+
+#' Feature 8: Tactical Safe-Haven Bear Regime Asset Selection
+#'
+#' Evaluates whether GLD (Gold) is in a confirmed uptrend (rolling regression slope > 0).
+#' If GLD is in an uptrend, returns "GLD" as the safe-haven asset.
+#' If GLD is in a downtrend/flat, returns "SGOV" (Treasury Bills / Cash preservation).
+#'
+#' @param gld_prices numeric vector or xts of historical GLD close prices.
+#' @param window integer rolling window for linear regression slope (default: 50).
+#' @return list containing asset ("GLD" or "SGOV"), slope, and rationale.
+evaluate_safe_haven_bear <- function(gld_prices, window = 50) {
+  if (is.null(gld_prices) || length(gld_prices) < window) {
+    return(list(asset = "SGOV", slope = 0.0, trend_up = FALSE, rationale = "Insufficient GLD data -> Default to SGOV"))
+  }
+  
+  cl <- as.numeric(gld_prices)
+  tail_cl <- tail(cl, window)
+  lm_res <- lmMA(tail_cl, n = window)
+  slope <- tail(as.numeric(lm_res$slope), 1)
+  trend_up <- (slope > 0)
+  
+  if (trend_up) {
+    list(asset = "GLD", slope = slope, trend_up = TRUE, rationale = sprintf("GLD 50d Slope (%+.2f) > 0 -> Gold Safe Haven Active", slope))
+  } else {
+    list(asset = "SGOV", slope = slope, trend_up = FALSE, rationale = sprintf("GLD 50d Slope (%+.2f) <= 0 -> Park in SGOV / Cash Yield", slope))
+  }
+}
+
+
