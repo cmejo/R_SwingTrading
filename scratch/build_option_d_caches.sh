@@ -12,10 +12,13 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-python3 -c "import pandas, yfinance" 2>/dev/null || pip install --quiet pandas yfinance
+python3 -c "import pandas, yfinance, yaml" 2>/dev/null || python3 -m pip install --quiet --user pandas yfinance pyyaml
 Rscript -e 'if (!requireNamespace("quantmod", quietly = TRUE)) install.packages("quantmod", repos = "https://cloud.r-project.org")'
 
-if [ ! -d /tmp/n100tickers ]; then
+# Membership is committed to the repo; n100tickers is only needed to rebuild it.
+# Its package needs Python >= 3.11; build_n100_pit_universe.py falls back to reading
+# its YAML directly on older Pythons.
+if [ ! -f data/n100_pit/membership_monthly.csv ] && [ ! -d /tmp/n100tickers ]; then
   git clone --depth 1 https://github.com/jmccarrell/n100tickers /tmp/n100tickers
 fi
 
