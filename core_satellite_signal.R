@@ -44,6 +44,7 @@ suppressPackageStartupMessages({
 
 source("R/01_data_loader.R")
 source("R/02_trend_lmMA.R")
+source("R/10_option_d_features.R")   # shared with R/11_option_d_engine.R (backtest)
 
 # ------------------------------------------------------------------------------
 # 1. Parse Command Line Arguments & Configuration Presets
@@ -87,6 +88,21 @@ USE_CONVEX_SIZING     <- FALSE        # (K) Convex Rank Sizing (30%, 25%, 20%, 1
                                       #     Default: FALSE. Verified across 3, 10, and 20-Yr backtests: Equal 20% weighting
                                       #     delivers higher CAGR (+94.3% vs +88.6%), higher wealth ($4.89B vs $2.73B),
                                       #     and lower MaxDD (-73.0% vs -75.4%) due to lower single-stock volatility drag at 2.50x margin.
+# ---- Research features (ALL OFF BY DEFAULT; validate on the PIT universe with
+# ---- scratch/backtest_option_d_pit.R before enabling in live trading) --------
+USE_RISK_TARGET_LEV   <- FALSE        # (L) Feature 1: replace fixed 1.5x / 2.50x turbo with ex-ante portfolio-vol
+SIGMA_TARGET          <- 0.30         #     target on the SELECTED book (EWMA cov) + fractional Kelly cap that uses
+LEV_MAX               <- 2.00         #     the broker's actual margin rate. If L < 1, the undeployed (1 - L) goes to the
+                                      #     defensive asset exactly as the 1 - vol_scale buffer does today.
+MU_HAT                <- NA_real_     #     Expected arithmetic annual return of the UNLEVERED book. NA = no Kelly cap,
+                                      #     in which case borrowing is capped at PORTFOLIO_MARGIN_LEV (1.5x).
+BORROW_RATE           <- 0.12075      #     Schwab effective rate, debit < $25k, as of 2026-09-18. IBKR Pro ~0.054.
+KELLY_FRAC            <- 0.50         #     Half-Kelly: mu_hat is estimated with large error.
+USE_RESID_MOM         <- FALSE        # (M) Feature 2: rank on beta-adjusted residual momentum IR (Blitz, Huij &
+RESID_EST_WINDOW      <- 504          #     Martens 2011) instead of raw return minus QQQ return. Beta uses up to 504d;
+                                      #     names with >= 252d of history are scored, younger names rank last.
+SKIP_DAYS             <- 0            # (N) Feature 3: exclude the most recent N trading days from formation
+                                      #     (short-term reversal, Jegadeesh 1990). Applies to both RS variants.
 FORCE_REBALANCE       <- FALSE
 RESET                 <- FALSE
 SYMBOLS_FILE          <- "symbols_broad.txt" # Broad 170-name growth/momentum list (alt: symbols_n100.txt = PIT-tested universe)
@@ -198,8 +214,28 @@ for (arg in args) {
     RETENTION_BUFFER_RANK <- as.integer(sub("^--retention_rank=", "", arg))
   } else if (grepl("^--convex_sizing=", arg)) {
     USE_CONVEX_SIZING <- as.logical(sub("^--convex_sizing=", "", arg))
+  } else if (grepl("^--risk_target_lev=", arg)) {
+    USE_RISK_TARGET_LEV <- as.logical(sub("^--risk_target_lev=", "", arg))
+  } else if (grepl("^--sigma_target=", arg)) {
+    SIGMA_TARGET <- as.numeric(sub("^--sigma_target=", "", arg))
+  } else if (grepl("^--lev_max=", arg)) {
+    LEV_MAX <- as.numeric(sub("^--lev_max=", "", arg))
+  } else if (grepl("^--mu_hat=", arg)) {
+    MU_HAT <- suppressWarnings(as.numeric(sub("^--mu_hat=", "", arg)))
+  } else if (grepl("^--borrow_rate=", arg)) {
+    BORROW_RATE <- as.numeric(sub("^--borrow_rate=", "", arg))
+  } else if (grepl("^--kelly_frac=", arg)) {
+    KELLY_FRAC <- as.numeric(sub("^--kelly_frac=", "", arg))
+  } else if (grepl("^--resid_mom=", arg)) {
+    USE_RESID_MOM <- as.logical(sub("^--resid_mom=", "", arg))
+  } else if (grepl("^--resid_est_window=", arg)) {
+    RESID_EST_WINDOW <- as.integer(sub("^--resid_est_window=", "", arg))
+  } else if (grepl("^--skip_days=", arg)) {
+    SKIP_DAYS <- as.integer(sub("^--skip_days=", "", arg))
   }
 }
+if (USE_RESID_MOM && RESID_EST_WINDOW < LOOKBACK_LONG + SKIP_DAYS)
+  stop("--resid_est_window must be >= lookback_long + skip_days")
 
 SATELLITE_WEIGHT <- max(0, 1.0 - CORE_WEIGHT)
 SLOT_WEIGHT      <- if (TOP_N > 0) SATELLITE_WEIGHT / TOP_N else 0.0
@@ -399,8 +435,10 @@ if (is.null(qqq_ohlcv) || nrow(qqq_ohlcv) < max(LOOKBACK_LONG, 200)) {
 qqq_close      <- as.numeric(Cl(qqq_ohlcv))
 n_qqq          <- length(qqq_close)
 qqq_cur_px     <- tail(qqq_close, 1)
-qqq_ret_long   <- (qqq_cur_px / qqq_close[n_qqq - LOOKBACK_LONG]) - 1
-qqq_ret_short  <- (qqq_cur_px / qqq_close[n_qqq - LOOKBACK_SHORT]) - 1
+# Formation window ends SKIP_DAYS bars before today (SKIP_DAYS = 0 -> identical to prior behaviour)
+qqq_end_px     <- qqq_close[n_qqq - SKIP_DAYS]
+qqq_ret_long   <- (qqq_end_px / qqq_close[n_qqq - LOOKBACK_LONG]) - 1
+qqq_ret_short  <- (qqq_end_px / qqq_close[n_qqq - LOOKBACK_SHORT]) - 1
 qqq_ret        <- qqq_ret_long # Compatibility alias
 
 # Linear Model Moving Average (lmMA) - Zero First-Order Phase Lag.
@@ -537,6 +575,10 @@ cat(sprintf(" Scanning %d candidate stocks for Dual-Lookback RS (50%% %dd + 50%%
             length(scan_syms), LOOKBACK_LONG, LOOKBACK_SHORT))
 
 rs_results <- list()
+ret_cache  <- list()   # daily simple returns per scanned symbol (Feature 1 covariance)
+qqq_ret_xts <- {
+  qc <- Cl(qqq_ohlcv); r <- qc / stats::lag(qc, 1) - 1; colnames(r) <- "QQQ"; r[-1, ]
+}
 for (sym in scan_syms) {
   d <- tryCatch(load_stock_data(sym, force_refresh = FALSE), error = function(e) NULL)
   d <- inject_live_quote(d, sym, live_quotes_data)
@@ -549,8 +591,23 @@ for (sym in scan_syms) {
   cl <- as.numeric(Cl(d))
   n <- length(cl)
   cur_px <- cl[n]
+  end_px <- cl[n - SKIP_DAYS]            # Feature 3: formation ends SKIP_DAYS bars ago
   lb_long_px  <- cl[n - LOOKBACK_LONG]
   lb_short_px <- cl[n - LOOKBACK_SHORT]
+
+  d_ret <- { dc <- Cl(d); r <- dc / stats::lag(dc, 1) - 1; colnames(r) <- sym; r[-1, ] }
+  ret_cache[[sym]] <- d_ret
+  rs_resid <- NA_real_
+  if (USE_RESID_MOM) {
+    mm <- stats::na.omit(merge(d_ret, qqq_ret_xts, join = "inner"))
+    if (nrow(mm) >= 252) {
+      mm <- tail(mm, RESID_EST_WINDOW)
+      rs_resid <- residual_dual_score(as.numeric(mm[, 1]), as.numeric(mm[, 2]),
+                                      est = RESID_EST_WINDOW, long = LOOKBACK_LONG,
+                                      short = LOOKBACK_SHORT, w_long = WEIGHT_LONG,
+                                      skip = SKIP_DAYS)
+    }
+  }
   
   # Trend check: 200 SMA
   sma200 <- if (n >= 200) mean(cl[(n - 199):n]) else mean(cl)
@@ -564,8 +621,8 @@ for (sym in scan_syms) {
   
   trend_up <- if (TREND_ENGINE == "lmMA_slope") !stk_down else trend_up_sma
   
-  ret_long  <- (cur_px / lb_long_px) - 1
-  ret_short <- (cur_px / lb_short_px) - 1
+  ret_long  <- (end_px / lb_long_px) - 1
+  ret_short <- (end_px / lb_short_px) - 1
   rs_long   <- ret_long - qqq_ret_long
   rs_short  <- ret_short - qqq_ret_short
   rs_comp   <- (WEIGHT_LONG * rs_long) + (WEIGHT_SHORT * rs_short)
@@ -583,6 +640,7 @@ for (sym in scan_syms) {
     RS_126D      = rs_long,
     RS_63D       = rs_short,
     RS_Composite = rs_comp,
+    RS_Resid     = rs_resid,
     Vol_63D      = vol_63d,
     stringsAsFactors = FALSE
   )
@@ -593,6 +651,16 @@ if (length(rs_results) == 0) {
 }
 
 rs_df <- do.call(rbind, rs_results)
+
+# Ranking key: Feature 2 ranks on the residual IR; names without enough
+# history for the residual estimate rank last rather than being dropped.
+rs_df$Rank_Score <- if (USE_RESID_MOM) ifelse(is.na(rs_df$RS_Resid), -Inf, rs_df$RS_Resid) else rs_df$RS_Composite
+if (USE_RESID_MOM || SKIP_DAYS > 0) {
+  cat(sprintf(" Ranking engine: %s%s\n",
+              if (USE_RESID_MOM) sprintf("RESIDUAL momentum IR (beta vs QQQ, up to %dd estimation)", RESID_EST_WINDOW)
+              else "Dual-lookback RS vs QQQ",
+              if (SKIP_DAYS > 0) sprintf(" | skipping most recent %d day(s)", SKIP_DAYS) else ""))
+}
 
 # (B) Optional market-breadth gate: % of scanned universe above its own 200 SMA
 breadth_pct <- mean(rs_df$Trend_Up, na.rm = TRUE)
@@ -699,7 +767,7 @@ if (USE_CRISIS_MVP && is_crisis_regime) {
   print(print_df, row.names = FALSE)
   cat("--------------------------------------------------------------------------------------------------------\n\n")
 } else {
-  rs_qualified <- rs_qualified[order(-rs_qualified$RS_Composite), ]
+  rs_qualified <- rs_qualified[order(-rs_qualified$Rank_Score), ]
   
   cur_held_syms <- if (!is.null(port_state$satellite_positions)) {
     sapply(port_state$satellite_positions, function(p) p$symbol)
@@ -731,14 +799,42 @@ if (USE_CRISIS_MVP && is_crisis_regime) {
               else if (TREND_ENGINE == "lmMA_slope") sprintf("lmMA(%d) Slope / Low-Lag Filter", LMMA_WINDOW)
               else ">= 200-day SMA"))
   cat("--------------------------------------------------------------------------------------------------------\n")
-  print_df <- head(rs_qualified[, c("Symbol", "Close", "Trend_Up", "lmMA_Slope", "Ret_126D", "Ret_63D", "RS_Composite", "Vol_63D")], 8)
+  print_df <- head(rs_qualified[, c("Symbol", "Close", "Trend_Up", "lmMA_Slope", "Ret_126D", "Ret_63D", "RS_Composite", "RS_Resid", "Vol_63D")], 8)
   print_df$lmMA_Slope   <- sprintf("%+.2f", print_df$lmMA_Slope)
   print_df$Ret_126D     <- sprintf("%+.1f%%", print_df$Ret_126D * 100)
   print_df$Ret_63D      <- sprintf("%+.1f%%", print_df$Ret_63D * 100)
   print_df$RS_Composite <- sprintf("%+.1f%%", print_df$RS_Composite * 100)
+  print_df$RS_Resid     <- ifelse(is.na(print_df$RS_Resid), "-", sprintf("%+.2f", print_df$RS_Resid))
   print_df$Vol_63D      <- sprintf("%.0f%%", print_df$Vol_63D * 100)
   print(print_df, row.names = FALSE)
   cat("--------------------------------------------------------------------------------------------------------\n\n")
+}
+
+# (L) Feature 1: risk-targeted, fractional-Kelly leverage on the SELECTED book.
+# Replaces the fixed 1.5x / 2.50x turbo and the QQQ-vol scale factor. Same function
+# and conventions as R/11_option_d_engine.R (leverage_mode = "risk_kelly"):
+# stock gross = vol_scale * active_margin = L, defensive asset = 1 - min(1, L).
+if (USE_RISK_TARGET_LEV && nrow(top_picks) > 0) {
+  pick_syms <- top_picks$Symbol[top_picks$Symbol %in% names(ret_cache)]
+  rmat <- if (length(pick_syms) > 0) stats::na.omit(do.call(merge, c(unname(ret_cache[pick_syms]), list(join = "inner")))) else NULL
+  sig_p <- if (!is.null(rmat) && nrow(rmat) >= 63) {
+    portfolio_vol(rep(1 / ncol(rmat), ncol(rmat)), ewma_cov(as.matrix(tail(rmat, 126))))
+  } else NA_real_
+  lev <- risk_kelly_leverage(sig_p, sigma_target = SIGMA_TARGET, max_leverage = LEV_MAX,
+                             bull = qqq_trend_up, mu_hat = MU_HAT, borrow_rate = BORROW_RATE,
+                             kelly_fraction = KELLY_FRAC, no_mu_cap = PORTFOLIO_MARGIN_LEV)
+  vol_scale     <- min(1.0, lev$L)
+  active_margin <- if (vol_scale > 0) lev$L / vol_scale else 1.0
+  cat("========================================================================================\n")
+  cat(" FEATURE 1: RISK-TARGETED / FRACTIONAL-KELLY LEVERAGE (replaces fixed margin + turbo)\n")
+  cat(sprintf(" Ex-ante book vol (EWMA, 126d): %s | Target: %.0f%% | L_risk: %.2fx | L_kelly: %s | Cap: %.2fx\n",
+              if (is.na(sig_p)) "n/a (insufficient history)" else sprintf("%.1f%%", sig_p * 100),
+              SIGMA_TARGET * 100, lev$L_risk,
+              if (is.na(lev$L_kelly)) "off (no --mu_hat)" else sprintf("%.2fx", lev$L_kelly), LEV_MAX))
+  cat(sprintf(" Borrow rate: %.2f%% | Kelly fraction: %.2f | ACTIVE GROSS: %.2fx (binding: %s)\n",
+              BORROW_RATE * 100, KELLY_FRAC, lev$L, lev$binding))
+  if (is.na(MU_HAT)) cat(sprintf(" WARNING: --mu_hat not set; borrowing capped at %.2fx (no Kelly cap).\n", PORTFOLIO_MARGIN_LEV))
+  cat("========================================================================================\n\n")
 }
 
 # ------------------------------------------------------------------------------

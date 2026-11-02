@@ -52,5 +52,12 @@ check("default config runs to completion in a super-bull regime", a$status == 0)
 check("turbo engages (super-bull leverage active)", any(grepl("SUPER-BULL LEVERAGE TURBO ACTIVE: [0-9.]+x", a$out)))
 if (a$status != 0) cat(tail(a$out, 15), sep = "\n")
 
+b <- run("features", c("--risk_target_lev=TRUE", "--sigma_target=0.30", "--mu_hat=0.30",
+                       "--borrow_rate=0.12075", "--resid_mom=TRUE", "--skip_days=5"))
+check("all three features enabled run to completion", b$status == 0)
+check("Feature 1 block printed", any(grepl("FEATURE 1: RISK-TARGETED", b$out)))
+check("residual ranking engine reported", any(grepl("RESIDUAL momentum IR", b$out)))
+if (b$status != 0) cat(tail(b$out, 15), sep = "\n")
+
 cat(sprintf("\nsandbox: %s\n%s\n", sb, if (n_fail == 0) "ALL PASS" else sprintf("%d FAILED", n_fail)))
 if (n_fail > 0) quit(status = 1)
