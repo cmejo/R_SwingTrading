@@ -11,6 +11,7 @@
 #'   bash scratch/build_option_d_caches.sh        # once: builds the gitignored price caches
 #'   Rscript scratch/backtest_option_d_pit.R [universe] [--broker=schwab|ibkr|legacy]
 #'                                          [--maint=0.30] [--prior_trials=250]
+#'                                          [--tax_st=0.45] [--tax_lt=0.30]
 #'     universe: pit_n100 (default) | broad (hindsight list, for comparison only)
 #'
 #' Row 1 ("LEGACY replication") uses R/11_option_d_engine.R with the original
@@ -33,6 +34,10 @@ opt <- function(name, default) {
 BROKER       <- opt("broker", "schwab")
 MAINT        <- as.numeric(opt("maint", "0.30"))
 PRIOR_TRIALS <- as.integer(opt("prior_trials", "250"))   # configs already tried on this history
+# Combined marginal tax rates (federal + NIIT + state + city) on short-term and long-term
+# gains. Defaults are ASSUMPTIONS for an upper-middle New York City bracket; pass your own.
+TAX_ST       <- as.numeric(opt("tax_st", "0.45"))
+TAX_LT       <- as.numeric(opt("tax_lt", "0.30"))
 
 need <- c("data/n100_pit/prices_adjclose.csv", "data/universe_prices_adjclose.csv",
           file.path("data/data_historical", c("data_qqq.rds", "data_qld.rds", "data_gld_full.rds", "data_^irx.rds")))
@@ -82,17 +87,30 @@ cfgs <- list(
   "F1 risk target 30% (expanding mu, half-Kelly)"       = c(real, list(leverage_mode = "risk_kelly", sigma_target = 0.30)),
   "F1 risk target 35% (expanding mu, half-Kelly)"       = c(real, list(leverage_mode = "risk_kelly", sigma_target = 0.35)),
   "F1+F2+F3 (30%, residual, skip 5d)"                   = c(real, list(leverage_mode = "risk_kelly", sigma_target = 0.30,
-                                                                       rank_mode = "residual", skip = 5))
+                                                                       rank_mode = "residual", skip = 5)),
+  # IRA / cash account: no borrowing at all (an IRA cannot use margin), live rules otherwise
+  "IRA: 1.0x no margin (live rules, FIP)"               = modifyList(real, list(base_margin = 1.0, use_turbo = FALSE))
 )
+TAX_FREE <- "IRA: 1.0x no margin (live rules, FIP)"   # after-tax == pre-tax for this row
 
 run_period <- function(cfg, s, e) {
   r <- sim_option_d(D, do.call(option_d_config, cfg), s, e)
   ev <- which(cal >= s & cal <= e); ev <- ev[ev >= 2]
-  list(r = r, m = option_d_metrics(r, rf_daily[ev]))
+  list(r = r, d = cal[ev], m = option_d_metrics(r, rf_daily[ev]))
 }
 
-cat(sprintf("\nUniverse: %s | Broker: %s (spread %.2f%% over T-bill) | Maintenance: %.0f%%\n\n",
+# Buy-and-hold benchmarks on the same calendar (adjusted closes, dividends reinvested)
+bench_period <- function(rv, s, e) {
+  ev <- which(cal >= s & cal <= e); ev <- ev[ev >= 2]
+  r <- rv[ev]
+  list(r = r, d = cal[ev], m = option_d_metrics(r, rf_daily[ev]))
+}
+BENCH <- list("BENCHMARK: QQQ buy & hold" = rq, "BENCHMARK: QLD (2x QQQ) buy & hold" = r_qld)
+
+cat(sprintf("\nUniverse: %s | Broker: %s (spread %.2f%% over T-bill) | Maintenance: %.0f%%\n",
             UNIV, BROKER, bp$borrow_spread * 100, MAINT * 100))
+cat(sprintf("Tax: strategy taxed annually at %.0f%% (short-term); buy-and-hold taxed once at %.0f%% (long-term) on exit; IRA row untaxed\n\n",
+            TAX_ST * 100, TAX_LT * 100))
 res <- lapply(names(cfgs), function(nm) {
   cat(" running:", nm, "\n")
   cfg <- cfgs[[nm]]
@@ -114,12 +132,16 @@ n_trials <- PRIOR_TRIALS + length(cfgs)
 sr0_ann <- sqrt(var_sr) * ((1 - 0.5772156649) * qnorm(1 - 1 / n_trials) +
                            0.5772156649 * qnorm(1 - 1 / (n_trials * exp(1)))) * sqrt(252)
 
+at <- function(p, rate, mode) after_tax_cagr(p$r, p$d, rate, mode)
 tbl <- do.call(rbind, lapply(names(res), function(nm) {
   x <- res[[nm]]
+  rate <- if (nm == TAX_FREE) 0 else TAX_ST
   data.frame(Config = nm,
              CAGR_3y = x$Y3$m[["CAGR"]], MaxDD_3y = x$Y3$m[["MaxDD"]],
              CAGR_10y = x$Y10$m[["CAGR"]], MaxDD_10y = x$Y10$m[["MaxDD"]],
              CAGR_20y = x$Y20$m[["CAGR"]], MaxDD_20y = x$Y20$m[["MaxDD"]],
+             AfterTax_3y = at(x$Y3, rate, "annual"), AfterTax_10y = at(x$Y10, rate, "annual"),
+             AfterTax_20y = at(x$Y20, rate, "annual"),
              Train_CAGR = x$train$m[["CAGR"]], Test_CAGR = x$test$m[["CAGR"]],
              Full_CAGR = x$full$m[["CAGR"]], Full_MaxDD = x$full$m[["MaxDD"]],
              Full_Vol = x$full$m[["Vol"]], Full_Sharpe = x$full$m[["Sharpe"]],
@@ -128,12 +150,30 @@ tbl <- do.call(rbind, lapply(names(res), function(nm) {
              Ruined = x$full$m[["Ruined"]], Turnover = x$full$m[["Turnover"]],
              check.names = FALSE)
 }))
+bench_tbl <- do.call(rbind, lapply(names(BENCH), function(nm) {
+  rv <- BENCH[[nm]]
+  y3 <- bench_period(rv, WINDOWS$Y3, E_FULL); y10 <- bench_period(rv, WINDOWS$Y10, E_FULL)
+  full <- bench_period(rv, S_FULL, E_FULL)
+  tr <- bench_period(rv, S_FULL, SPLIT - 1); te <- bench_period(rv, SPLIT, E_FULL)
+  data.frame(Config = nm,
+             CAGR_3y = y3$m[["CAGR"]], MaxDD_3y = y3$m[["MaxDD"]],
+             CAGR_10y = y10$m[["CAGR"]], MaxDD_10y = y10$m[["MaxDD"]],
+             CAGR_20y = full$m[["CAGR"]], MaxDD_20y = full$m[["MaxDD"]],
+             AfterTax_3y = at(y3, TAX_LT, "deferred"), AfterTax_10y = at(y10, TAX_LT, "deferred"),
+             AfterTax_20y = at(full, TAX_LT, "deferred"),
+             Train_CAGR = tr$m[["CAGR"]], Test_CAGR = te$m[["CAGR"]],
+             Full_CAGR = full$m[["CAGR"]], Full_MaxDD = full$m[["MaxDD"]],
+             Full_Vol = full$m[["Vol"]], Full_Sharpe = full$m[["Sharpe"]],
+             DSR = NA_real_, AvgGross = if (grepl("QLD", nm)) 2 else 1, MarginCalls = NA_real_,
+             Ruined = 0, Turnover = 0, check.names = FALSE)
+}))
+tbl <- rbind(bench_tbl, tbl)
 
 num <- vapply(tbl, is.numeric, logical(1))
 print(cbind(tbl[!num], round(tbl[num], 3)), row.names = FALSE)
 cat(sprintf("\nDSR uses n_trials = %d (prior %d + %d here); SR0 (annualised) = %.2f\n",
             n_trials, PRIOR_TRIALS, length(cfgs), sr0_ann))
-cat("Acceptance rule: a feature ships only if Test_CAGR improves on the realistic baseline (row 2),\n",
+cat("Acceptance rule: a feature ships only if Test_CAGR improves on the LIVE config row,\n",
     "neighbouring parameter values move the same direction, and DSR stays > 0.95.\n")
 
 out <- sprintf("scratch/scorecard_option_d_%s_%s.csv", UNIV, BROKER)
