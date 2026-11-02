@@ -403,7 +403,10 @@ qqq_ret_long   <- (qqq_cur_px / qqq_close[n_qqq - LOOKBACK_LONG]) - 1
 qqq_ret_short  <- (qqq_cur_px / qqq_close[n_qqq - LOOKBACK_SHORT]) - 1
 qqq_ret        <- qqq_ret_long # Compatibility alias
 
-# Linear Model Moving Average (lmMA) - Zero First-Order Phase Lag
+# Linear Model Moving Average (lmMA) - Zero First-Order Phase Lag.
+# MUST be computed before is_super_bull: previously qqq_lm_slope was referenced
+# before assignment, which threw "object not found" whenever QQQ > SMA50 > SMA200
+# (the && short-circuit hid the bug in every other regime) and aborted the run.
 qqq_lm       <- lmMA(qqq_close, n = LMMA_WINDOW)
 qqq_lm_fit   <- tail(as.numeric(qqq_lm$fit), 1)
 qqq_lm_slope <- tail(as.numeric(qqq_lm$slope), 1)
@@ -839,9 +842,9 @@ port_state$satellite_positions <- kept_sat_positions
 #     bear regimes (QQQ < 200 SMA), where the proceeds stay in cash until month-end.
 if (STOP_PROCEEDS_TO_CORE && CORE_WEIGHT > 0 && length(disaster_tickets) > 0 && !should_rebalance &&
     (!USE_CORE_TREND || qqq_trend_up)) {
-  stop_proceeds <- sum(sapply(port_state$closed_trades, function(tr)
+  stop_proceeds <- sum(vapply(port_state$closed_trades, function(tr)
     if (identical(tr$exit_date, today_str) && identical(tr$reason, "DISASTER_STOP"))
-      as.numeric(tr$shares) * as.numeric(tr$exit_price) else 0))
+      as.numeric(tr$shares) * as.numeric(tr$exit_price) else 0, numeric(1)))
   if (stop_proceeds >= 30) {
     buy_shs <- round(stop_proceeds / core_cur_px, 3)
     disaster_tickets <- c(disaster_tickets, sprintf(
@@ -868,8 +871,8 @@ if (STOP_PROCEEDS_TO_CORE && CORE_WEIGHT > 0 && length(disaster_tickets) > 0 && 
 # (B) Immediate Stop Replacement: Deploy disaster-stop proceeds into Rank 6 candidate immediately
 #     Eliminates 3-4 weeks of cash drag during bull regimes (+9.8% 10-Yr / +3.7% 20-Yr CAGR boost)
 if (USE_STOP_REPLACEMENT && length(disaster_tickets) > 0 && !should_rebalance && qqq_trend_up) {
-  stopped_trades <- port_state$closed_trades[sapply(port_state$closed_trades, function(tr) 
-    identical(tr$exit_date, today_str) && identical(tr$reason, "DISASTER_STOP"))]
+  stopped_trades <- port_state$closed_trades[vapply(port_state$closed_trades, function(tr)
+    identical(tr$exit_date, today_str) && identical(tr$reason, "DISASTER_STOP"), logical(1))]
   
   if (length(stopped_trades) > 0) {
     held_now <- sapply(port_state$satellite_positions, function(p) p$symbol)
@@ -977,9 +980,11 @@ if (should_rebalance) {
   target_sat_syms  <- top_picks$Symbol
 
   # Exclude any symbols stopped out today from rebalance buy list
-  stopped_today <- sapply(port_state$closed_trades, function(tr) 
-    identical(tr$exit_date, today_str) && identical(tr$reason, "DISASTER_STOP"))
-  stopped_syms_today <- sapply(port_state$closed_trades[stopped_today], function(tr) tr$symbol)
+  # vapply (not sapply): with zero closed trades sapply returns list(), and
+  # indexing a list by a list aborted every rebalance before the first exit.
+  stopped_today <- vapply(port_state$closed_trades, function(tr)
+    identical(tr$exit_date, today_str) && identical(tr$reason, "DISASTER_STOP"), logical(1))
+  stopped_syms_today <- vapply(port_state$closed_trades[stopped_today], function(tr) tr$symbol, character(1))
   if (length(stopped_syms_today) > 0) {
     target_sat_syms <- setdiff(target_sat_syms, stopped_syms_today)
     needed <- TOP_N - length(target_sat_syms)
