@@ -403,16 +403,16 @@ qqq_ret_long   <- (qqq_cur_px / qqq_close[n_qqq - LOOKBACK_LONG]) - 1
 qqq_ret_short  <- (qqq_cur_px / qqq_close[n_qqq - LOOKBACK_SHORT]) - 1
 qqq_ret        <- qqq_ret_long # Compatibility alias
 
-# QQQ Trend & Realized Volatility Diagnostics
-qqq_sma200   <- mean(tail(qqq_close, 200))
-qqq_sma50    <- mean(tail(qqq_close, 50))
-is_super_bull <- (qqq_cur_px > qqq_sma50 && qqq_sma50 > qqq_sma200 && qqq_lm_slope > 0)
-
 # Linear Model Moving Average (lmMA) - Zero First-Order Phase Lag
 qqq_lm       <- lmMA(qqq_close, n = LMMA_WINDOW)
 qqq_lm_fit   <- tail(as.numeric(qqq_lm$fit), 1)
 qqq_lm_slope <- tail(as.numeric(qqq_lm$slope), 1)
 qqq_lm_rsq   <- tail(as.numeric(qqq_lm$r.squared), 1)
+
+# QQQ Trend & Realized Volatility Diagnostics
+qqq_sma200   <- mean(tail(qqq_close, 200))
+qqq_sma50    <- mean(tail(qqq_close, 50))
+is_super_bull <- (qqq_cur_px > qqq_sma50 && qqq_sma50 > qqq_sma200 && qqq_lm_slope > 0)
 
 # Trend Conviction Filter:
 # Eliminates lag while avoiding whipsaws from naive price crossing.
