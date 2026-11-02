@@ -62,15 +62,18 @@ S_FULL <- as.Date("2007-01-02"); E_FULL <- as.Date("2026-10-06"); SPLIT <- as.Da
 WINDOWS <- list(Y3 = as.Date("2023-10-03"), Y10 = as.Date("2016-10-03"), Y20 = as.Date("2007-01-02"))
 
 bp <- broker_preset(BROKER)
-real <- list(turbo_margin = 2.50,   # live default since 547dc49 (row 1 keeps 2.00x for scorecard parity)
+# Row 2 mirrors the LIVE configuration on main: 1.60x Reg-T turbo (7f28d44) and FIP 70/30
+# rank blend (20448ac). Row 1 keeps the original 2.00x / no-FIP semantics for scorecard parity.
+real <- list(turbo_margin = 1.60, fip_weight = 0.30,
              borrow_spread = bp$borrow_spread, maintenance = MAINT,
              # live-parity execution: trim/top-up only on >= 15% drift, 1 - vol_scale into GLD,
              # stop proceeds (not a fresh slot) redeployed into the replacement
              drift_band = 0.15, residual_to = "gld", stop_replace_size = "proceeds")
 cfgs <- list(
   "LEGACY replication (T-bill+1.75%, no margin calls)" = list(),
-  "Option D realistic (broker borrow + calls + parity)" = real,
+  "Option D LIVE config (broker borrow + calls + parity)" = real,
   "Option D realistic, turbo OFF (1.5x)"                = c(real, list(use_turbo = FALSE)),
+  "Option D realistic, FIP OFF"                         = modifyList(real, list(fip_weight = 0)),
   "F3 skip 5d"                                          = c(real, list(skip = 5)),
   "F3 skip 21d"                                         = c(real, list(skip = 21)),
   "F2 residual momentum"                                = c(real, list(rank_mode = "residual")),
