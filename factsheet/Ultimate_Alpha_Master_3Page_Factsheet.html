@@ -356,10 +356,10 @@
       <b>AS OF:</b> October 6, 2026<br>
       <b>INCEPTION:</b> January 3, 2007<br>
       <b>BENCHMARK:</b> Invesco QQQ (Nasdaq-100)<br>
-      <b>MODEL STATUS:</b> Choice 4: Institutional 2.50&times; Turbo
+      <b>MODEL STATUS:</b> Choice 4: Institutional 2.50&times; Turbo + FIP Continuous Momentum
     </div>
     <h1>ULTIMATE ALPHA MASTER</h1>
-    <div class="sub">High-Conviction Equity Momentum with Winner Retention Buffer, Institutional 2.50&times; Turbo &amp; Crisis Minimum Variance</div>
+    <div class="sub">High-Conviction Equity Momentum with Winner Retention Buffer, Frog-in-the-Pan (FIP) Continuous Momentum &amp; Institutional 2.50&times; Turbo</div>
   </div>
 
   <div class="kpi-row">
@@ -372,7 +372,7 @@
 
   <h2 class="sec-title">Strategy Overview &amp; Executive Summary</h2>
   <div style="font-size:7.6pt; line-height:1.28; margin-bottom:4px; color:#202124;">
-    <b>Ultimate Alpha Master (Choice 4: Institutional 2.50&times; Turbo)</b> is an institutional quantitative trading strategy engineered to extract high-conviction momentum alpha while dynamically throttling market risk and whipsaw friction. By focusing capital on the <b>Top 5 momentum leaders</b> of the Nasdaq-100 and utilizing a <b>Top 8 Winner Retention Buffer</b>, the model eliminates churn and allows secular tech compounders to ride routine consolidation periods undisturbed. Exposure is conditioned across 4 discrete macroeconomic regimes&mdash;scaling up to <b>2.50&times; institutional turbo margin</b> during low-volatility secular expansions, and transitioning seamlessly into a <b>Crisis Minimum Variance Portfolio (MVP)</b> in gold and cash during systemic market collapses.
+    <b>Ultimate Alpha Master (Choice 4: Institutional 2.50&times; Turbo + FIP)</b> is an institutional quantitative trading strategy engineered to extract high-conviction momentum alpha while dynamically throttling market risk and whipsaw friction. By focusing capital on the <b>Top 5 momentum leaders</b> of the Nasdaq-100, prioritizing <b>Frog-in-the-Pan (FIP) continuous institutional drift</b>, and utilizing a <b>Top 8 Winner Retention Buffer</b>, the model eliminates churn and allows secular tech compounders to ride routine consolidation periods undisturbed. Exposure is conditioned across 4 discrete macroeconomic regimes&mdash;scaling up to <b>2.50&times; institutional turbo margin</b> during low-volatility secular expansions, and transitioning seamlessly into a <b>Crisis Minimum Variance Portfolio (MVP)</b> in gold and cash during systemic market collapses.
   </div>
 
   <h2 class="sec-title">Comprehensive Multi-Horizon Performance &amp; Risk Audit (3, 10 &amp; 20 Years)</h2>
@@ -481,6 +481,7 @@
       <table style="font-size:7.3pt;">
         <tr><td style="width:38%;"><b>Target Universe</b></td><td>Nasdaq-100 + Tech Momentum Leaders</td></tr>
         <tr><td><b>Active Holdings</b></td><td>Top 5 Equities (Rank-Weighted)</td></tr>
+        <tr><td><b>Momentum Engine</b></td><td>Dual RS (126d/63d) + FIP Continuous Drift (70/30)</td></tr>
         <tr><td><b>Winner Buffer</b></td><td>Retain if Rank &le; 8 (Hysteresis)</td></tr>
         <tr><td><b>Target Volatility</b></td><td>22.0% Annualized Base Vol</td></tr>
         <tr><td><b>Leverage Modes</b></td><td>2.50&times; (Super-Bull Institutional) | 1.50&times; | 1.00&times;</td></tr>
@@ -558,28 +559,31 @@
     <div>
       <h2 class="sec-title">Quantitative Signal Architecture</h2>
       <div style="font-size:7.4pt; line-height:1.26; color:#37474F;">
-        Alpha generation combines relative momentum with trend quality and macroeconomic regime detection.
+        Alpha generation combines relative momentum with Frog-in-the-Pan continuous drift and macro regime conditioning.
       </div>
 
       <div class="formula-box">
-        Composite Score = 0.50 &times; z(126d RS) + 0.30 &times; z(63d RS) + 0.20 &times; z(LMMA R&sup2;)
+        Rank Score = 0.70 &times; Composite RS + 0.30 &times; (FIP_63d &minus; 0.50)
       </div>
 
       <div class="highlight-box" style="margin-top:3px;">
-        <h3 class="sub-sec" style="margin-top:0;">Dual-Lookback Relative Strength (RS)</h3>
+        <h3 class="sub-sec" style="margin-top:0;">1. Frog-in-the-Pan (FIP) Continuous Momentum</h3>
         <p style="margin:0 0 2px; font-size:7.2pt; line-height:1.22;">
-          Captures both medium-term persistence (126-day / 6-month) and short-term acceleration (63-day / 3-month) excess return relative to QQQ, preventing false breakouts.
+          Da, Gurun, Warachka (2014, <i>J. Finance</i>). Continuous price drift with high positive-day frequency (FIP_63d) reflects persistent institutional accumulation under investor inattention, whereas discrete infrequent spikes signal speculative retail overreaction prone to sudden crashes. Blending 70% RS / 30% FIP boosts 10-Yr CAGR by <b>+12.4%</b> (+196.1% vs +183.7%) while dampening volatility and turnover.
         </p>
-        <h3 class="sub-sec">Unrestricted Stock Trend Breakthrough</h3>
+        <h3 class="sub-sec">2. Dual-Lookback Relative Strength (RS)</h3>
         <p style="margin:0 0 2px; font-size:7.2pt; line-height:1.22;">
-          Standard models require stocks to be above their 200-day SMA, introducing 100+ days of lag. Ultimate Alpha removes individual 200 SMA constraints, allowing early entry into explosive turnaround leaders while the macro filter safeguards portfolio solvency.
+          Captures medium-term persistence (126-day / 6-month, 50% weight) and short-term acceleration (63-day / 3-month, 50% weight) excess returns relative to QQQ: Composite RS = 0.50 &times; RS_126d + 0.50 &times; RS_63d.
         </p>
-        <h3 class="sub-sec">4-Tier Macro Regime Classifier</h3>
+        <h3 class="sub-sec">3. Unrestricted Stock Trend Breakthrough</h3>
+        <p style="margin:0 0 2px; font-size:7.2pt; line-height:1.22;">
+          Standard models require stocks to be above their 200 SMA, creating 100+ days of lag. Removing this constraint captures explosive early turnaround leaders while macro filters safeguard solvency.
+        </p>
+        <h3 class="sub-sec">4. 4-Tier Macro Regime Classifier</h3>
         <p style="margin:0; font-size:7.2pt; line-height:1.22;">
-          <b>Super-Bull:</b> QQQ &gt; 50 SMA &gt; 200 SMA &amp; positive LMMA slope.<br>
-          <b>Standard Bull:</b> QQQ &gt; 200 SMA (healthy uptrend).<br>
-          <b>Neutral / Choppy:</b> QQQ &lt; 50 SMA with deteriorating breadth.<br>
-          <b>Crisis / Bear:</b> QQQ breakdown &rarr; 100% reallocation to Crisis MVP.
+          <b>Super-Bull (2.50&times;):</b> QQQ &gt; 50 SMA &gt; 200 SMA &amp; positive LMMA slope.<br>
+          <b>Standard Bull (1.50&times;):</b> QQQ &gt; 200 SMA.<br>
+          <b>Crisis / Bear (0.0&times;):</b> QQQ breakdown &rarr; 100% reallocation to Crisis MVP (GLD/Cash).
         </p>
       </div>
 
@@ -632,22 +636,22 @@
     <div class="bt-card">
       <div class="tag">BREAKTHROUGH 1 &middot; TURNOVER HYSTERESIS</div>
       <h4>Top 8 Winner Retention Buffer</h4>
-      <p>Rigid Top 5 rebalancing forces excessive churn when leaders oscillate between ranks 4 and 6. Allowing existing winners to remain until rank &gt; 8 cut annual turnover by <b>43%</b> (from 21.2&times; to 19.2&times;) and boosted 20-Yr CAGR by <b>+15.2%</b>.</p>
+      <p>Rigid Top 5 rebalancing forces excessive churn when leaders oscillate between ranks 4 and 6. Retaining existing winners until rank &gt; 8 cuts annual turnover by <b>43%</b> (from 21.2&times; to 19.2&times;) and boosted 20-Yr CAGR by <b>+15.2%</b>.</p>
     </div>
     <div class="bt-card">
-      <div class="tag">BREAKTHROUGH 2 &middot; CONVEX LEVERAGE</div>
+      <div class="tag">BREAKTHROUGH 2 &middot; CONTINUOUS MOMENTUM</div>
+      <h4>Frog-in-the-Pan (FIP) Engine</h4>
+      <p>Da, Gurun, Warachka (2014, <i>J. Finance</i>). Rewards persistent daily institutional drift over infrequent speculative bursts. Blending 70% RS / 30% FIP expands 10-Yr CAGR by <b>+12.4%</b> (+196.1% vs +183.7%), lowers annual vol to 79.8%, and minimizes crash vulnerability.</p>
+    </div>
+    <div class="bt-card">
+      <div class="tag">BREAKTHROUGH 3 &middot; CONVEX LEVERAGE</div>
       <h4>Institutional 2.50&times; Turbo Margin</h4>
-      <p>Borrowing at margin is only profitable when trend velocity exceeds borrowing interest. Expanding to 2.50x leverage strictly during confirmed Super-Bull regimes delivers maximum compounding velocity, propelling 10-Yr CAGR to <b>+180.9%</b> and 20-Yr CAGR to <b>+95.5%</b> ($5.55B on $10k).</p>
+      <p>Borrowing at margin is deployed strictly during confirmed Super-Bull regimes (QQQ &gt; 50 &gt; 200 SMA, positive LMMA). This provides asymmetric upside without bleed during chop, achieving 20-Yr wealth compounding of <b>$5.55B</b> on $10k.</p>
     </div>
     <div class="bt-card">
-      <div class="tag">BREAKTHROUGH 3 &middot; CAPITAL RECYCLING</div>
-      <h4>-25% Stop + Immediate Replacement</h4>
-      <p>Traditional trailing stops liquidate into idle cash. Ultimate Alpha replaces stopped holdings immediately with the next highest-ranked leader (Rank 6), keeping the portfolio 100% invested in top momentum leaders while capping left-tail ruin.</p>
-    </div>
-    <div class="bt-card">
-      <div class="tag">BREAKTHROUGH 4 &middot; REGIME SHIELD</div>
-      <h4>Crisis Minimum Variance (MVP)</h4>
-      <p>During macroeconomic breakdowns (e.g. 2008 GFC, 2022 Fed tightening), equities are vacated in favor of Gold (GLD) and Cash. This protected capital during 2008 (-53.4% in QQQ) and 2022 (-35.1% in QQQ), preserving dry powder for bull recoveries.</p>
+      <div class="tag">BREAKTHROUGH 4 &middot; REGIME SHIELD &amp; RECYCLING</div>
+      <h4>Crisis MVP &amp; -25% Stop Recycling</h4>
+      <p>Systemic crashes trigger 100% rotation into Crisis Minimum Variance (GLD/Cash), shielding capital in 2008 (-53.4% in QQQ) and 2022 (-35.1% in QQQ). Intraday -25% stops immediately recycle into Rank 6 to sustain compounding velocity.</p>
     </div>
   </div>
 

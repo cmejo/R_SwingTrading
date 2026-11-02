@@ -179,3 +179,19 @@ deflated_sharpe_ratio <- function(r, n_trials = 1, sr_var = 0) {
   if (!is.finite(den) || den <= 0) return(NA_real_)
   stats::pnorm((sr - sr0) * sqrt(T_ - 1) / sqrt(den))
 }
+
+#' Feature 4: Frog-in-the-Pan (FIP) Continuous Momentum (Da, Gurun, Warachka 2014).
+#' Measures the proportion of positive daily returns over a trailing window (default 63 days).
+#' Persistent, continuous price drift signals institutional accumulation and lower crash risk.
+#' @param cl numeric vector of closing prices.
+#' @param lookback number of trading days (default 63).
+#' @return fraction in [0, 1] of positive return days (defaults to 0.50 if insufficient data).
+calc_fip_ratio <- function(cl, lookback = 63) {
+  cl <- cl[is.finite(cl)]
+  n <- length(cl)
+  if (n <= 1) return(0.50)
+  k <- min(n - 1, lookback)
+  ret <- diff(tail(cl, k + 1))
+  if (length(ret) == 0) return(0.50)
+  mean(ret > 0, na.rm = TRUE)
+}

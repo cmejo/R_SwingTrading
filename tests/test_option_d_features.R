@@ -83,6 +83,9 @@ check(dual_rs_raw(cumprod(1 + 2.0 * m_up + eps), cumprod(1 + m_up)) >
       "raw RS prefers the high-beta name in a bull tape (the bias Feature 2 removes)")
 check(is.na(residual_momentum_score(r_alpha[1:100], m[1:100])), "insufficient history returns NA")
 check(is.finite(residual_dual_score(r_alpha, m, skip = 5)), "dual residual score with skip is finite")
+cl_steady <- 100 * cumprod(c(1, rep(c(1.01, 1.01, 0.99), 30)))
+check(near(calc_fip_ratio(cl_steady, lookback = 63), 42 / 63, 1e-4), "calc_fip_ratio correctly measures fraction of positive days")
+check(calc_fip_ratio(c(100), lookback = 63) == 0.50, "single price returns 0.50 neutral fallback")
 
 # ------------------------------------------------------------------------------
 cat("\n[5] Deflated Sharpe ratio\n")
