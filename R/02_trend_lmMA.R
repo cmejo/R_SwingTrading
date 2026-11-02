@@ -28,22 +28,23 @@ lmMA <- function(x, n = 50) {
     stop(sprintf("Input length (%d) is shorter than rolling window n (%d)", n_obs, n))
   }
   
-  # Align time index strictly to x's time-series index
-  if (is.xts(x)) {
-    time_idx <- xts(1:n_obs, order.by = index(x))
+  was_xts <- is.xts(x)
+  if (!was_xts) {
+    x_xts <- xts(as.numeric(x), order.by = as.Date("2000-01-01") + seq_len(n_obs) - 1)
   } else {
-    time_idx <- 1:n_obs
+    x_xts <- x
   }
   
-  rl_raw <- rollSFM(x, time_idx, n = n)
+  time_idx <- xts(1:n_obs, order.by = index(x_xts))
+  rl_raw <- rollSFM(x_xts, time_idx, n = n)
   
   # Extract components safely by column name
   alpha_val <- as.numeric(rl_raw[, "alpha"])
   beta_val  <- as.numeric(rl_raw[, "beta"])
   rsq_val   <- as.numeric(rl_raw[, "r.squared"])
-  fit_val   <- alpha_val + beta_val * as.numeric(time_idx)
+  fit_val   <- alpha_val + beta_val * (1:n_obs)
   
-  if (is.xts(x)) {
+  if (was_xts) {
     idx <- index(x)
     rl <- list(
       alpha     = xts(alpha_val, order.by = idx),

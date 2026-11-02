@@ -43,6 +43,7 @@ suppressPackageStartupMessages({
 })
 
 source("R/01_data_loader.R")
+source("R/02_trend_lmMA.R")
 
 # ------------------------------------------------------------------------------
 # 1. Parse Command Line Arguments & Configuration Presets
@@ -64,8 +65,12 @@ BREADTH_THRESHOLD     <- 0.50    #     BREADTH_THRESHOLD of scanned stocks are a
 VOL_CAP               <- 1.00    # (C) Speculative-spike filter: skip stocks whose 63-day realized volatility
                                  #     exceeds VOL_CAP (1.00 = 100% annualized, ~6.3%/day). Set NA to disable.
 USE_CRISIS_MVP        <- TRUE    # (D) Crisis Minimum Variance Portfolio: When in crisis/bear territory
-                                 #     (QQQ < 200 SMA), stay invested in equities but switch selection rules
-                                 #     from Momentum to the Minimum Variance Portfolio (lowest-volatility stocks).
+                                 #     (trend predicted down and high volatility regime), stay invested
+                                 #     in equities but switch selection rules from Momentum to Min-Var.
+TREND_ENGINE          <- "lmMA_slope" # (E) Macro Trend Engine: "lmMA_slope" (low-lag regression conviction),
+                                      #     alt: "sma200" (classic 200 SMA), "lmMA_fit" (price vs lmMA level)
+LMMA_WINDOW           <- 50           # Rolling window for linear regression trend velocity (default: 50)
+LMMA_RSQ_THRESHOLD    <- 0.15         # Statistical conviction threshold (R^2 > 0.15 confirms directional trend)
 FORCE_REBALANCE       <- FALSE
 RESET                 <- FALSE
 SYMBOLS_FILE          <- "symbols_broad.txt" # Broad 170-name growth/momentum list (alt: symbols_n100.txt = PIT-tested universe)
@@ -151,6 +156,12 @@ for (arg in args) {
     ORDERS_OUT_FILE <- sub("^--orders_out=", "", arg)
   } else if (grepl("^--crisis_mvp=", arg)) {
     USE_CRISIS_MVP <- as.logical(sub("^--crisis_mvp=", "", arg))
+  } else if (grepl("^--trend_engine=", arg)) {
+    TREND_ENGINE <- sub("^--trend_engine=", "", arg)
+  } else if (grepl("^--lmma_window=", arg)) {
+    LMMA_WINDOW <- as.integer(sub("^--lmma_window=", "", arg))
+  } else if (grepl("^--lmma_rsq=", arg)) {
+    LMMA_RSQ_THRESHOLD <- as.numeric(sub("^--lmma_rsq=", "", arg))
   }
 }
 
@@ -351,7 +362,25 @@ qqq_ret        <- qqq_ret_long # Compatibility alias
 
 # QQQ Trend & Realized Volatility Diagnostics
 qqq_sma200   <- mean(tail(qqq_close, 200))
-qqq_trend_up <- qqq_cur_px >= qqq_sma200
+
+# Linear Model Moving Average (lmMA) - Zero First-Order Phase Lag
+qqq_lm       <- lmMA(qqq_close, n = LMMA_WINDOW)
+qqq_lm_fit   <- tail(as.numeric(qqq_lm$fit), 1)
+qqq_lm_slope <- tail(as.numeric(qqq_lm$slope), 1)
+qqq_lm_rsq   <- tail(as.numeric(qqq_lm$r.squared), 1)
+
+# Trend Conviction Filter:
+# Eliminates lag while avoiding whipsaws from naive price crossing.
+# A crisis / bear regime is confirmed if BOTH slope is negative AND R^2 exceeds threshold.
+is_confirmed_downtrend <- (qqq_lm_slope < 0 && qqq_lm_rsq > LMMA_RSQ_THRESHOLD)
+
+qqq_trend_up <- if (TREND_ENGINE == "lmMA_slope") {
+  !is_confirmed_downtrend
+} else if (TREND_ENGINE == "lmMA_fit") {
+  qqq_cur_px >= qqq_lm_fit
+} else {
+  qqq_cur_px >= qqq_sma200
+}
 
 # Rolling 20-day realized volatility of log returns
 ret_20d      <- diff(log(tail(qqq_close, 21)))
@@ -398,8 +427,20 @@ cat(sprintf(" Portfolio Leverage:     Target: %.2fx | Active Today: %.2fx %s\n",
             if (active_margin < PORTFOLIO_MARGIN_LEV) "(DE-LEVERED TO 0% DEBT: QQQ < 200 SMA)" else "(BULL MARGIN ACTIVE)"))
 cat(sprintf(" Volatility Targeting:   Target: %.1f%% | Realized (20d): %.1f%% | Vol Scale Factor: %.2fx\n",
             VOL_TARGET * 100, realized_vol * 100, vol_scale))
-cat(sprintf(" Benchmark Status:       QQQ @ $%.2f | 200 SMA: $%.2f | Trend: %s\n",
-            qqq_cur_px, qqq_sma200, if (qqq_trend_up) "BULLISH (>= 200 SMA)" else "BEARISH (< 200 SMA)"))
+cat(sprintf(" Benchmark Status:       QQQ @ $%.2f | Trend Engine: %s (%s)\n",
+            qqq_cur_px,
+            if (TREND_ENGINE == "lmMA_slope") sprintf("lmMA(%d) Slope + R^2", LMMA_WINDOW)
+            else if (TREND_ENGINE == "lmMA_fit") sprintf("lmMA(%d) Level", LMMA_WINDOW)
+            else "200 SMA",
+            if (qqq_trend_up) "BULLISH (UPTREND / CHOP BUFFER)" else "CRISIS / BEARISH"))
+cat(sprintf(" lmMA Diagnostics:       Slope: %+.2f/day (%+.1f%% ann.) | R^2: %.3f | Fit: $%.2f | Signal: %s\n",
+            qqq_lm_slope, (qqq_lm_slope * 252 / qqq_cur_px) * 100, qqq_lm_rsq, qqq_lm_fit,
+            if (is_confirmed_downtrend) "CONFIRMED DOWNTREND (CRISIS MODE)"
+            else if (qqq_lm_slope >= 0) "UPWARD DRIFT (BULLISH)"
+            else "NEGATIVE SLOPE BUT LOW R^2 (WHIPSAW SHIELD: STAY INVESTED)"))
+cat(sprintf(" 200 SMA Diagnostics:    200 SMA: $%.2f (Spread: %+.1f%% | Trend: %s)\n",
+            qqq_sma200, ((qqq_cur_px / qqq_sma200) - 1) * 100,
+            if (qqq_cur_px >= qqq_sma200) "BULLISH" else "BEARISH"))
 cat(sprintf(" Defensive Reserve:      %s @ $%.2f (Inflation/Crisis Flight-to-Safety)\n",
             DEFENSIVE_ASSET, def_cur_px))
 cat(sprintf(" Disaster Stop Floor:    -%.1f%% on individual stock positions\n", DISASTER_STOP * 100))
@@ -458,7 +499,15 @@ for (sym in scan_syms) {
   
   # Trend check: 200 SMA
   sma200 <- if (n >= 200) mean(cl[(n - 199):n]) else mean(cl)
-  trend_up <- cur_px >= sma200
+  trend_up_sma <- cur_px >= sma200
+  
+  # Linear Model Moving Average (lmMA) trend check for stock (50-day window)
+  stk_lm <- if (n >= LMMA_WINDOW) lmMA(tail(cl, LMMA_WINDOW), n = LMMA_WINDOW) else NULL
+  stk_slope <- if (!is.null(stk_lm)) tail(as.numeric(stk_lm$slope), 1) else 0.0
+  stk_rsq   <- if (!is.null(stk_lm)) tail(as.numeric(stk_lm$r.squared), 1) else 0.0
+  stk_down  <- (stk_slope < 0 && stk_rsq > LMMA_RSQ_THRESHOLD)
+  
+  trend_up <- if (TREND_ENGINE == "lmMA_slope") !stk_down else trend_up_sma
   
   ret_long  <- (cur_px / lb_long_px) - 1
   ret_short <- (cur_px / lb_short_px) - 1
@@ -471,6 +520,8 @@ for (sym in scan_syms) {
     Symbol       = sym,
     Close        = cur_px,
     SMA200       = sma200,
+    lmMA_Slope   = stk_slope,
+    lmMA_R2      = stk_rsq,
     Trend_Up     = trend_up,
     Ret_126D     = ret_long,
     Ret_63D      = ret_short,
@@ -521,7 +572,9 @@ is_crisis_regime <- !qqq_trend_up
 
 if (USE_CRISIS_MVP && is_crisis_regime) {
   cat("\n========================================================================================\n")
-  cat(" 🛡️ CRISIS / BEAR REGIME ACTIVE: QQQ < 200-day SMA                                      \n")
+  cat(sprintf(" 🛡️ CRISIS / BEAR REGIME ACTIVE: %s Downtrend Confirmed \n",
+              if (TREND_ENGINE == "lmMA_slope") sprintf("lmMA(%d) Slope (%.2f) + R^2 (%.2f)", LMMA_WINDOW, qqq_lm_slope, qqq_lm_rsq)
+              else "QQQ < 200-day SMA"))
   cat(" CHANGING RULES: REBALANCING AROUND MINIMUM VARIANCE EQUITIES PORTFOLIO (MVP)           \n")
   cat(" Philosophy: Stay 100% invested in equities, shifting selection from Momentum to Min-Var!\n")
   cat("========================================================================================\n")
@@ -533,11 +586,10 @@ if (USE_CRISIS_MVP && is_crisis_regime) {
   
   cat(sprintf("\n Top %d Minimum Variance Defensive Stocks (Lowest 63-day Realized Volatility):\n", TOP_N))
   cat("--------------------------------------------------------------------------------------------------------\n")
-  print_df <- head(mv_pool[, c("Symbol", "Close", "Trend_Up", "Ret_126D", "Ret_63D", "RS_126D", "RS_63D", "RS_Composite", "Vol_63D")], 8)
+  print_df <- head(mv_pool[, c("Symbol", "Close", "Trend_Up", "lmMA_Slope", "Ret_126D", "Ret_63D", "RS_Composite", "Vol_63D")], 8)
+  print_df$lmMA_Slope   <- sprintf("%+.2f", print_df$lmMA_Slope)
   print_df$Ret_126D     <- sprintf("%+.1f%%", print_df$Ret_126D * 100)
   print_df$Ret_63D      <- sprintf("%+.1f%%", print_df$Ret_63D * 100)
-  print_df$RS_126D      <- sprintf("%+.1f%%", print_df$RS_126D * 100)
-  print_df$RS_63D       <- sprintf("%+.1f%%", print_df$RS_63D * 100)
   print_df$RS_Composite <- sprintf("%+.1f%%", print_df$RS_Composite * 100)
   print_df$Vol_63D      <- sprintf("%.0f%%", print_df$Vol_63D * 100)
   print(print_df, row.names = FALSE)
@@ -546,13 +598,13 @@ if (USE_CRISIS_MVP && is_crisis_regime) {
   rs_qualified <- rs_qualified[order(-rs_qualified$RS_Composite), ]
   top_picks <- head(rs_qualified, TOP_N)
   
-  cat("\n Top Candidate Relative Strength Leaders (Dual-Lookback: 50% 126d + 50% 63d | >= 200-day SMA):\n")
+  cat(sprintf("\n Top Candidate Relative Strength Leaders (Dual-Lookback: 50%% 126d + 50%% 63d | %s):\n",
+              if (TREND_ENGINE == "lmMA_slope") sprintf("lmMA(%d) Slope / Low-Lag Filter", LMMA_WINDOW) else ">= 200-day SMA"))
   cat("--------------------------------------------------------------------------------------------------------\n")
-  print_df <- head(rs_qualified[, c("Symbol", "Close", "Trend_Up", "Ret_126D", "Ret_63D", "RS_126D", "RS_63D", "RS_Composite", "Vol_63D")], 8)
+  print_df <- head(rs_qualified[, c("Symbol", "Close", "Trend_Up", "lmMA_Slope", "Ret_126D", "Ret_63D", "RS_Composite", "Vol_63D")], 8)
+  print_df$lmMA_Slope   <- sprintf("%+.2f", print_df$lmMA_Slope)
   print_df$Ret_126D     <- sprintf("%+.1f%%", print_df$Ret_126D * 100)
   print_df$Ret_63D      <- sprintf("%+.1f%%", print_df$Ret_63D * 100)
-  print_df$RS_126D      <- sprintf("%+.1f%%", print_df$RS_126D * 100)
-  print_df$RS_63D       <- sprintf("%+.1f%%", print_df$RS_63D * 100)
   print_df$RS_Composite <- sprintf("%+.1f%%", print_df$RS_Composite * 100)
   print_df$Vol_63D      <- sprintf("%.0f%%", print_df$Vol_63D * 100)
   print(print_df, row.names = FALSE)
@@ -584,7 +636,7 @@ if (!is.null(live_quotes_data)) {
 # Value Core Position
 core_val <- 0
 core_pos <- port_state$core_position
-if (!is.null(core_pos) && as.numeric(core_pos$shares) > 0) {
+if (!is.null(core_pos) && !is.null(core_pos$shares) && !is.na(core_pos$shares) && as.numeric(core_pos$shares) > 0) {
   sym_core <- if (!is.null(core_pos$symbol)) core_pos$symbol else CORE_ASSET
   core_px  <- if (!is.null(cur_prices[[sym_core]]) && cur_prices[[sym_core]] > 0) cur_prices[[sym_core]] else as.numeric(core_pos$entry_price)
   core_val <- round(as.numeric(core_pos$shares) * core_px, 2)
@@ -593,7 +645,7 @@ if (!is.null(core_pos) && as.numeric(core_pos$shares) > 0) {
 # Value Defensive Position (GLD or legacy SGOV)
 def_val <- 0
 def_pos <- port_state$defensive_position
-if (!is.null(def_pos) && as.numeric(def_pos$shares) > 0) {
+if (!is.null(def_pos) && !is.null(def_pos$shares) && !is.na(def_pos$shares) && as.numeric(def_pos$shares) > 0) {
   sym_def <- if (!is.null(def_pos$symbol)) def_pos$symbol else DEFENSIVE_ASSET
   def_px  <- if (!is.null(cur_prices[[sym_def]])) cur_prices[[sym_def]] else as.numeric(def_pos$entry_price)
   def_val <- round(as.numeric(def_pos$shares) * def_px, 2)
@@ -995,6 +1047,9 @@ if (should_rebalance) {
   port_state$portfolio_margin_lev <- PORTFOLIO_MARGIN_LEV
   port_state$vol_target           <- VOL_TARGET
   port_state$defensive_asset      <- DEFENSIVE_ASSET
+  port_state$trend_engine         <- TREND_ENGINE
+  port_state$lmma_window          <- LMMA_WINDOW
+  port_state$lmma_rsq_threshold   <- LMMA_RSQ_THRESHOLD
   port_state$realized_vol_20d     <- round(realized_vol, 4)
   port_state$vol_scale            <- round(vol_scale, 4)
   port_state$last_rebalance_date  <- today_str
