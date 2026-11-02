@@ -433,16 +433,16 @@ def cmd_sync(args):
                     pj = json.load(pf)
                     sim_capital = float(pj.get("total_capital", 8000.0))
                     sim_cash = float(pj.get("cash_balance", 0.0))
-                    if pj.get("core_position"):
-                        cp = pj["core_position"]
+                    cp = pj.get("core_position")
+                    if cp and isinstance(cp, dict) and cp.get("symbol") not in (None, "", "NONE") and float(cp.get("shares", 0)) > 0:
                         sim_positions.append({
-                            "symbol": cp.get("symbol", "QLD"),
+                            "symbol": cp.get("symbol"),
                             "shares": float(cp.get("shares", 0)),
                             "average_price": float(cp.get("entry_price", 82.59)),
                             "market_value": round(float(cp.get("shares", 0)) * float(cp.get("entry_price", 82.59)), 2)
                         })
-                    if pj.get("defensive_position"):
-                        dp = pj["defensive_position"]
+                    dp = pj.get("defensive_position")
+                    if dp and isinstance(dp, dict) and dp.get("symbol") not in (None, "", "NONE") and float(dp.get("shares", 0)) > 0:
                         sim_positions.append({
                             "symbol": dp.get("symbol", "GLD"),
                             "shares": float(dp.get("shares", 0)),
@@ -450,12 +450,13 @@ def cmd_sync(args):
                             "market_value": round(float(dp.get("shares", 0)) * float(dp.get("entry_price", 355.78)), 2)
                         })
                     for sp in pj.get("satellite_positions", []):
-                        sim_positions.append({
-                            "symbol": sp.get("symbol"),
-                            "shares": float(sp.get("shares", 0)),
-                            "average_price": float(sp.get("entry_price", 100.0)),
-                            "market_value": round(float(sp.get("shares", 0)) * float(sp.get("entry_price", 100.0)), 2)
-                        })
+                        if float(sp.get("shares", 0)) > 0:
+                            sim_positions.append({
+                                "symbol": sp.get("symbol"),
+                                "shares": float(sp.get("shares", 0)),
+                                "average_price": float(sp.get("entry_price", 100.0)),
+                                "market_value": round(float(sp.get("shares", 0)) * float(sp.get("entry_price", 100.0)), 2)
+                            })
             except Exception:
                 pass
 
@@ -531,7 +532,7 @@ def cmd_quotes(args):
     out_file = args.out
     dry_run = args.dry_run
 
-    symbols = ["QQQ", "QLD", "GLD", "SGOV"]
+    symbols = ["QQQ", "GLD", "SGOV"]
     if os.path.exists(symbols_file):
         with open(symbols_file, "r") as f:
             for line in f:
@@ -580,7 +581,7 @@ def cmd_quotes(args):
         json.dump(payload, f, indent=2)
 
     print(f"✅ Saved {len(quotes)} real-time quotes to: {out_file} (Source: {source})")
-    print(f"   Benchmark QQQ: ${quotes.get('QQQ', 0):.2f} | Core QLD: ${quotes.get('QLD', 0):.2f} | Defense GLD: ${quotes.get('GLD', 0):.2f}")
+    print(f"   Benchmark QQQ: ${quotes.get('QQQ', 0):.2f} | Defense GLD: ${quotes.get('GLD', 0):.2f}")
 
 
 def cmd_execute(args):

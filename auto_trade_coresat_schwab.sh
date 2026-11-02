@@ -62,7 +62,7 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 LOG_FILE="$SCRIPT_DIR/logs/schwab_coresat_${TIMESTAMP}.log"
 
 echo "================================================================================"
-echo "      CHARLES SCHWAB AUTOMATED TRADING PIPELINE (TRIPLE-ENGINE 30/70)           "
+echo "      CHARLES SCHWAB AUTOMATED TRADING PIPELINE (100% STOCK: 1.5x MARGIN)       "
 echo "================================================================================"
 echo " Mode:          $([ "$DRY_RUN" = "false" ] && echo '🔴 LIVE EXECUTION' || echo '🟡 DRY RUN (Preview)')"
 echo " Watchlist:     $SYMBOLS_FILE"
@@ -99,7 +99,8 @@ echo -e "\n[Step 3/5] Fetching fresh real-time quotes for universe into $QUOTES_
 python3 schwab_bridge.py quotes --symbols_file="$SYMBOLS_FILE" --out="$QUOTES_FILE" --dry_run="$DRY_RUN"
 
 # Step 4: Run R Quantitative Signal Engine
-echo -e "\n[Step 4/5] Executing Triple-Engine Quantitative Model in R..."
+echo -e "\n[Step 4/5] Executing 100% Stock Quantitative Momentum Model in R..."
+rm -f "$ORDERS_FILE"
 R_ARGS=(
   "--symbols_file=$SYMBOLS_FILE"
   "--broker_state=$STATE_FILE"

@@ -228,18 +228,25 @@ port_state <- load_portfolio(PORTFOLIO_FILE, CAPITAL)
 if (!is.null(BROKER_STATE_FILE) && file.exists(BROKER_STATE_FILE)) {
   broker_state <- tryCatch(fromJSON(BROKER_STATE_FILE, simplifyVector = FALSE), error = function(e) NULL)
   if (!is.null(broker_state)) {
-    b_cap <- as.numeric(broker_state$total_capital %||% broker_state$equity %||% CAPITAL)
-    b_cash <- as.numeric(broker_state$cash_balance %||% broker_state$cashAvailableForTrading %||% CAPITAL)
-    if (!is.na(b_cap) && b_cap > 0) {
-      CAPITAL <- b_cap
-      port_state$total_capital <- b_cap
-    }
-    if (!is.na(b_cash)) {
-      port_state$cash_balance <- b_cash
+    is_sim <- isTRUE(broker_state$is_simulation)
+    if (RESET && is_sim) {
+      cat(sprintf(" 🔄 RESET active with simulated broker state: Re-initializing clean $%.2f cash balance and 0 positions.\n", CAPITAL))
+      port_state$cash_balance  <- CAPITAL
+      port_state$total_capital <- CAPITAL
+      b_positions <- NULL
+    } else {
+      b_cap <- as.numeric(broker_state$total_capital %||% broker_state$equity %||% CAPITAL)
+      b_cash <- as.numeric(broker_state$cash_balance %||% broker_state$cashAvailableForTrading %||% CAPITAL)
+      if (!is.na(b_cap) && b_cap > 0) {
+        CAPITAL <- b_cap
+        port_state$total_capital <- b_cap
+      }
+      if (!is.na(b_cash)) {
+        port_state$cash_balance <- b_cash
+      }
+      b_positions <- broker_state$positions
     }
     
-    # Synchronize broker positions if available
-    b_positions <- broker_state$positions
     if (!is.null(b_positions) && length(b_positions) > 0) {
       cat(sprintf(" 🔗 Reconciling %d live broker position(s) from %s...\n", length(b_positions), BROKER_STATE_FILE))
       b_core_pos <- NULL
@@ -257,7 +264,7 @@ if (!is.null(BROKER_STATE_FILE) && file.exists(BROKER_STATE_FILE)) {
         b_px  <- as.numeric(bp$average_price %||% bp$averageCost %||% bp$current_price %||% 0)
         if (b_shs <= 0) next
         
-        if (b_sym == CORE_ASSET || b_sym == "QQQ") {
+        if (b_sym == CORE_ASSET || b_sym %in% c("QLD", "QQQ", "TQQQ")) {
           b_core_pos <- list(symbol = b_sym, shares = b_shs, entry_price = b_px, entry_date = as.character(Sys.Date()))
         } else if (b_sym == DEFENSIVE_ASSET || b_sym %in% c("GLD", "SGOV", "BIL")) {
           b_def_pos <- list(symbol = b_sym, shares = b_shs, entry_price = b_px, entry_date = as.character(Sys.Date()))
