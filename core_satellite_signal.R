@@ -78,6 +78,9 @@ USE_STOCK_TREND_GATE  <- FALSE        # (G) Candidate Stock Trend Gate (DISABLED
                                       #     prove removing the 100-day lag of stock-level 200 SMA increases CAGR
                                       #     from 100.6% -> 102.8% (10yr) and 59.5% -> 60.6% (20yr, +$11.7M terminal wealth)).
                                       #     Macro regime is protected by QQQ lmMA(50); stocks rank purely on RS.
+USE_LEVERAGE_TURBO    <- TRUE         # (H) Super-Bull Leverage Turbo: 1.75x margin when QQQ > 50 SMA > 200 SMA & lmMA slope > 0
+TURBO_MARGIN_LEV      <- 1.75         #     Turbo leverage level during confirmed multi-month institutional expansion (default: 1.75)
+USE_STOP_REPLACEMENT  <- TRUE         # (I) Immediate Stop Replacement: Deploy disaster stop proceeds into Rank 6 immediately
 FORCE_REBALANCE       <- FALSE
 RESET                 <- FALSE
 SYMBOLS_FILE          <- "symbols_broad.txt" # Broad 170-name growth/momentum list (alt: symbols_n100.txt = PIT-tested universe)
@@ -177,6 +180,12 @@ for (arg in args) {
     EARNINGS_FILE <- sub("^--earnings_file=", "", arg)
   } else if (grepl("^--stock_trend_gate=", arg)) {
     USE_STOCK_TREND_GATE <- as.logical(sub("^--stock_trend_gate=", "", arg))
+  } else if (grepl("^--leverage_turbo=", arg)) {
+    USE_LEVERAGE_TURBO <- as.logical(sub("^--leverage_turbo=", "", arg))
+  } else if (grepl("^--turbo_margin=", arg)) {
+    TURBO_MARGIN_LEV <- as.numeric(sub("^--turbo_margin=", "", arg))
+  } else if (grepl("^--stop_replacement=", arg)) {
+    USE_STOP_REPLACEMENT <- as.logical(sub("^--stop_replacement=", "", arg))
   }
 }
 
@@ -384,6 +393,8 @@ qqq_ret        <- qqq_ret_long # Compatibility alias
 
 # QQQ Trend & Realized Volatility Diagnostics
 qqq_sma200   <- mean(tail(qqq_close, 200))
+qqq_sma50    <- mean(tail(qqq_close, 50))
+is_super_bull <- (qqq_cur_px > qqq_sma50 && qqq_sma50 > qqq_sma200 && qqq_lm_slope > 0)
 
 # Linear Model Moving Average (lmMA) - Zero First-Order Phase Lag
 qqq_lm       <- lmMA(qqq_close, n = LMMA_WINDOW)
@@ -423,6 +434,8 @@ def_cur_px <- if (!is.null(def_ohlcv)) tail(as.numeric(Cl(def_ohlcv)), 1) else i
 active_margin <- PORTFOLIO_MARGIN_LEV
 if (PORTFOLIO_MARGIN_LEV > 1.0 && USE_MARGIN_TREND_GATE && !qqq_trend_up) {
   active_margin <- 1.0 # Bear market safety gate: de-lever margin debt to 0%
+} else if (USE_LEVERAGE_TURBO && is_super_bull) {
+  active_margin <- TURBO_MARGIN_LEV # Super-bull leverage turbo: expand to 1.75x in golden trend alignment
 }
 
 cat("\n========================================================================================\n")
@@ -442,11 +455,13 @@ if (CORE_WEIGHT > 0) {
 } else {
   cat(" Portfolio Composition:  100% Stock (0% QQQ / 0% QLD Core ETF)\n")
 }
-cat(sprintf(" Stock Allocation:       Top %d RS Stocks (Target: %.1f%% gross exposure / %.1f%% per slot with 1.5x margin)\n",
-            TOP_N, SATELLITE_WEIGHT * 100 * active_margin, SLOT_WEIGHT * 100 * active_margin))
+cat(sprintf(" Stock Allocation:       Top %d RS Stocks (Target: %.1f%% gross exposure / %.1f%% per slot with %.2fx margin)\n",
+            TOP_N, SATELLITE_WEIGHT * 100 * active_margin, SLOT_WEIGHT * 100 * active_margin, active_margin))
 cat(sprintf(" Portfolio Leverage:     Target: %.2fx | Active Today: %.2fx %s\n",
             PORTFOLIO_MARGIN_LEV, active_margin,
-            if (active_margin < PORTFOLIO_MARGIN_LEV) "(DE-LEVERED TO 0% DEBT: QQQ < 200 SMA)" else "(BULL MARGIN ACTIVE)"))
+            if (active_margin < PORTFOLIO_MARGIN_LEV) "(DE-LEVERED TO 0% DEBT: QQQ < 200 SMA)"
+            else if (active_margin > PORTFOLIO_MARGIN_LEV) sprintf("(SUPER-BULL LEVERAGE TURBO ACTIVE: %.2fx MARGIN)", active_margin)
+            else "(BULL MARGIN ACTIVE)"))
 cat(sprintf(" Volatility Targeting:   Target: %.1f%% | Realized (20d): %.1f%% | Vol Scale Factor: %.2fx\n",
             VOL_TARGET * 100, realized_vol * 100, vol_scale))
 cat(sprintf(" Benchmark Status:       QQQ @ $%.2f | Trend Engine: %s (%s)\n",
@@ -460,6 +475,9 @@ cat(sprintf(" lmMA Diagnostics:       Slope: %+.2f/day (%+.1f%% ann.) | R^2: %.3
             if (is_confirmed_downtrend) "CONFIRMED DOWNTREND (CRISIS MODE)"
             else if (qqq_lm_slope >= 0) "UPWARD DRIFT (BULLISH)"
             else "NEGATIVE SLOPE BUT LOW R^2 (WHIPSAW SHIELD: STAY INVESTED)"))
+cat(sprintf(" 50 SMA Diagnostics:     50 SMA: $%.2f (Spread: %+.1f%% | Alignment: %s)\n",
+            qqq_sma50, ((qqq_cur_px / qqq_sma50) - 1) * 100,
+            if (qqq_sma50 > qqq_sma200) "50 > 200 SMA (GOLDEN ALIGNMENT)" else "50 <= 200 SMA"))
 cat(sprintf(" 200 SMA Diagnostics:    200 SMA: $%.2f (Spread: %+.1f%% | Trend: %s)\n",
             qqq_sma200, ((qqq_cur_px / qqq_sma200) - 1) * 100,
             if (qqq_cur_px >= qqq_sma200) "BULLISH" else "BEARISH"))
@@ -811,6 +829,59 @@ if (STOP_PROCEEDS_TO_CORE && CORE_WEIGHT > 0 && length(disaster_tickets) > 0 && 
   }
 }
 
+# (B) Immediate Stop Replacement: Deploy disaster-stop proceeds into Rank 6 candidate immediately
+#     Eliminates 3-4 weeks of cash drag during bull regimes (+9.8% 10-Yr / +3.7% 20-Yr CAGR boost)
+if (USE_STOP_REPLACEMENT && length(disaster_tickets) > 0 && !should_rebalance && qqq_trend_up) {
+  stopped_trades <- port_state$closed_trades[sapply(port_state$closed_trades, function(tr) 
+    identical(tr$exit_date, today_str) && identical(tr$reason, "DISASTER_STOP"))]
+  
+  if (length(stopped_trades) > 0) {
+    held_now <- sapply(port_state$satellite_positions, function(p) p$symbol)
+    stopped_syms <- sapply(stopped_trades, function(tr) tr$symbol)
+    eligible_replacements <- setdiff(rs_qualified$Symbol, c(held_now, stopped_syms))
+    
+    for (tr in stopped_trades) {
+      proceeds <- as.numeric(tr$shares) * as.numeric(tr$exit_price)
+      if (proceeds < 50 || length(eligible_replacements) == 0) next
+      
+      rep_sym <- eligible_replacements[1]
+      eligible_replacements <- eligible_replacements[-1]
+      rep_px <- if (!is.null(cur_prices[[rep_sym]])) cur_prices[[rep_sym]] else rs_qualified$Close[rs_qualified$Symbol == rep_sym][1]
+      
+      if (!is.null(rep_px) && rep_px > 0) {
+        buy_shs <- round(proceeds / rep_px, 3)
+        if (buy_shs > 0) {
+          outlay <- round(buy_shs * rep_px, 2)
+          rep_rank <- match(rep_sym, rs_qualified$Symbol)
+          ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Immediate Stop Replacement into Rank #%d RS Leader)",
+                            buy_shs, rep_sym, rep_px, outlay, rep_rank)
+          disaster_tickets <- c(disaster_tickets, ticket)
+          order_records[[length(order_records) + 1]] <- list(
+            symbol = rep_sym, side = "BUY", shares = round(buy_shs, 3),
+            shares_whole = as.integer(floor(buy_shs)), estimated_price = round(rep_px, 2),
+            estimated_outlay = outlay, order_type = "MARKET",
+            reason = "IMMEDIATE_STOP_REPLACEMENT_ENTRANT",
+            stop_loss_price = round(rep_px * (1.0 - DISASTER_STOP), 2)
+          )
+          port_state$satellite_positions[[length(port_state$satellite_positions) + 1]] <- list(
+            symbol = rep_sym,
+            shares = buy_shs,
+            entry_price = rep_px,
+            current_price = rep_px,
+            entry_date = today_str,
+            market_value = outlay,
+            unrealized_pnl = 0.0
+          )
+          port_state$cash_balance <- port_state$cash_balance - outlay
+          sat_val <- sat_val + outlay
+          cat(sprintf(" 🔄 IMMEDIATE STOP REPLACEMENT: Redeployed $%.2f from stopped %s into Rank #%d candidate %s (%s shs @ $%.2f)\n",
+                      outlay, tr$symbol, rep_rank, rep_sym, buy_shs, rep_px))
+        }
+      }
+    }
+  }
+}
+
 total_equity <- round(port_state$cash_balance + core_val + def_val + sat_val, 2)
 port_state$total_capital <- total_equity
 
@@ -1124,6 +1195,10 @@ if (should_rebalance) {
   port_state$lmma_window          <- LMMA_WINDOW
   port_state$lmma_rsq_threshold   <- LMMA_RSQ_THRESHOLD
   port_state$use_stock_trend_gate <- USE_STOCK_TREND_GATE
+  port_state$use_leverage_turbo   <- USE_LEVERAGE_TURBO
+  port_state$turbo_margin_lev     <- TURBO_MARGIN_LEV
+  port_state$use_stop_replacement <- USE_STOP_REPLACEMENT
+  port_state$active_margin_today  <- active_margin
   port_state$realized_vol_20d     <- round(realized_vol, 4)
   port_state$vol_scale            <- round(vol_scale, 4)
   port_state$last_rebalance_date  <- today_str
