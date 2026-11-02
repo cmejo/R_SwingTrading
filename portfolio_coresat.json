@@ -1,6 +1,6 @@
 {
   "total_capital": 8000,
-  "cash_balance": -3766.22,
+  "cash_balance": -3851.44,
   "core_weight": 0.3,
   "satellite_weight": 0.7,
   "core_asset": "QLD",
@@ -11,13 +11,13 @@
   "last_rebalance_date": "2026-11-01",
   "core_position": {
     "symbol": "QLD",
-    "shares": 42.809,
+    "shares": 41.967,
     "entry_price": 82.59,
     "entry_date": "2026-11-01"
   },
   "defensive_position": {
     "symbol": "GLD",
-    "shares": 0.402,
+    "shares": 0.837,
     "entry_price": 355.78,
     "entry_date": "2026-11-01"
   },
@@ -103,7 +103,7 @@
       "reason": "MONTHLY_ROTATION"
     }
   ],
-  "realized_vol_20d": 0.224,
-  "vol_scale": 0.9821,
-  "last_updated": "2026-11-01 01:20:33.44725"
+  "realized_vol_20d": 0.2285,
+  "vol_scale": 0.9628,
+  "last_updated": "2026-11-01 21:36:09.114153"
 }

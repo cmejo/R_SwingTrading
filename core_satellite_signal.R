@@ -67,6 +67,9 @@ VOL_CAP               <- 1.00    # (C) Speculative-spike filter: skip stocks who
                                  #     exceeds VOL_CAP (1.00 = 100% annualized, ~6.3%/day). Set NA to disable.
                                  #     Cuts MaxDD ~6 pts in backtest, but the 50% threshold is fragile
                                  #     (40% had no effect, 60% was worse). Needs a broad list (e.g. N100).
+USE_CRISIS_MVP        <- TRUE    # (D) Crisis Minimum Variance Portfolio: When in crisis/bear territory
+                                 #     (QQQ < 200 SMA), stay invested in equities but switch selection rules
+                                 #     from Momentum to the Minimum Variance Portfolio (lowest-volatility stocks).
 FORCE_REBALANCE       <- FALSE
 RESET                 <- FALSE
 SYMBOLS_FILE          <- "symbols_broad.txt" # Broad 170-name growth/momentum list (alt: symbols_n100.txt = PIT-tested universe)
@@ -150,6 +153,8 @@ for (arg in args) {
     QUOTES_FILE <- sub("^--quotes_file=", "", arg)
   } else if (grepl("^--orders_out=", arg)) {
     ORDERS_OUT_FILE <- sub("^--orders_out=", "", arg)
+  } else if (grepl("^--crisis_mvp=", arg)) {
+    USE_CRISIS_MVP <- as.logical(sub("^--crisis_mvp=", "", arg))
   }
 }
 
@@ -508,20 +513,48 @@ if (!is.na(VOL_CAP)) {
   }
 }
 
-rs_qualified <- rs_qualified[order(-rs_qualified$RS_Composite), ]
-top_picks <- head(rs_qualified, TOP_N)
+# Check regime: Bull (QQQ >= 200 SMA) vs Crisis / Serious Bear (QQQ < 200 SMA)
+is_crisis_regime <- !qqq_trend_up
 
-cat("\n Top Candidate Relative Strength Leaders (Dual-Lookback: 50% 126d + 50% 63d | >= 200-day SMA):\n")
-cat("--------------------------------------------------------------------------------------------------------\n")
-print_df <- head(rs_qualified[, c("Symbol", "Close", "Trend_Up", "Ret_126D", "Ret_63D", "RS_126D", "RS_63D", "RS_Composite", "Vol_63D")], 8)
-print_df$Ret_126D     <- sprintf("%+.1f%%", print_df$Ret_126D * 100)
-print_df$Ret_63D      <- sprintf("%+.1f%%", print_df$Ret_63D * 100)
-print_df$RS_126D      <- sprintf("%+.1f%%", print_df$RS_126D * 100)
-print_df$RS_63D       <- sprintf("%+.1f%%", print_df$RS_63D * 100)
-print_df$RS_Composite <- sprintf("%+.1f%%", print_df$RS_Composite * 100)
-print_df$Vol_63D      <- sprintf("%.0f%%", print_df$Vol_63D * 100)
-print(print_df, row.names = FALSE)
-cat("--------------------------------------------------------------------------------------------------------\n\n")
+if (USE_CRISIS_MVP && is_crisis_regime) {
+  cat("\n========================================================================================\n")
+  cat(" 🛡️ CRISIS / BEAR REGIME ACTIVE: QQQ < 200-day SMA                                      \n")
+  cat(" CHANGING RULES: REBALANCING AROUND MINIMUM VARIANCE EQUITIES PORTFOLIO (MVP)           \n")
+  cat(" Philosophy: Stay 100% invested in equities, shifting selection from Momentum to Min-Var!\n")
+  cat("========================================================================================\n")
+  
+  # When trend is down and volatility is elevated, shift rules from Momentum to Minimum Variance
+  mv_pool <- rs_df[!is.na(rs_df$Vol_63D) & rs_df$Vol_63D > 0, ]
+  mv_pool <- mv_pool[order(mv_pool$Vol_63D), ]
+  top_picks <- head(mv_pool, TOP_N)
+  
+  cat(sprintf("\n Top %d Minimum Variance Defensive Stocks (Lowest 63-day Realized Volatility):\n", TOP_N))
+  cat("--------------------------------------------------------------------------------------------------------\n")
+  print_df <- head(mv_pool[, c("Symbol", "Close", "Trend_Up", "Ret_126D", "Ret_63D", "RS_126D", "RS_63D", "RS_Composite", "Vol_63D")], 8)
+  print_df$Ret_126D     <- sprintf("%+.1f%%", print_df$Ret_126D * 100)
+  print_df$Ret_63D      <- sprintf("%+.1f%%", print_df$Ret_63D * 100)
+  print_df$RS_126D      <- sprintf("%+.1f%%", print_df$RS_126D * 100)
+  print_df$RS_63D       <- sprintf("%+.1f%%", print_df$RS_63D * 100)
+  print_df$RS_Composite <- sprintf("%+.1f%%", print_df$RS_Composite * 100)
+  print_df$Vol_63D      <- sprintf("%.0f%%", print_df$Vol_63D * 100)
+  print(print_df, row.names = FALSE)
+  cat("--------------------------------------------------------------------------------------------------------\n\n")
+} else {
+  rs_qualified <- rs_qualified[order(-rs_qualified$RS_Composite), ]
+  top_picks <- head(rs_qualified, TOP_N)
+  
+  cat("\n Top Candidate Relative Strength Leaders (Dual-Lookback: 50% 126d + 50% 63d | >= 200-day SMA):\n")
+  cat("--------------------------------------------------------------------------------------------------------\n")
+  print_df <- head(rs_qualified[, c("Symbol", "Close", "Trend_Up", "Ret_126D", "Ret_63D", "RS_126D", "RS_63D", "RS_Composite", "Vol_63D")], 8)
+  print_df$Ret_126D     <- sprintf("%+.1f%%", print_df$Ret_126D * 100)
+  print_df$Ret_63D      <- sprintf("%+.1f%%", print_df$Ret_63D * 100)
+  print_df$RS_126D      <- sprintf("%+.1f%%", print_df$RS_126D * 100)
+  print_df$RS_63D       <- sprintf("%+.1f%%", print_df$RS_63D * 100)
+  print_df$RS_Composite <- sprintf("%+.1f%%", print_df$RS_Composite * 100)
+  print_df$Vol_63D      <- sprintf("%.0f%%", print_df$Vol_63D * 100)
+  print(print_df, row.names = FALSE)
+  cat("--------------------------------------------------------------------------------------------------------\n\n")
+}
 
 # ------------------------------------------------------------------------------
 # 6. Mark Current Portfolio Value & Process Disaster Stops
@@ -822,14 +855,15 @@ if (should_rebalance) {
     if (length(existing_idx) == 0) {
       shs_to_buy <- round(target_slot_cash / px, 3)
       outlay <- round(shs_to_buy * px, 2)
-      ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Top-%d RS Satellite Entrant)",
-                        shs_to_buy, sym, px, outlay, TOP_N)
+      ticket_desc <- if (USE_CRISIS_MVP && is_crisis_regime) sprintf("Top-%d Minimum Variance Defensive Entrant", TOP_N) else sprintf("Top-%d RS Satellite Entrant", TOP_N)
+      ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - %s)",
+                        shs_to_buy, sym, px, outlay, ticket_desc)
       rebalance_tickets <- c(rebalance_tickets, ticket)
       order_records[[length(order_records) + 1]] <- list(
         symbol = sym, side = "BUY", shares = round(shs_to_buy, 3),
         shares_whole = as.integer(floor(shs_to_buy)), estimated_price = round(px, 2),
         estimated_outlay = round(outlay, 2), order_type = "MARKET",
-        reason = sprintf("TOP_%d_RS_SATELLITE_ENTRANT", TOP_N),
+        reason = if (USE_CRISIS_MVP && is_crisis_regime) sprintf("TOP_%d_MIN_VARIANCE_DEFENSIVE_ENTRANT", TOP_N) else sprintf("TOP_%d_RS_SATELLITE_ENTRANT", TOP_N),
         stop_loss_price = round(px * (1.0 - DISASTER_STOP), 2)
       )
       
