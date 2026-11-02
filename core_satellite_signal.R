@@ -58,7 +58,7 @@ LOOKBACK_SHORT        <- 63      # ~3 months quarterly momentum acceleration
 WEIGHT_LONG           <- 0.50    # 50% weight on 126d RS
 WEIGHT_SHORT          <- 0.50    # 50% weight on 63d RS
 LOOKBACK_DAYS         <- LOOKBACK_LONG # Compatibility alias
-DISASTER_STOP         <- 0.20    # 20% catastrophic max loss floor
+DISASTER_STOP         <- 0.25    # 25% catastrophic max loss floor (Option D: room for winners to compound)
 STOP_PROCEEDS_TO_CORE <- FALSE   # (A) No Core ETF; stopped-out cash stays in cash to reduce margin debt
 USE_BREADTH_GATE      <- FALSE   # (B) OPTIONAL, OFF BY DEFAULT: drop margin to 1.0x when fewer than
 BREADTH_THRESHOLD     <- 0.50    #     BREADTH_THRESHOLD of scanned stocks are above their 200 SMA.
@@ -78,9 +78,11 @@ USE_STOCK_TREND_GATE  <- FALSE        # (G) Candidate Stock Trend Gate (DISABLED
                                       #     prove removing the 100-day lag of stock-level 200 SMA increases CAGR
                                       #     from 100.6% -> 102.8% (10yr) and 59.5% -> 60.6% (20yr, +$11.7M terminal wealth)).
                                       #     Macro regime is protected by QQQ lmMA(50); stocks rank purely on RS.
-USE_LEVERAGE_TURBO    <- TRUE         # (H) Super-Bull Leverage Turbo: 1.75x margin when QQQ > 50 SMA > 200 SMA & lmMA slope > 0
-TURBO_MARGIN_LEV      <- 1.75         #     Turbo leverage level during confirmed multi-month institutional expansion (default: 1.75)
+USE_LEVERAGE_TURBO    <- TRUE         # (H) Super-Bull Leverage Turbo: 2.00x margin when QQQ > 50 SMA > 200 SMA & lmMA slope > 0
+TURBO_MARGIN_LEV      <- 2.00         #     Turbo leverage level during confirmed multi-month institutional expansion (default: 2.00)
 USE_STOP_REPLACEMENT  <- TRUE         # (I) Immediate Stop Replacement: Deploy disaster stop proceeds into Rank 6 immediately
+USE_RETENTION_BUFFER  <- TRUE         # (J) Winner Retention Buffer: Retain existing holdings as long as they stay in Top 8
+RETENTION_BUFFER_RANK <- 8            #     Hysteresis boundary: only rotate out if stock drops below Rank 8 or hits stop
 FORCE_REBALANCE       <- FALSE
 RESET                 <- FALSE
 SYMBOLS_FILE          <- "symbols_broad.txt" # Broad 170-name growth/momentum list (alt: symbols_n100.txt = PIT-tested universe)
@@ -186,6 +188,10 @@ for (arg in args) {
     TURBO_MARGIN_LEV <- as.numeric(sub("^--turbo_margin=", "", arg))
   } else if (grepl("^--stop_replacement=", arg)) {
     USE_STOP_REPLACEMENT <- as.logical(sub("^--stop_replacement=", "", arg))
+  } else if (grepl("^--retention_buffer=", arg)) {
+    USE_RETENTION_BUFFER <- as.logical(sub("^--retention_buffer=", "", arg))
+  } else if (grepl("^--retention_rank=", arg)) {
+    RETENTION_BUFFER_RANK <- as.integer(sub("^--retention_rank=", "", arg))
   }
 }
 
@@ -685,7 +691,31 @@ if (USE_CRISIS_MVP && is_crisis_regime) {
   cat("--------------------------------------------------------------------------------------------------------\n\n")
 } else {
   rs_qualified <- rs_qualified[order(-rs_qualified$RS_Composite), ]
-  top_picks <- head(rs_qualified, TOP_N)
+  
+  cur_held_syms <- if (!is.null(port_state$satellite_positions)) {
+    sapply(port_state$satellite_positions, function(p) p$symbol)
+  } else character()
+  
+  if (USE_RETENTION_BUFFER && length(cur_held_syms) > 0) {
+    buffer_cutoff <- min(nrow(rs_qualified), RETENTION_BUFFER_RANK)
+    buffer_eligible <- rs_qualified$Symbol[1:buffer_cutoff]
+    kept_buffer_syms <- intersect(cur_held_syms, buffer_eligible)
+    
+    slots_needed <- max(0, TOP_N - length(kept_buffer_syms))
+    new_candidates <- setdiff(rs_qualified$Symbol, kept_buffer_syms)
+    new_picks_syms <- head(new_candidates, slots_needed)
+    
+    target_syms <- c(kept_buffer_syms, new_picks_syms)[1:TOP_N]
+    top_picks <- rs_qualified[match(target_syms, rs_qualified$Symbol), ]
+    
+    if (length(kept_buffer_syms) > 0) {
+      cat(sprintf("\n 🛡️ WINNER RETENTION BUFFER (Top %d): Retained %d existing winner(s) [ranks 1-%d]: %s\n",
+                  RETENTION_BUFFER_RANK, length(kept_buffer_syms), RETENTION_BUFFER_RANK,
+                  paste(sprintf("%s (#%d)", kept_buffer_syms, match(kept_buffer_syms, rs_qualified$Symbol)), collapse = ", ")))
+    }
+  } else {
+    top_picks <- head(rs_qualified, TOP_N)
+  }
   
   cat(sprintf("\n Top Candidate Relative Strength Leaders (Dual-Lookback: 50%% 126d + 50%% 63d | %s):\n",
               if (!USE_STOCK_TREND_GATE) "Unrestricted RS Rank (No Stock Lag)"
@@ -939,6 +969,19 @@ if (should_rebalance) {
   target_sat_cash  <- base_sat_cash * active_margin
   target_slot_cash <- target_sat_cash / TOP_N
   target_sat_syms  <- top_picks$Symbol
+
+  # Exclude any symbols stopped out today from rebalance buy list
+  stopped_today <- sapply(port_state$closed_trades, function(tr) 
+    identical(tr$exit_date, today_str) && identical(tr$reason, "DISASTER_STOP"))
+  stopped_syms_today <- sapply(port_state$closed_trades[stopped_today], function(tr) tr$symbol)
+  if (length(stopped_syms_today) > 0) {
+    target_sat_syms <- setdiff(target_sat_syms, stopped_syms_today)
+    needed <- TOP_N - length(target_sat_syms)
+    if (needed > 0) {
+      fill_cands <- setdiff(rs_qualified$Symbol, c(target_sat_syms, stopped_syms_today))
+      target_sat_syms <- c(target_sat_syms, head(fill_cands, needed))
+    }
+  }
   
   # Defensive Target Allocation: absorbs unallocated buffer + core when core inactive
   base_equity_w   <- (if (core_active) CORE_WEIGHT else 0.0) * vol_scale + (SATELLITE_WEIGHT * vol_scale)
@@ -1198,6 +1241,9 @@ if (should_rebalance) {
   port_state$use_leverage_turbo   <- USE_LEVERAGE_TURBO
   port_state$turbo_margin_lev     <- TURBO_MARGIN_LEV
   port_state$use_stop_replacement <- USE_STOP_REPLACEMENT
+  port_state$use_retention_buffer <- USE_RETENTION_BUFFER
+  port_state$retention_buffer_rank <- RETENTION_BUFFER_RANK
+  port_state$disaster_stop_pct    <- DISASTER_STOP
   port_state$active_margin_today  <- active_margin
   port_state$realized_vol_20d     <- round(realized_vol, 4)
   port_state$vol_scale            <- round(vol_scale, 4)
