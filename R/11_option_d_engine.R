@@ -52,7 +52,10 @@ option_d_config <- function(...) {
     mu_hat = NA_real_, mu_min_obs = 504, cov_window = 126, ewma_lambda = 0.94,
     # Feature 2 / 3
     rank_mode = "raw",         # "raw" or "residual"
-    skip = 0, resid_est = 504
+    skip = 0, resid_est = 504,
+    # Frog-in-the-pan blend, identical to core_satellite_signal.R (USE_FIP):
+    # score = (1 - fip_weight) * base + fip_weight * (FIP_63d - 0.5). Live uses 0.30.
+    fip_weight = 0, fip_lookback = 63
   )
   modifyList(base, list(...))
 }
@@ -73,6 +76,14 @@ prepare_option_d_data <- function(D, lmma_window = 50, rsq_threshold = 0.15) {
 
 #' Ranking score for candidates `ok` at signal bar s0 (higher = better).
 option_d_rank_scores <- function(D, cfg, s0, ok) {
+  base <- option_d_base_scores(D, cfg, s0, ok)
+  if (cfg$fip_weight <= 0) return(base)
+  idx <- max(1, s0 - cfg$fip_lookback):s0
+  fip <- vapply(ok, function(s) calc_fip_ratio(D$P[idx, s], lookback = cfg$fip_lookback), numeric(1))
+  setNames((1 - cfg$fip_weight) * base + cfg$fip_weight * (fip - 0.50), ok)
+}
+
+option_d_base_scores <- function(D, cfg, s0, ok) {
   if (cfg$rank_mode == "residual") {
     idx <- max(2, s0 - cfg$resid_est + 1):s0
     m <- D$rq[idx]

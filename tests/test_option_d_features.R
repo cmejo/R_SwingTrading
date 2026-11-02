@@ -197,6 +197,19 @@ r_ruin <- run(base_margin = 12, turbo_margin = 12, stop_pct = 5)
 k_ruin <- which(r_ruin == -1)
 check(length(k_ruin) == 1 && all(r_ruin[-(1:k_ruin)] == 0) && option_d_metrics(r_ruin)[["Ruined"]] == 1,
       "ruin is absorbing and flagged")
+# FIP: engine score must equal the live core_satellite_signal.R formula
+s0 <- 600; okk <- D$syms[!is.na(D$P[s0 - 252, ])]
+cfg_fip <- option_d_config(fip_weight = 0.30)
+eng <- option_d_rank_scores(D, cfg_fip, s0, okk)
+live <- vapply(okk, function(s) {
+  cl <- D$P[1:s0, s]; cl <- cl[!is.na(cl)]; n <- length(cl); qcl <- D$q[1:s0]; nq <- length(qcl)
+  rs_comp <- 0.5 * ((cl[n] / cl[n - 126] - 1) - (qcl[nq] / qcl[nq - 126] - 1)) +
+             0.5 * ((cl[n] / cl[n - 63]  - 1) - (qcl[nq] / qcl[nq - 63]  - 1))
+  0.70 * rs_comp + 0.30 * (calc_fip_ratio(cl, lookback = 63) - 0.50)
+}, numeric(1))
+check(near(eng, live, 1e-12), "engine FIP rank score == live USE_FIP formula")
+r_fip <- run(fip_weight = 0.30)
+check(fin(r_fip) && !near(as.numeric(r_fip), as.numeric(base)), "FIP blend runs and changes selections")
 m_base <- option_d_metrics(base, D$rf_daily[D$cal >= START & D$cal <= END])
 check(all(is.finite(m_base[c("CAGR", "MaxDD", "Vol", "Sharpe")])), "metrics are finite")
 
