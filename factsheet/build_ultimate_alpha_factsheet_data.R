@@ -24,9 +24,9 @@ INIT <- 10000
 ev <- which(cal >= S20 & cal <= E20)
 d <- cal[ev]
 
-cat("Running 20-Year Simulation for Ultimate Alpha Master...\n")
+cat("Running 20-Year Simulation for Choice 4: Institutional 2.50x Turbo...\n")
 ret_ultimate <- sim_buffer_engine(buffer_rank = 8, disaster_stop_pct = 0.25,
-                                  super_bull_leverage = 2.00, use_breadth_turbo = FALSE,
+                                  super_bull_leverage = 2.50, use_breadth_turbo = FALSE,
                                   start = S20, end = E20)
 
 cat("Running 20-Year Simulation for Power Alpha Baseline...\n")

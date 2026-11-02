@@ -78,8 +78,8 @@ USE_STOCK_TREND_GATE  <- FALSE        # (G) Candidate Stock Trend Gate (DISABLED
                                       #     prove removing the 100-day lag of stock-level 200 SMA increases CAGR
                                       #     from 100.6% -> 102.8% (10yr) and 59.5% -> 60.6% (20yr, +$11.7M terminal wealth)).
                                       #     Macro regime is protected by QQQ lmMA(50); stocks rank purely on RS.
-USE_LEVERAGE_TURBO    <- TRUE         # (H) Super-Bull Leverage Turbo: 2.00x margin when QQQ > 50 SMA > 200 SMA & lmMA slope > 0
-TURBO_MARGIN_LEV      <- 2.00         #     Turbo leverage level during confirmed multi-month institutional expansion (default: 2.00)
+USE_LEVERAGE_TURBO    <- TRUE         # (H) Super-Bull Leverage Turbo: 2.50x Institutional Turbo margin when QQQ > 50 SMA > 200 SMA & lmMA slope > 0
+TURBO_MARGIN_LEV      <- 2.50         #     Turbo leverage level during confirmed multi-month institutional expansion (Choice 4: 2.50x Institutional Turbo)
 USE_STOP_REPLACEMENT  <- TRUE         # (I) Immediate Stop Replacement: Deploy disaster stop proceeds into Rank 6 immediately
 USE_RETENTION_BUFFER  <- TRUE         # (J) Winner Retention Buffer: Retain existing holdings as long as they stay in Top 8
 RETENTION_BUFFER_RANK <- 8            #     Hysteresis boundary: only rotate out if stock drops below Rank 8 or hits stop
@@ -441,7 +441,7 @@ active_margin <- PORTFOLIO_MARGIN_LEV
 if (PORTFOLIO_MARGIN_LEV > 1.0 && USE_MARGIN_TREND_GATE && !qqq_trend_up) {
   active_margin <- 1.0 # Bear market safety gate: de-lever margin debt to 0%
 } else if (USE_LEVERAGE_TURBO && is_super_bull) {
-  active_margin <- TURBO_MARGIN_LEV # Super-bull leverage turbo: expand to 1.75x in golden trend alignment
+  active_margin <- TURBO_MARGIN_LEV # Super-bull leverage turbo: expand to 2.50x in golden trend alignment
 }
 
 cat("\n========================================================================================\n")

@@ -62,7 +62,7 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 LOG_FILE="$SCRIPT_DIR/logs/schwab_coresat_${TIMESTAMP}.log"
 
 echo "================================================================================"
-echo "    CHARLES SCHWAB AUTOMATED TRADING PIPELINE (OPTION D: ULTIMATE ALPHA MASTER) "
+echo " CHARLES SCHWAB AUTOMATED TRADING PIPELINE (CHOICE 4: INSTITUTIONAL 2.50X TURBO) "
 echo "================================================================================"
 echo " Mode:          $([ "$DRY_RUN" = "false" ] && echo '🔴 LIVE EXECUTION' || echo '🟡 DRY RUN (Preview)')"
 echo " Watchlist:     $SYMBOLS_FILE"
