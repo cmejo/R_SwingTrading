@@ -8,6 +8,7 @@
 #' separate and combined variants.
 #'
 #' Usage (from repo root):
+#'   bash scratch/build_option_d_caches.sh        # once: builds the gitignored price caches
 #'   Rscript scratch/backtest_option_d_pit.R [universe] [--broker=schwab|ibkr|legacy]
 #'                                          [--maint=0.30] [--prior_trials=250]
 #'     universe: pit_n100 (default) | broad (hindsight list, for comparison only)
@@ -17,8 +18,9 @@
 #' On the `broad` universe it should reproduce the "Ultimate Alpha Master" row of
 #' scratch/scorecard_*_buffer_combos.csv; check that before trusting any other row.
 #'
-#' Requires the regenerable caches: data/n100_pit/prices_adjclose.csv,
-#' data/universe_prices_adjclose.csv and data/data_historical/*.rds.
+#' Requires the regenerable caches built by scratch/build_option_d_caches.sh.
+#' Reports 3/10/20-year windows ending 2026-10-06 (same dates as the *_3_10_20yr scorecards)
+#' plus the 2007-16 / 2017-26 train/test split used by the acceptance rule.
 #' ==============================================================================
 suppressPackageStartupMessages({ library(xts); library(zoo); library(TTR) })
 
@@ -33,10 +35,10 @@ MAINT        <- as.numeric(opt("maint", "0.30"))
 PRIOR_TRIALS <- as.integer(opt("prior_trials", "250"))   # configs already tried on this history
 
 need <- c("data/n100_pit/prices_adjclose.csv", "data/universe_prices_adjclose.csv",
-          "data/data_historical/data_qqq.rds")
+          file.path("data/data_historical", c("data_qqq.rds", "data_qld.rds", "data_gld_full.rds", "data_^irx.rds")))
 miss <- need[!file.exists(need)]
-if (length(miss)) stop("Missing price caches (regenerate with scratch/build_n100_pit_universe.py and ",
-                       "scratch/download_universe_prices.py): ", paste(miss, collapse = ", "))
+if (length(miss)) stop("Missing price caches. Build them once with:  bash scratch/build_option_d_caches.sh\n  missing: ",
+                       paste(miss, collapse = ", "))
 
 # Load data exactly as the existing studies do (PIT globals preserved in PIT_G)
 src <- readLines("scratch/compare_symbol_lists.R"); idx <- grep("^lists <- c\\(", src)
@@ -56,6 +58,8 @@ D <- prepare_option_d_data(list(cal = cal, syms = syms, P = P, R = R, MEM = MEM,
                                 month_end = month_end))
 
 S_FULL <- as.Date("2007-01-02"); E_FULL <- as.Date("2026-10-06"); SPLIT <- as.Date("2017-01-01")
+# Same windows as scratch/test_convex_sizing_audit_3_10_20yr.R, so rows are directly comparable
+WINDOWS <- list(Y3 = as.Date("2023-10-03"), Y10 = as.Date("2016-10-03"), Y20 = as.Date("2007-01-02"))
 
 bp <- broker_preset(BROKER)
 real <- list(turbo_margin = 2.50,   # live default since 547dc49 (row 1 keeps 2.00x for scorecard parity)
@@ -89,9 +93,12 @@ cat(sprintf("\nUniverse: %s | Broker: %s (spread %.2f%% over T-bill) | Maintenan
 res <- lapply(names(cfgs), function(nm) {
   cat(" running:", nm, "\n")
   cfg <- cfgs[[nm]]
-  list(train = run_period(cfg, S_FULL, SPLIT - 1),
-       test  = run_period(cfg, SPLIT, E_FULL),
-       full  = run_period(cfg, S_FULL, E_FULL))
+  out <- list(train = run_period(cfg, S_FULL, SPLIT - 1),
+              test  = run_period(cfg, SPLIT, E_FULL),
+              full  = run_period(cfg, S_FULL, E_FULL))
+  for (w in c("Y3", "Y10")) out[[w]] <- run_period(cfg, WINDOWS[[w]], E_FULL)
+  out$Y20 <- out$full   # 20-year window == full period (2007-01-02 .. 2026-10-06)
+  out
 })
 names(res) <- names(cfgs)
 
@@ -107,6 +114,9 @@ sr0_ann <- sqrt(var_sr) * ((1 - 0.5772156649) * qnorm(1 - 1 / n_trials) +
 tbl <- do.call(rbind, lapply(names(res), function(nm) {
   x <- res[[nm]]
   data.frame(Config = nm,
+             CAGR_3y = x$Y3$m[["CAGR"]], MaxDD_3y = x$Y3$m[["MaxDD"]],
+             CAGR_10y = x$Y10$m[["CAGR"]], MaxDD_10y = x$Y10$m[["MaxDD"]],
+             CAGR_20y = x$Y20$m[["CAGR"]], MaxDD_20y = x$Y20$m[["MaxDD"]],
              Train_CAGR = x$train$m[["CAGR"]], Test_CAGR = x$test$m[["CAGR"]],
              Full_CAGR = x$full$m[["CAGR"]], Full_MaxDD = x$full$m[["MaxDD"]],
              Full_Vol = x$full$m[["Vol"]], Full_Sharpe = x$full$m[["Sharpe"]],
