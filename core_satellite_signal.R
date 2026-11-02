@@ -74,6 +74,10 @@ LMMA_RSQ_THRESHOLD    <- 0.15         # Statistical conviction threshold (R^2 > 
 USE_EARNINGS_SHIELD   <- FALSE        # (F) Earnings Blackout Filter (DISABLED BY DEFAULT: Backtests prove holding through earnings delivers +58.7% CAGR vs +57.5% with blackout)
 EARNINGS_BLACKOUT_DAYS<- 5            # Pre-earnings blackout window in trading days (default: 5 days)
 EARNINGS_FILE         <- "data/historical_earnings_dates.json" # Historical & forward earnings dates database
+USE_STOCK_TREND_GATE  <- FALSE        # (G) Candidate Stock Trend Gate (DISABLED BY DEFAULT: 10-Yr & 20-Yr backtests
+                                      #     prove removing the 100-day lag of stock-level 200 SMA increases CAGR
+                                      #     from 100.6% -> 102.8% (10yr) and 59.5% -> 60.6% (20yr, +$11.7M terminal wealth)).
+                                      #     Macro regime is protected by QQQ lmMA(50); stocks rank purely on RS.
 FORCE_REBALANCE       <- FALSE
 RESET                 <- FALSE
 SYMBOLS_FILE          <- "symbols_broad.txt" # Broad 170-name growth/momentum list (alt: symbols_n100.txt = PIT-tested universe)
@@ -171,6 +175,8 @@ for (arg in args) {
     EARNINGS_BLACKOUT_DAYS <- as.integer(sub("^--blackout_days=", "", arg))
   } else if (grepl("^--earnings_file=", arg)) {
     EARNINGS_FILE <- sub("^--earnings_file=", "", arg)
+  } else if (grepl("^--stock_trend_gate=", arg)) {
+    USE_STOCK_TREND_GATE <- as.logical(sub("^--stock_trend_gate=", "", arg))
   }
 }
 
@@ -565,8 +571,14 @@ if (USE_BREADTH_GATE && active_margin > 1.0 && breadth_pct < BREADTH_THRESHOLD) 
   cat(sprintf("\n Market Breadth: %.0f%% of %d scanned stocks above 200 SMA%s\n", breadth_pct * 100, nrow(rs_df),
               if (USE_BREADTH_GATE) sprintf(" (gate ON, threshold %.0f%%)", BREADTH_THRESHOLD * 100) else " (gate OFF)"))
 }
-rs_qualified <- rs_df[rs_df$Trend_Up, ]
-if (nrow(rs_qualified) < TOP_N) rs_qualified <- rs_df
+if (USE_STOCK_TREND_GATE) {
+  rs_qualified <- rs_df[rs_df$Trend_Up, ]
+  if (nrow(rs_qualified) < TOP_N) rs_qualified <- rs_df
+} else {
+  # Unrestricted stock selection: Macro trend is protected by QQQ lmMA(50);
+  # individual candidate stocks are selected unconstrained by RS rank (removes 100-day lag)
+  rs_qualified <- rs_df
+}
 
 # (C) Speculative-spike filter: drop extreme-volatility names (only if enough names remain)
 if (!is.na(VOL_CAP)) {
@@ -658,7 +670,9 @@ if (USE_CRISIS_MVP && is_crisis_regime) {
   top_picks <- head(rs_qualified, TOP_N)
   
   cat(sprintf("\n Top Candidate Relative Strength Leaders (Dual-Lookback: 50%% 126d + 50%% 63d | %s):\n",
-              if (TREND_ENGINE == "lmMA_slope") sprintf("lmMA(%d) Slope / Low-Lag Filter", LMMA_WINDOW) else ">= 200-day SMA"))
+              if (!USE_STOCK_TREND_GATE) "Unrestricted RS Rank (No Stock Lag)"
+              else if (TREND_ENGINE == "lmMA_slope") sprintf("lmMA(%d) Slope / Low-Lag Filter", LMMA_WINDOW)
+              else ">= 200-day SMA"))
   cat("--------------------------------------------------------------------------------------------------------\n")
   print_df <- head(rs_qualified[, c("Symbol", "Close", "Trend_Up", "lmMA_Slope", "Ret_126D", "Ret_63D", "RS_Composite", "Vol_63D")], 8)
   print_df$lmMA_Slope   <- sprintf("%+.2f", print_df$lmMA_Slope)
@@ -1109,6 +1123,7 @@ if (should_rebalance) {
   port_state$trend_engine         <- TREND_ENGINE
   port_state$lmma_window          <- LMMA_WINDOW
   port_state$lmma_rsq_threshold   <- LMMA_RSQ_THRESHOLD
+  port_state$use_stock_trend_gate <- USE_STOCK_TREND_GATE
   port_state$realized_vol_20d     <- round(realized_vol, 4)
   port_state$vol_scale            <- round(vol_scale, 4)
   port_state$last_rebalance_date  <- today_str
