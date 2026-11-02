@@ -50,23 +50,19 @@ source("R/01_data_loader.R")
 args <- commandArgs(trailingOnly = TRUE)
 
 CAPITAL               <- 8000    # Default capital base: $8,000
-CORE_WEIGHT           <- 0.30    # 30% Core Sleeve
-TOP_N                 <- 5       # 5 Satellite slots (14% each) - beat top 3 on every broad list (see scratch/compare_top3_vs_top5.R)
+CORE_WEIGHT           <- 0.00    # 100% Stock Model: 0% Core ETF (QQQ / QLD removed)
+TOP_N                 <- 5       # 5 High-Conviction Stock slots (30% each at 1.5x margin)
 LOOKBACK_LONG         <- 126     # ~6 months intermediate trend anchor
 LOOKBACK_SHORT        <- 63      # ~3 months quarterly momentum acceleration
 WEIGHT_LONG           <- 0.50    # 50% weight on 126d RS
 WEIGHT_SHORT          <- 0.50    # 50% weight on 63d RS
 LOOKBACK_DAYS         <- LOOKBACK_LONG # Compatibility alias
 DISASTER_STOP         <- 0.20    # 20% catastrophic max loss floor
-STOP_PROCEEDS_TO_CORE <- TRUE    # (A) Redeploy stopped-out satellite cash into the Core asset (QLD)
-                                 #     when QQQ >= 200 SMA, instead of idling in cash until month-end.
-                                 #     PIT N100 backtest: +1.6 pts CAGR, improved in both 2007-16 and 2017-26.
+STOP_PROCEEDS_TO_CORE <- FALSE   # (A) No Core ETF; stopped-out cash stays in cash to reduce margin debt
 USE_BREADTH_GATE      <- FALSE   # (B) OPTIONAL, OFF BY DEFAULT: drop margin to 1.0x when fewer than
 BREADTH_THRESHOLD     <- 0.50    #     BREADTH_THRESHOLD of scanned stocks are above their 200 SMA.
 VOL_CAP               <- 1.00    # (C) Speculative-spike filter: skip stocks whose 63-day realized volatility
                                  #     exceeds VOL_CAP (1.00 = 100% annualized, ~6.3%/day). Set NA to disable.
-                                 #     Cuts MaxDD ~6 pts in backtest, but the 50% threshold is fragile
-                                 #     (40% had no effect, 60% was worse). Needs a broad list (e.g. N100).
 USE_CRISIS_MVP        <- TRUE    # (D) Crisis Minimum Variance Portfolio: When in crisis/bear territory
                                  #     (QQQ < 200 SMA), stay invested in equities but switch selection rules
                                  #     from Momentum to the Minimum Variance Portfolio (lowest-volatility stocks).
@@ -79,12 +75,12 @@ QUOTES_FILE           <- NULL    # Optional JSON file containing real-time quote
 ORDERS_OUT_FILE       <- NULL    # Optional JSON output destination for structured machine-readable orders
 
 # ==============================================================================
-# ACTIVE PRESET: OPTION 6 (Supercharged: 1.5x Margin + QLD Core + GLD Hedge)
+# ACTIVE PRESET: 100% HIGH-CONVICTION STOCK MODEL (1.5x Margin, Top 5 Stocks)
 # ==============================================================================
-CORE_ASSET            <- "QLD"   # Core Sleeve holds QLD (2x QQQ ETF)
+CORE_ASSET            <- "NONE"  # 100% Stock: No Core ETF (0% QQQ / QLD)
 PORTFOLIO_MARGIN_LEV  <- 1.50    # 1.5x portfolio margin during bull markets
 USE_MARGIN_TREND_GATE <- TRUE    # De-lever margin debt to 0% when QQQ < 200 SMA
-USE_CORE_TREND        <- TRUE    # Exit QLD to GLD when QQQ < 200 SMA
+USE_CORE_TREND        <- FALSE   # No core sleeve to rotate
 VOL_TARGET            <- 0.22    # 22% Volatility Target
 DEFENSIVE_ASSET       <- "GLD"   # Gold (GLD) flight-to-safety crisis hedge
 
@@ -362,10 +358,10 @@ ret_20d      <- diff(log(tail(qqq_close, 21)))
 realized_vol <- sd(ret_20d) * sqrt(252)
 vol_scale    <- min(1.0, VOL_TARGET / max(0.05, realized_vol))
 
-# Core Asset Data (QLD or QQQ)
-core_ohlcv <- if (CORE_ASSET == "QQQ") qqq_ohlcv else tryCatch(load_stock_data(CORE_ASSET, force_refresh = FALSE), error = function(e) NULL)
+# Core Asset Data (QLD or QQQ or NONE)
+core_ohlcv <- if (CORE_ASSET == "NONE" || CORE_WEIGHT == 0.0) NULL else if (CORE_ASSET == "QQQ") qqq_ohlcv else tryCatch(load_stock_data(CORE_ASSET, force_refresh = FALSE), error = function(e) NULL)
 core_ohlcv <- inject_live_quote(core_ohlcv, CORE_ASSET, live_quotes_data)
-core_cur_px <- if (!is.null(core_ohlcv)) tail(as.numeric(Cl(core_ohlcv)), 1) else if (CORE_ASSET == "QLD") 82.59 else qqq_cur_px
+core_cur_px <- if (!is.null(core_ohlcv)) tail(as.numeric(Cl(core_ohlcv)), 1) else if (CORE_ASSET == "QLD") 82.59 else 0.0
 
 # Defensive Asset Market Data (GLD or SGOV)
 def_ohlcv  <- tryCatch(load_stock_data(DEFENSIVE_ASSET, force_refresh = FALSE), error = function(e) NULL)
@@ -379,7 +375,10 @@ if (PORTFOLIO_MARGIN_LEV > 1.0 && USE_MARGIN_TREND_GATE && !qqq_trend_up) {
 }
 
 cat("\n========================================================================================\n")
-if (PORTFOLIO_MARGIN_LEV > 1.0) {
+if (CORE_WEIGHT == 0.0) {
+  cat(sprintf("        100%% HIGH-CONVICTION STOCK MOMENTUM MODEL: %.1fx MARGIN (TOP %d STOCKS)          \n",
+              PORTFOLIO_MARGIN_LEV, TOP_N))
+} else if (PORTFOLIO_MARGIN_LEV > 1.0) {
   cat(sprintf("   TRIPLE-ENGINE SUPERCHARGED MODEL: 1.5x MARGIN + %s CORE + 22%% VT -> %s     \n", CORE_ASSET, DEFENSIVE_ASSET))
 } else {
   cat(sprintf("   TRIPLE-ENGINE SWEET SPOT MODEL (CASH / IRA): %s CORE + 22%% VT -> %s        \n", CORE_ASSET, DEFENSIVE_ASSET))
@@ -387,9 +386,13 @@ if (PORTFOLIO_MARGIN_LEV > 1.0) {
 cat("========================================================================================\n")
 cat(sprintf(" Date:                   %s\n", Sys.Date()))
 cat(sprintf(" Capital Base (Equity):  $%.2f\n", port_state$total_capital))
-cat(sprintf(" Core Asset:             %s @ $%.2f (Target: %.1f%%)\n", CORE_ASSET, core_cur_px, CORE_WEIGHT * 100))
-cat(sprintf(" Satellite Sleeve:       Top %d RS Stocks (Target: %.1f%% / %.1f%% per slot)\n",
-            TOP_N, SATELLITE_WEIGHT * 100, SLOT_WEIGHT * 100))
+if (CORE_WEIGHT > 0) {
+  cat(sprintf(" Core Asset:             %s @ $%.2f (Target: %.1f%%)\n", CORE_ASSET, core_cur_px, CORE_WEIGHT * 100))
+} else {
+  cat(" Portfolio Composition:  100% Stock (0% QQQ / 0% QLD Core ETF)\n")
+}
+cat(sprintf(" Stock Allocation:       Top %d RS Stocks (Target: %.1f%% gross exposure / %.1f%% per slot with 1.5x margin)\n",
+            TOP_N, SATELLITE_WEIGHT * 100 * active_margin, SLOT_WEIGHT * 100 * active_margin))
 cat(sprintf(" Portfolio Leverage:     Target: %.2fx | Active Today: %.2fx %s\n",
             PORTFOLIO_MARGIN_LEV, active_margin,
             if (active_margin < PORTFOLIO_MARGIN_LEV) "(DE-LEVERED TO 0% DEBT: QQQ < 200 SMA)" else "(BULL MARGIN ACTIVE)"))
@@ -399,7 +402,7 @@ cat(sprintf(" Benchmark Status:       QQQ @ $%.2f | 200 SMA: $%.2f | Trend: %s\n
             qqq_cur_px, qqq_sma200, if (qqq_trend_up) "BULLISH (>= 200 SMA)" else "BEARISH (< 200 SMA)"))
 cat(sprintf(" Defensive Reserve:      %s @ $%.2f (Inflation/Crisis Flight-to-Safety)\n",
             DEFENSIVE_ASSET, def_cur_px))
-cat(sprintf(" Disaster Stop Floor:    -%.1f%% on individual satellite positions\n", DISASTER_STOP * 100))
+cat(sprintf(" Disaster Stop Floor:    -%.1f%% on individual stock positions\n", DISASTER_STOP * 100))
 cat("========================================================================================\n\n")
 
 # ------------------------------------------------------------------------------
@@ -559,8 +562,8 @@ if (USE_CRISIS_MVP && is_crisis_regime) {
 # ------------------------------------------------------------------------------
 # 6. Mark Current Portfolio Value & Process Disaster Stops
 # ------------------------------------------------------------------------------
-cur_prices <- list(QQQ = qqq_cur_px, QLD = core_cur_px, GLD = def_cur_px, SGOV = 100.73)
-cur_prices[[CORE_ASSET]]      <- core_cur_px
+cur_prices <- list(QQQ = qqq_cur_px, QLD = 82.59, GLD = def_cur_px, SGOV = 100.73)
+if (CORE_ASSET != "NONE" && core_cur_px > 0) cur_prices[[CORE_ASSET]] <- core_cur_px
 cur_prices[[DEFENSIVE_ASSET]] <- def_cur_px
 
 for (row_idx in seq_len(nrow(rs_df))) {
@@ -583,7 +586,7 @@ core_val <- 0
 core_pos <- port_state$core_position
 if (!is.null(core_pos) && as.numeric(core_pos$shares) > 0) {
   sym_core <- if (!is.null(core_pos$symbol)) core_pos$symbol else CORE_ASSET
-  core_px  <- if (!is.null(cur_prices[[sym_core]])) cur_prices[[sym_core]] else as.numeric(core_pos$entry_price)
+  core_px  <- if (!is.null(cur_prices[[sym_core]]) && cur_prices[[sym_core]] > 0) cur_prices[[sym_core]] else as.numeric(core_pos$entry_price)
   core_val <- round(as.numeric(core_pos$shares) * core_px, 2)
 }
 
@@ -655,7 +658,7 @@ port_state$satellite_positions <- kept_sat_positions
 # (A) Redeploy disaster-stop proceeds into the Core asset (QLD) between rebalances.
 #     Skipped on rebalance days (the rebalance redeploys everything anyway) and in
 #     bear regimes (QQQ < 200 SMA), where the proceeds stay in cash until month-end.
-if (STOP_PROCEEDS_TO_CORE && length(disaster_tickets) > 0 && !should_rebalance &&
+if (STOP_PROCEEDS_TO_CORE && CORE_WEIGHT > 0 && length(disaster_tickets) > 0 && !should_rebalance &&
     (!USE_CORE_TREND || qqq_trend_up)) {
   stop_proceeds <- sum(sapply(port_state$closed_trades, function(tr)
     if (identical(tr$exit_date, today_str) && identical(tr$reason, "DISASTER_STOP"))
@@ -699,9 +702,11 @@ cat(sprintf(" Gross Long Market Value:            $%.2f (%5.1f%% of equity)\n",
 cat(sprintf(" Borrowed Margin Loan (Debt):        $%.2f (%5.1f%% leverage)\n",
             margin_debt, (margin_debt / max(1, total_equity)) * 100))
 cat("----------------------------------------------------------------------------------------\n")
-cat(sprintf(" Core %-4s Sleeve:                  $%.2f (%5.1f%% of equity)\n",
-            CORE_ASSET, core_val, (core_val / max(1, total_equity)) * 100))
-cat(sprintf(" Satellite Sleeve (%d Stocks):        $%.2f (%5.1f%% of equity)\n", TOP_N,
+if (CORE_WEIGHT > 0 || core_val > 0) {
+  cat(sprintf(" Core %-4s Sleeve:                  $%.2f (%5.1f%% of equity)\n",
+              if (CORE_ASSET != "NONE") CORE_ASSET else "ETF", core_val, (core_val / max(1, total_equity)) * 100))
+}
+cat(sprintf(" Stock Positions (%d Stocks):        $%.2f (%5.1f%% of equity)\n", TOP_N,
             sat_val, (sat_val / max(1, total_equity)) * 100))
 cat(sprintf(" Defensive %-4s Sleeve:             $%.2f (%5.1f%% of equity)\n",
             DEFENSIVE_ASSET, def_val, (def_val / max(1, total_equity)) * 100))
@@ -743,10 +748,17 @@ if (should_rebalance) {
   base_equity_w   <- (if (core_active) CORE_WEIGHT else 0.0) * vol_scale + (SATELLITE_WEIGHT * vol_scale)
   target_def_cash <- max(0, total_equity * (1.0 - base_equity_w))
   
-  cat(sprintf(" Target Allocations: Core %s: $%.2f (%.1f%%) | Satellites (%d): $%.2f (%.1f%%) | Defensive %s: $%.2f (%.1f%%)\n\n",
-              CORE_ASSET, target_core_cash, (target_core_cash / total_equity) * 100, TOP_N,
-              target_sat_cash, (target_sat_cash / total_equity) * 100,
-              DEFENSIVE_ASSET, target_def_cash, (target_def_cash / total_equity) * 100))
+  if (CORE_WEIGHT > 0) {
+    cat(sprintf(" Target Allocations: Core %s: $%.2f (%.1f%%) | Stocks (%d): $%.2f (%.1f%%) | Defensive %s: $%.2f (%.1f%%)\n\n",
+                CORE_ASSET, target_core_cash, (target_core_cash / total_equity) * 100, TOP_N,
+                target_sat_cash, (target_sat_cash / total_equity) * 100,
+                DEFENSIVE_ASSET, target_def_cash, (target_def_cash / total_equity) * 100))
+  } else {
+    cat(sprintf(" Target Allocations: 100%% Stocks (%d): $%.2f (%.1f%% gross exposure / %.1f%% per slot) | Defensive %s: $%.2f (%.1f%%)\n\n",
+                TOP_N, target_sat_cash, (target_sat_cash / total_equity) * 100,
+                (target_slot_cash / total_equity) * 100,
+                DEFENSIVE_ASSET, target_def_cash, (target_def_cash / total_equity) * 100))
+  }
   
   # A. Liquidate Satellite Positions That Dropped Out of Top-N
   updated_sat_list <- list()
@@ -783,65 +795,69 @@ if (should_rebalance) {
   }
   port_state$satellite_positions <- updated_sat_list
   
-  # B. Core Position Adjustment (Liquidate old QQQ if switching to QLD)
+  # B. Core Position Adjustment (Liquidate Core if 100% Stock or Switching Core)
   current_core_sym <- if (!is.null(port_state$core_position$symbol)) port_state$core_position$symbol else ""
   current_core_shs <- if (!is.null(port_state$core_position$shares)) as.numeric(port_state$core_position$shares) else 0
   
-  if (current_core_sym != CORE_ASSET && current_core_shs > 0) {
-    old_core_px <- if (!is.null(cur_prices[[current_core_sym]])) cur_prices[[current_core_sym]] else as.numeric(port_state$core_position$entry_price)
+  if (current_core_shs > 0 && (CORE_WEIGHT == 0.0 || current_core_sym != CORE_ASSET)) {
+    old_core_px <- if (!is.null(cur_prices[[current_core_sym]]) && cur_prices[[current_core_sym]] > 0) cur_prices[[current_core_sym]] else as.numeric(port_state$core_position$entry_price)
     old_core_mv <- round(current_core_shs * old_core_px, 2)
-    ticket <- sprintf("SELL %s shares of %s @ ~$%.2f ($%.2f proceeds - Switch Core to %s)",
-                      current_core_shs, current_core_sym, old_core_px, old_core_mv, CORE_ASSET)
+    ticket_msg  <- if (CORE_WEIGHT == 0.0) "Liquidate Core Sleeve for 100% Stock Allocation" else sprintf("Switch Core to %s", CORE_ASSET)
+    ticket <- sprintf("SELL %s shares of %s @ ~$%.2f ($%.2f proceeds - %s)",
+                      current_core_shs, current_core_sym, old_core_px, old_core_mv, ticket_msg)
     rebalance_tickets <- c(rebalance_tickets, ticket)
     order_records[[length(order_records) + 1]] <- list(
       symbol = current_core_sym, side = "SELL", shares = round(current_core_shs, 3),
       shares_whole = as.integer(round(current_core_shs)), estimated_price = round(old_core_px, 2),
       estimated_outlay = round(old_core_mv, 2), order_type = "MARKET",
-      reason = sprintf("SWITCH_CORE_TO_%s", CORE_ASSET), stop_loss_price = NULL
+      reason = if (CORE_WEIGHT == 0.0) "LIQUIDATE_CORE_SLEEVE" else sprintf("SWITCH_CORE_TO_%s", CORE_ASSET),
+      stop_loss_price = NULL
     )
     port_state$cash_balance <- port_state$cash_balance + old_core_mv
     port_state$core_position <- NULL
     current_core_shs <- 0
   }
   
-  target_core_shs <- round(target_core_cash / core_cur_px, 3)
-  core_delta_shs  <- target_core_shs - current_core_shs
-  core_delta_cash <- round(core_delta_shs * core_cur_px, 2)
-  
-  if (abs(core_delta_cash) >= 30) {
-    if (core_delta_cash > 0) {
-      buy_shs <- round(core_delta_cash / core_cur_px, 3)
-      ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Align Core Target to %.1f%%)",
-                        buy_shs, CORE_ASSET, core_cur_px, round(buy_shs * core_cur_px, 2),
-                        (target_core_cash / total_equity) * 100)
-      rebalance_tickets <- c(rebalance_tickets, ticket)
-      order_records[[length(order_records) + 1]] <- list(
-        symbol = CORE_ASSET, side = "BUY", shares = round(buy_shs, 3),
-        shares_whole = as.integer(floor(buy_shs)), estimated_price = round(core_cur_px, 2),
-        estimated_outlay = round(buy_shs * core_cur_px, 2), order_type = "MARKET",
-        reason = "ALIGN_CORE_TARGET", stop_loss_price = NULL
-      )
-      port_state$core_position <- list(
-        symbol = CORE_ASSET,
-        shares = current_core_shs + buy_shs,
-        entry_price = core_cur_px,
-        entry_date = today_str
-      )
-      port_state$cash_balance <- port_state$cash_balance - round(buy_shs * core_cur_px, 2)
-    } else {
-      trim_shs <- abs(core_delta_shs)
-      ticket <- sprintf("SELL %s shares of %s @ ~$%.2f ($%.2f proceeds - Trim Core Target to %.1f%%)",
-                        trim_shs, CORE_ASSET, core_cur_px, abs(core_delta_cash),
-                        (target_core_cash / total_equity) * 100)
-      rebalance_tickets <- c(rebalance_tickets, ticket)
-      order_records[[length(order_records) + 1]] <- list(
-        symbol = CORE_ASSET, side = "SELL", shares = round(trim_shs, 3),
-        shares_whole = as.integer(round(trim_shs)), estimated_price = round(core_cur_px, 2),
-        estimated_outlay = abs(core_delta_cash), order_type = "MARKET",
-        reason = "TRIM_CORE_TARGET", stop_loss_price = NULL
-      )
-      port_state$core_position$shares <- max(0, current_core_shs - trim_shs)
-      port_state$cash_balance <- port_state$cash_balance + abs(core_delta_cash)
+  if (CORE_WEIGHT > 0 && core_cur_px > 0) {
+    target_core_shs <- round(target_core_cash / core_cur_px, 3)
+    core_delta_shs  <- target_core_shs - current_core_shs
+    core_delta_cash <- round(core_delta_shs * core_cur_px, 2)
+    
+    if (abs(core_delta_cash) >= 30) {
+      if (core_delta_cash > 0) {
+        buy_shs <- round(core_delta_cash / core_cur_px, 3)
+        ticket <- sprintf("BUY %s shares of %s @ ~$%.2f ($%.2f outlay - Align Core Target to %.1f%%)",
+                          buy_shs, CORE_ASSET, core_cur_px, round(buy_shs * core_cur_px, 2),
+                          (target_core_cash / total_equity) * 100)
+        rebalance_tickets <- c(rebalance_tickets, ticket)
+        order_records[[length(order_records) + 1]] <- list(
+          symbol = CORE_ASSET, side = "BUY", shares = round(buy_shs, 3),
+          shares_whole = as.integer(floor(buy_shs)), estimated_price = round(core_cur_px, 2),
+          estimated_outlay = round(buy_shs * core_cur_px, 2), order_type = "MARKET",
+          reason = "ALIGN_CORE_TARGET", stop_loss_price = NULL
+        )
+        port_state$core_position <- list(
+          symbol = CORE_ASSET,
+          shares = current_core_shs + buy_shs,
+          entry_price = core_cur_px,
+          entry_date = today_str
+        )
+        port_state$cash_balance <- port_state$cash_balance - round(buy_shs * core_cur_px, 2)
+      } else {
+        trim_shs <- abs(core_delta_shs)
+        ticket <- sprintf("SELL %s shares of %s @ ~$%.2f ($%.2f proceeds - Trim Core Target to %.1f%%)",
+                          trim_shs, CORE_ASSET, core_cur_px, abs(core_delta_cash),
+                          (target_core_cash / total_equity) * 100)
+        rebalance_tickets <- c(rebalance_tickets, ticket)
+        order_records[[length(order_records) + 1]] <- list(
+          symbol = CORE_ASSET, side = "SELL", shares = round(trim_shs, 3),
+          shares_whole = as.integer(round(trim_shs)), estimated_price = round(core_cur_px, 2),
+          estimated_outlay = abs(core_delta_cash), order_type = "MARKET",
+          reason = "TRIM_CORE_TARGET", stop_loss_price = NULL
+        )
+        port_state$core_position$shares <- max(0, current_core_shs - trim_shs)
+        port_state$cash_balance <- port_state$cash_balance + abs(core_delta_cash)
+      }
     }
   }
   
