@@ -610,7 +610,16 @@ def cmd_execute(args):
 
     # Sells executed first, buys second
     sells = [o for o in orders if o.get("side") == "SELL"]
-    buys  = [o for o in orders if o.get("side") == "BUY"]
+    raw_buys = [o for o in orders if o.get("side") == "BUY"]
+    
+    # Safety Filter: 100% Stock Model strictly forbids Core ETF buys (QLD, QQQ, TQQQ)
+    buys = []
+    for b in raw_buys:
+        b_sym = (b.get("symbol") or "").upper()
+        if b_sym in ("QLD", "QQQ", "TQQQ"):
+            print(f"  🚫 Prohibited Core ETF: BUY {b_sym} blocked. 100% Stock Model strictly forbids Core ETF purchases.")
+            continue
+        buys.append(b)
 
     print("\n================================================================================")
     print("                 CHARLES SCHWAB ORDER EXECUTION ENGINE                          ")

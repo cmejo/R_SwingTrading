@@ -106,6 +106,8 @@ R_ARGS=(
   "--broker_state=$STATE_FILE"
   "--quotes_file=$QUOTES_FILE"
   "--orders_out=$ORDERS_FILE"
+  "--core_weight=0.00"
+  "--core_asset=NONE"
 )
 
 if [ "$FORCE_REBALANCE" = "true" ]; then
