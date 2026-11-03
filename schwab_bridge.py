@@ -538,6 +538,127 @@ def cmd_sync(args):
         sys.exit(1)
 
 
+def cmd_positions(args):
+    """Fetches and displays live account balances, positions, and unrealized P&L from Schwab."""
+    app_key = os.environ.get("SCHWAB_APP_KEY", "")
+    secret = os.environ.get("SCHWAB_SECRET", "")
+    token_exists = os.path.exists(TOKEN_FILE)
+
+    if not app_key or not secret or not token_exists:
+        print("\n[Schwab Positions] No live Schwab credentials/token found; displaying local schwab_state.json")
+        if os.path.exists("schwab_state.json"):
+            with open("schwab_state.json", "r") as f:
+                state = json.load(f)
+            positions = state.get("positions", [])
+            total_equity = float(state.get("total_capital", 0.0))
+            margin_debt = float(state.get("margin_debt", 0.0))
+            acct_num = state.get("account_number", "UNKNOWN")
+            is_sim = state.get("is_simulation", True)
+            print(f" Connected Account: {acct_num} (Mode: {'SIMULATION' if is_sim else 'CACHED LIVE'})")
+            print(f" Net Liquidation Value (Equity): ${total_equity:,.2f}  |  Margin Debt: ${margin_debt:,.2f}")
+            print("-" * 80)
+            print(f"{'Symbol':<8} {'Shares':>10} {'Avg Cost':>14} {'Market Value':>16}")
+            print("-" * 80)
+            total_mv = 0.0
+            for p in positions:
+                sym = p.get("symbol", "")
+                shs = float(p.get("shares", 0.0))
+                cost = float(p.get("average_price", 0.0))
+                mv = float(p.get("market_value", shs * cost))
+                total_mv += mv
+                print(f"{sym:<8} {shs:>10.3f} ${cost:>13.2f} ${mv:>15.2f}")
+            print("-" * 80)
+            print(f"Total Market Value: ${total_mv:,.2f} ({(total_mv / max(1.0, total_equity)) * 100:.1f}% gross exposure)\n")
+        else:
+            print("❌ No schwab_state.json found. Run: python3 schwab_bridge.py sync")
+        return
+
+    try:
+        schwab = SchwabTraderAPI(app_key, secret)
+        hashes = schwab.get_account_hashes()
+        if not hashes:
+            raise Exception("No linked Schwab accounts found.")
+        acct_hash = hashes[0]["hashValue"]
+        acct_num = hashes[0]["accountNumber"]
+
+        details = schwab.get_account_details(acct_hash)
+        sec_acct = details.get("securitiesAccount", {})
+        balances = sec_acct.get("currentBalances", {})
+
+        total_equity = float(balances.get("liquidationValue") or balances.get("equity") or 0.0)
+        raw_positions = sec_acct.get("positions", [])
+        clean_positions = []
+        for p in raw_positions:
+            inst = p.get("instrument", {})
+            sym = inst.get("symbol", "").upper()
+            qty = float(p.get("longQuantity", 0.0) or p.get("shortQuantity", 0.0) or p.get("quantity", 0.0))
+            cost = float(p.get("averagePrice", 0.0))
+            mv = float(p.get("marketValue", 0.0))
+            pnl_open = float(p.get("longOpenProfitLoss", mv - (qty * cost)))
+            pnl_open_pct = ((mv / (qty * cost)) - 1.0) * 100.0 if (qty * cost) > 0 else 0.0
+            cur_px = (mv / qty) if qty > 0 else cost
+            if qty > 0 and sym:
+                clean_positions.append({
+                    "symbol": sym,
+                    "shares": qty,
+                    "average_price": cost,
+                    "current_price": cur_px,
+                    "market_value": mv,
+                    "unrealized_pnl": pnl_open,
+                    "unrealized_pnl_pct": pnl_open_pct
+                })
+
+        total_mv = round(sum(p["market_value"] for p in clean_positions), 2)
+        margin_debt = round(max(0.0, total_mv - total_equity), 2)
+        total_open_pnl = sum(p["unrealized_pnl"] for p in clean_positions)
+
+        print("\n" + "=" * 96)
+        print("                         CHARLES SCHWAB LIVE ACCOUNT POSITIONS                          ")
+        print("=" * 96)
+        print(f" Connected Account: ***{acct_num[-4:]}  |  Sync Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f" Net Liquidation Value (Equity): ${total_equity:,.2f}")
+        print(f" Gross Long Market Value:       ${total_mv:,.2f} ({(total_mv / max(1.0, total_equity)) * 100:.1f}% gross exposure)")
+        print(f" Borrowed Margin Loan (Debt):   ${margin_debt:,.2f} ({(margin_debt / max(1.0, total_equity)) * 100:.1f}% leverage)")
+        print(f" Total Unrealized P&L:          {'+' if total_open_pnl >= 0 else ''}${total_open_pnl:,.2f}")
+        print("-" * 96)
+        print(f"{'Symbol':<7} {'Shares':>8} {'Avg Cost':>12} {'Current Px':>12} {'Market Value':>14} {'Total P&L ($)':>16} {'Total P&L (%)':>16}")
+        print("-" * 96)
+        for p in clean_positions:
+            sign = "+" if p["unrealized_pnl"] >= 0 else ""
+            print(f"{p['symbol']:<7} {p['shares']:>8.0f} ${p['average_price']:>11.2f} ${p['current_price']:>11.2f} ${p['market_value']:>13.2f} {sign}${p['unrealized_pnl']:>14.2f} {sign}{p['unrealized_pnl_pct']:>14.2f}%")
+        print("-" * 96)
+        print(f" Total: {len(clean_positions)} Position(s) | Gross Value: ${total_mv:,.2f} | Net Equity: ${total_equity:,.2f}")
+        print("=" * 96 + "\n")
+    except Exception as e:
+        print(f"⚠️  Live Schwab API call failed ({e}).")
+        if os.path.exists("schwab_state.json"):
+            print("   Displaying cached positions from local schwab_state.json:\n")
+            with open("schwab_state.json", "r") as f:
+                state = json.load(f)
+            positions = state.get("positions", [])
+            total_equity = float(state.get("total_capital", 0.0))
+            margin_debt = float(state.get("margin_debt", 0.0))
+            acct_num = state.get("account_number", "UNKNOWN")
+            is_sim = state.get("is_simulation", True)
+            print(f" Account: {acct_num} (Mode: {'SIMULATION' if is_sim else 'CACHED LIVE'})")
+            print(f" Net Liquidation Value (Equity): ${total_equity:,.2f}  |  Margin Debt: ${margin_debt:,.2f}")
+            print("-" * 80)
+            print(f"{'Symbol':<8} {'Shares':>10} {'Avg Cost':>14} {'Market Value':>16}")
+            print("-" * 80)
+            total_mv = 0.0
+            for p in positions:
+                sym = p.get("symbol", "")
+                shs = float(p.get("shares", 0.0))
+                cost = float(p.get("average_price", 0.0))
+                mv = float(p.get("market_value", shs * cost))
+                total_mv += mv
+                print(f"{sym:<8} {shs:>10.3f} ${cost:>13.2f} ${mv:>15.2f}")
+            print("-" * 80)
+            print(f"Total Market Value: ${total_mv:,.2f} ({(total_mv / max(1.0, total_equity)) * 100:.1f}% gross exposure)\n")
+        else:
+            sys.exit(1)
+
+
 def cmd_quotes(args):
     """Fetches real-time market quotes for candidate universe + core/defensive assets."""
     symbols_file = args.symbols_file
@@ -794,6 +915,9 @@ def main():
     p_sync.add_argument("--out", type=str, default="schwab_state.json", help="Output state JSON file")
     p_sync.add_argument("--dry_run", type=lambda x: str(x).lower() == "true", default=True, help="Dry run simulation")
 
+    # Subcommand: positions
+    p_pos = subparsers.add_parser("positions", help="Display live holdings, market value & P&L from Schwab")
+
     # Subcommand: quotes
     p_quote = subparsers.add_parser("quotes", help="Fetch real-time quotes")
     p_quote.add_argument("--symbols_file", type=str, default="symbols_broad.txt", help="Universe text file")
@@ -814,6 +938,8 @@ def main():
         sys.exit(cmd_token_check(args))
     elif args.command == "sync":
         cmd_sync(args)
+    elif args.command == "positions":
+        cmd_positions(args)
     elif args.command == "quotes":
         cmd_quotes(args)
     elif args.command == "execute":
