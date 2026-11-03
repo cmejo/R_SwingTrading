@@ -236,10 +236,14 @@ class SchwabTraderAPI:
             with urllib.request.urlopen(req, timeout=15) as r:
                 return r.headers.get("Location", "ORDER_SUBMITTED")
 
-    def get_orders(self, account_hash: str) -> List[Dict[str, Any]]:
+    def get_orders(self, account_hash: str, from_date: str = None, to_date: str = None) -> List[Dict[str, Any]]:
         token = self.get_valid_token()
         headers = {"Authorization": f"Bearer {token}"}
-        url = f"{self.BASE_URL}/accounts/{account_hash}/orders"
+        if not from_date:
+            from_date = (datetime.datetime.utcnow() - datetime.timedelta(days=7)).strftime("%Y-%m-%dT00:00:00.000Z")
+        if not to_date:
+            to_date = (datetime.datetime.utcnow() + datetime.timedelta(days=1)).strftime("%Y-%m-%dT23:59:59.000Z")
+        url = f"{self.BASE_URL}/accounts/{account_hash}/orders?fromEnteredTime={from_date}&toEnteredTime={to_date}"
         if requests:
             resp = requests.get(url, headers=headers, timeout=10)
             if resp.status_code == 200:
@@ -659,6 +663,54 @@ def cmd_positions(args):
             sys.exit(1)
 
 
+def cmd_orders(args):
+    """Fetches and displays recent orders and their fill/canceled/expired status from Schwab."""
+    app_key = os.environ.get("SCHWAB_APP_KEY", "")
+    secret = os.environ.get("SCHWAB_SECRET", "")
+    if not app_key or not secret or not os.path.exists(TOKEN_FILE):
+        print("❌ Error: SCHWAB_APP_KEY, SCHWAB_SECRET and valid token required to fetch order history.")
+        sys.exit(1)
+
+    try:
+        schwab = SchwabTraderAPI(app_key, secret)
+        hashes = schwab.get_account_hashes()
+        if not hashes:
+            raise Exception("No linked Schwab accounts found.")
+        acct_hash = hashes[0]["hashValue"]
+        acct_num = hashes[0]["accountNumber"]
+
+        days = getattr(args, "days", 7)
+        from_dt = (datetime.datetime.utcnow() - datetime.timedelta(days=days)).strftime("%Y-%m-%dT00:00:00.000Z")
+        to_dt = (datetime.datetime.utcnow() + datetime.timedelta(days=1)).strftime("%Y-%m-%dT23:59:59.000Z")
+        orders = schwab.get_orders(acct_hash, from_date=from_dt, to_date=to_dt)
+
+        print("\n" + "=" * 105)
+        print("                         CHARLES SCHWAB RECENT ORDER EXECUTION HISTORY                          ")
+        print("=" * 105)
+        print(f" Connected Account: ***{acct_num[-4:]}  |  Recent Orders Found: {len(orders)} (Past {days} days)")
+        print("-" * 105)
+        print(f"{'Order ID':<14} {'Symbol':<7} {'Side':<6} {'Quantity':>9} {'Type':<8} {'Status':<16} {'Entered Time':<20} {'Status Reason':<20}")
+        print("-" * 105)
+        if not orders:
+            print(" No recent orders found in this timeframe.")
+        else:
+            for o in orders:
+                oid = str(o.get("orderId", ""))
+                legs = o.get("orderLegCollection", [{}])
+                sym = legs[0].get("instrument", {}).get("symbol", "N/A") if legs else "N/A"
+                instruction = legs[0].get("instruction", "N/A") if legs else "N/A"
+                qty = o.get("quantity", legs[0].get("quantity", 0) if legs else 0)
+                otype = o.get("orderType", "MARKET")
+                status = o.get("status", "UNKNOWN")
+                entered = o.get("enteredTime", "")[:19].replace("T", " ")
+                reason = o.get("statusDescription", o.get("rejectReason", ""))
+                print(f"{oid:<14} {sym:<7} {instruction:<6} {qty:>9.0f} {otype:<8} {status:<16} {entered:<20} {reason[:20]:<20}")
+        print("=" * 105 + "\n")
+    except Exception as e:
+        print(f"❌ Error fetching Schwab order history: {e}")
+        sys.exit(1)
+
+
 def cmd_quotes(args):
     """Fetches real-time market quotes for candidate universe + core/defensive assets."""
     symbols_file = args.symbols_file
@@ -794,6 +846,26 @@ def cmd_execute(args):
     acct_num = hashes[0]["accountNumber"]
     print(f"[Execution] Connected to Schwab Account: ***{acct_num[-4:]}")
 
+    # Market Hours Verification for Live Market Orders
+    try:
+        try:
+            from zoneinfo import ZoneInfo
+            now_est = datetime.datetime.now(ZoneInfo("America/New_York"))
+        except Exception:
+            import pytz
+            now_est = datetime.datetime.now(pytz.timezone("America/New_York"))
+        weekday = now_est.weekday()  # 0 = Monday, 4 = Friday
+        time_val = now_est.time()
+        market_open = (weekday < 5) and (datetime.time(9, 30) <= time_val <= datetime.time(16, 0))
+        if not market_open:
+            print("\n🚨 CRITICAL WARNING: US Stock Market is currently CLOSED!")
+            print(f" Current New York Time: {now_est.strftime('%Y-%m-%d %I:%M:%S %p %Z')}")
+            print(" Regular Trading Hours:  Monday - Friday, 9:30 AM - 4:00 PM EST")
+            print(" MARKET orders with DAY duration submitted now will NOT fill and will be canceled/expired by Schwab.")
+            print(" To ensure fills, please execute during regular market hours (9:30 AM - 4:00 PM EST).\n")
+    except Exception:
+        pass
+
     # STEP A: EXECUTE SELLS FIRST
     if sells:
         print(f"\n--- [Phase 1/2] Executing {len(sells)} SELL Order(s) to Release Capital ---")
@@ -918,6 +990,10 @@ def main():
     # Subcommand: positions
     p_pos = subparsers.add_parser("positions", help="Display live holdings, market value & P&L from Schwab")
 
+    # Subcommand: orders
+    p_ord = subparsers.add_parser("orders", help="Display recent order execution history from Schwab")
+    p_ord.add_argument("--days", type=int, default=7, help="Number of past days to query")
+
     # Subcommand: quotes
     p_quote = subparsers.add_parser("quotes", help="Fetch real-time quotes")
     p_quote.add_argument("--symbols_file", type=str, default="symbols_broad.txt", help="Universe text file")
@@ -940,6 +1016,8 @@ def main():
         cmd_sync(args)
     elif args.command == "positions":
         cmd_positions(args)
+    elif args.command == "orders":
+        cmd_orders(args)
     elif args.command == "quotes":
         cmd_quotes(args)
     elif args.command == "execute":
