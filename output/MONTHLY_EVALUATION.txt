@@ -3,40 +3,9 @@
  MONTHLY STRATEGY HEALTH EVALUATION | SNDK (PAST 30 DAYS)
 ========================================================================
 
-[DataLoader] Loaded 436 bars for SNDK [2025-02-13 to 2026-11-06]
+[DataLoader] Loaded 3 bars for SNDK [2026-11-17 to 2026-11-19]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
-[MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.001421, a1=0.0007, b1=0.7435 (pers=0.7442, unc_vol=118.3%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000487, a1=0.7939, b1=0.2039 (pers=0.9978, unc_vol=747.4%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9903, P(2->1)=0.0157 | Steady-State Low/High: 61.9% / 38.1%
-[Pipeline] Complete. Result: 382 valid observation rows across 27 features.
-[LogisticModel] Training set: 347 bars (2025-04-25 to 2026-09-11 | 7-day embargo applied)
-[LogisticModel] Testing set:  30 bars (2026-09-21 to 2026-10-30)
-[LogisticModel] Fitting cv.glmnet with alpha=0.50 (ElasticNet + Purged CV)...
-------------------------------------------------------------------------
- EVALUATION PERIOD: 2026-09-21 to 2026-10-30 (30 Trading Days)
-------------------------------------------------------------------------
-                               Strategy Cumulative_Return Annualized_Return
- ML Swing Strategy (GARCH Vol-Targeted)           -33.84%           -97.24%
-                 Classic MA Trend Cross            -1.51%           -12.42%
-                     Buy & Hold (Close)           -34.85%           -97.59%
- Annualized_Vol Sharpe_Ratio Sortino_Ratio Max_Drawdown Calmar_Ratio Win_Rate
-         67.90%        -4.91         -5.51      -37.34%        -2.60    37.9%
-         28.29%        -0.33         -0.51       -9.23%        -1.35    57.1%
-         73.47%        -4.67         -5.28      -39.01%        -2.50    37.9%
- Profit_Factor
-          0.45
-          0.90
-          0.46
-
-========================================================================
- STRATEGY HEALTH VERDICT: [UNDERPERFORMING (REVIEW SIZING / MARKET REGIME)]
-========================================================================
- X Profit Factor fell below 1.0 over this window. Market may be in prolonged non-trending chop.
- ✓ Maximum Drawdown (-37.34%) remained strictly within normal boundaries.
-========================================================================
-
-null device 
-          1 
-[Chart] Monthly evaluation plot saved to 'output/monthly_review.png'
-
+Error in lmMA(price, n = fast_n) : 
+  Input length (3) is shorter than rolling window n (20)
+Calls: build_feature_dataset -> calculate_dual_lmMA -> lmMA
+Execution halted
