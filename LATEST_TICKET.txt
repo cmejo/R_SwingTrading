@@ -4,57 +4,57 @@
 ========================================================================================
  1. MACRO MARKET & VOLATILITY REGIME GATE (QQQ + VIX DUAL FILTER)
 ========================================================================================
-[DataLoader] Attempting to fetch 'QQQ' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'QQQ' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_qqq.rds
-[DataLoader] Loaded 1733 bars for QQQ [2020-01-02 to 2026-11-23]
-[DataLoader] Attempting to fetch 'SPY' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Loaded 1734 bars for QQQ [2020-01-02 to 2026-11-24]
+[DataLoader] Attempting to fetch 'SPY' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_spy.rds
-[DataLoader] Loaded 1733 bars for SPY [2020-01-02 to 2026-11-23]
-[DataLoader] Attempting to fetch 'GLD' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Loaded 1734 bars for SPY [2020-01-02 to 2026-11-24]
+[DataLoader] Attempting to fetch 'GLD' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_gld.rds
-[DataLoader] Loaded 1733 bars for GLD [2020-01-02 to 2026-11-23]
-[DataLoader] Attempting to fetch 'FNGD' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Loaded 1734 bars for GLD [2020-01-02 to 2026-11-24]
+[DataLoader] Attempting to fetch 'FNGD' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_fngd.rds
-[DataLoader] Loaded 1733 bars for FNGD [2020-01-02 to 2026-11-23]
-[DataLoader] Attempting to fetch 'SQQQ' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Loaded 1734 bars for FNGD [2020-01-02 to 2026-11-24]
+[DataLoader] Attempting to fetch 'SQQQ' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_sqqq.rds
-[DataLoader] Loaded 1733 bars for SQQQ [2020-01-02 to 2026-11-23]
-[DataLoader] Attempting to fetch 'SGOV' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1631 bars from Yahoo Finance.
+[DataLoader] Loaded 1734 bars for SQQQ [2020-01-02 to 2026-11-24]
+[DataLoader] Attempting to fetch 'SGOV' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1632 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_sgov.rds
-[DataLoader] Loaded 1630 bars for SGOV [2020-06-01 to 2026-11-23]
-[DataLoader] Attempting to fetch '^VIX' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1799 bars from Yahoo Finance.
+[DataLoader] Loaded 1631 bars for SGOV [2020-06-01 to 2026-11-24]
+[DataLoader] Attempting to fetch '^VIX' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1800 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data__vix.rds
-[DataLoader] Loaded 1736 bars for ^VIX [2020-01-02 to 2026-11-24]
+[DataLoader] Loaded 1737 bars for ^VIX [2020-01-02 to 2026-11-25]
  Estimating Two-Regime MS-GARCH Market Volatility on SPY...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000002, a1=0.1086, b1=0.8507 (pers=0.9593, unc_vol=10.2%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000072, a1=0.3580, b1=0.6360 (pers=0.9940, unc_vol=173.8%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9058, P(2->1)=0.8171 | Steady-State Low/High: 89.7% / 10.3%
- [Macro Gate Status] DEFENSIVE (Risk-Off) | Volatility Regime: ELEVATED (Caution) | MS-GARCH Market Regime: LOW VOL (51.5% Prob)
-   QQQ Close: $651.03 | 50D lmMA Fit: $661.47 | Slope: -1.972 (Bearish)
-   GLD Gold Close: $333.02 | 50D lmMA Fit: $348.11 | Slope: -1.045 (BEARISH (Downtrend))
-   SPY Benchmark Close: $722.29 | MS-GARCH Ann Vol: 30.4% | P(High Vol Regime): 48.5%
-   CBOE VIX:  26.36   | Volatility Regime: ELEVATED (Caution)
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000002, a1=0.1080, b1=0.8512 (pers=0.9592, unc_vol=10.1%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000072, a1=0.3578, b1=0.6362 (pers=0.9940, unc_vol=173.4%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9052, P(2->1)=0.8207 | Steady-State Low/High: 89.6% / 10.4%
+ [Macro Gate Status] DEFENSIVE (Risk-Off) | Volatility Regime: CRISIS (Extreme Volatility) | MS-GARCH Market Regime: LOW VOL (91.3% Prob)
+   QQQ Close: $638.10 | 50D lmMA Fit: $655.69 | Slope: -2.154 (Bearish)
+   GLD Gold Close: $325.45 | 50D lmMA Fit: $345.18 | Slope: -1.108 (BEARISH (Downtrend))
+   SPY Benchmark Close: $718.78 | MS-GARCH Ann Vol: 38.8% | P(High Vol Regime): 8.7%
+   CBOE VIX:  28.29   | Volatility Regime: CRISIS (Extreme Volatility)
    Market Intraday Breadth (10D): +0.000 | Conviction Sizing Multiplier: 1.00x (Neutral Breadth)
-   -> Dynamic Policy: Max Positions = 2 | Safe f = 0.30 | Min P(Up) >= 65.0% (Asymmetric Hybrid Gate: 60.0% for RS > +5%)
+   -> Dynamic Policy: Max Positions = 1 | Safe f = 0.15 | Min P(Up) >= 68.0% (Asymmetric Hybrid Gate: 60.0% for RS > +5%)
 
 ========================================================================================
  2. SCANNING WATCHLIST (25 ASSETS) WITH WALK-FORWARD RETRAINING
 ========================================================================================
 [Scanning SNDK] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'SMH' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'SMH' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_smh.rds
-[DataLoader] Loaded 1733 bars for SMH [2020-01-02 to 2026-11-23]
-[DataLoader] Attempting to fetch 'SNDK' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 448 bars from Yahoo Finance.
+[DataLoader] Loaded 1734 bars for SMH [2020-01-02 to 2026-11-24]
+[DataLoader] Attempting to fetch 'SNDK' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 449 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_sndk.rds
 [DataLoader] Loaded 445 bars for SNDK [2025-02-13 to 2026-11-19]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
@@ -64,356 +64,357 @@
 [MS-GARCH] Transition Matrix: P(1->1)=0.9466, P(2->1)=0.0389 | Steady-State Low/High: 42.1% / 57.9%
 [Pipeline] Complete. Result: 389 valid observation rows across 27 features.
 [Scanning NVDA] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'NVDA' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'NVDA' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_nvda.rds
-[DataLoader] Loaded 1733 bars for NVDA [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for NVDA [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000482, a1=0.0357, b1=0.0081 (pers=0.0438, unc_vol=35.7%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.001675, a1=0.1200, b1=0.0834 (pers=0.2034, unc_vol=72.8%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9858, P(2->1)=0.0234 | Steady-State Low/High: 62.2% / 37.8%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000482, a1=0.0353, b1=0.0082 (pers=0.0435, unc_vol=35.6%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.001708, a1=0.1169, b1=0.0706 (pers=0.1876, unc_vol=72.8%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9857, P(2->1)=0.0235 | Steady-State Low/High: 62.2% / 37.8%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning AAPL] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'AAPL' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'AAPL' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_aapl.rds
-[DataLoader] Loaded 1733 bars for AAPL [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for AAPL [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000004, a1=0.0409, b1=0.9113 (pers=0.9521, unc_vol=13.9%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000144, a1=0.2414, b1=0.7321 (pers=0.9735, unc_vol=116.8%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.8258, P(2->1)=0.6548 | Steady-State Low/High: 79.0% / 21.0%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000004, a1=0.0410, b1=0.9112 (pers=0.9522, unc_vol=14.0%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000144, a1=0.2418, b1=0.7316 (pers=0.9734, unc_vol=116.9%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.8263, P(2->1)=0.6559 | Steady-State Low/High: 79.1% / 20.9%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning AMD] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'AMD' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'AMD' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_amd.rds
-[DataLoader] Loaded 1733 bars for AMD [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for AMD [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000011, a1=0.0431, b1=0.9126 (pers=0.9557, unc_vol=24.9%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000879, a1=0.3876, b1=0.5830 (pers=0.9706, unc_vol=274.5%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.7329, P(2->1)=0.9508 | Steady-State Low/High: 78.1% / 21.9%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000011, a1=0.0436, b1=0.9122 (pers=0.9558, unc_vol=24.8%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000880, a1=0.3880, b1=0.5825 (pers=0.9705, unc_vol=274.1%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.7330, P(2->1)=0.9522 | Steady-State Low/High: 78.1% / 21.9%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning MSFT] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'MSFT' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'MSFT' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_msft.rds
-[DataLoader] Loaded 1733 bars for MSFT [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for MSFT [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000011, a1=0.0662, b1=0.8589 (pers=0.9251, unc_vol=19.0%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000243, a1=0.2155, b1=0.7681 (pers=0.9836, unc_vol=193.0%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9282, P(2->1)=0.7295 | Steady-State Low/High: 91.0% / 9.0%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000011, a1=0.0659, b1=0.8590 (pers=0.9249, unc_vol=19.0%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000242, a1=0.2153, b1=0.7682 (pers=0.9835, unc_vol=192.1%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9281, P(2->1)=0.7279 | Steady-State Low/High: 91.0% / 9.0%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning TSLA] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'TSLA' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'TSLA' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_tsla.rds
-[DataLoader] Loaded 1733 bars for TSLA [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for TSLA [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000013, a1=0.0271, b1=0.9444 (pers=0.9716, unc_vol=34.1%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000056, a1=0.0163, b1=0.9813 (pers=0.9976, unc_vol=240.2%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.8682, P(2->1)=0.7492 | Steady-State Low/High: 85.0% / 15.0%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000013, a1=0.0268, b1=0.9449 (pers=0.9718, unc_vol=34.0%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000056, a1=0.0163, b1=0.9813 (pers=0.9976, unc_vol=241.4%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.8661, P(2->1)=0.7576 | Steady-State Low/High: 85.0% / 15.0%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning META] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'META' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'META' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_meta.rds
-[DataLoader] Loaded 1733 bars for META [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for META [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000013, a1=0.0255, b1=0.9273 (pers=0.9527, unc_vol=26.4%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.006101, a1=0.8543, b1=0.0036 (pers=0.8579, unc_vol=328.9%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9538, P(2->1)=0.8461 | Steady-State Low/High: 94.8% / 5.2%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Warning: ML fitting failed (non-finite value supplied by optim). Attempting fallback...
+[MS-GARCH] Notice: Utilizing rolling empirical standard deviation fallback.
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning IONQ] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'XLK' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'XLK' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_xlk.rds
-[DataLoader] Loaded 1733 bars for XLK [2020-01-02 to 2026-11-23]
-[DataLoader] Attempting to fetch 'IONQ' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1481 bars from Yahoo Finance.
+[DataLoader] Loaded 1734 bars for XLK [2020-01-02 to 2026-11-24]
+[DataLoader] Attempting to fetch 'IONQ' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1482 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_ionq.rds
-[DataLoader] Loaded 1480 bars for IONQ [2021-01-04 to 2026-11-23]
+[DataLoader] Loaded 1481 bars for IONQ [2021-01-04 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000000, a1=0.1046, b1=0.8814 (pers=0.9859, unc_vol=8.7%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000503, a1=0.0244, b1=0.9571 (pers=0.9815, unc_vol=261.8%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9501, P(2->1)=0.5746 | Steady-State Low/High: 92.0% / 8.0%
-[Pipeline] Complete. Result: 1424 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000000, a1=0.1041, b1=0.8817 (pers=0.9858, unc_vol=8.6%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000502, a1=0.0244, b1=0.9571 (pers=0.9814, unc_vol=261.2%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9501, P(2->1)=0.5732 | Steady-State Low/High: 92.0% / 8.0%
+[Pipeline] Complete. Result: 1425 valid observation rows across 27 features.
 [Scanning MU] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'MU' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'MU' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_mu.rds
-[DataLoader] Loaded 1733 bars for MU [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for MU [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000006, a1=0.0367, b1=0.9446 (pers=0.9813, unc_vol=27.4%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000328, a1=0.1734, b1=0.8132 (pers=0.9866, unc_vol=248.3%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.8946, P(2->1)=0.6327 | Steady-State Low/High: 85.7% / 14.3%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000006, a1=0.0370, b1=0.9444 (pers=0.9814, unc_vol=27.9%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000338, a1=0.1723, b1=0.8140 (pers=0.9863, unc_vol=249.3%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9023, P(2->1)=0.6146 | Steady-State Low/High: 86.3% / 13.7%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning SMH] Fetching data, checking earnings & updating rolling model...
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000011, a1=0.0423, b1=0.9229 (pers=0.9653, unc_vol=28.1%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000190, a1=0.1305, b1=0.8580 (pers=0.9885, unc_vol=203.5%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9829, P(2->1)=0.2000 | Steady-State Low/High: 92.1% / 7.9%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000011, a1=0.0422, b1=0.9230 (pers=0.9653, unc_vol=28.1%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000186, a1=0.1290, b1=0.8595 (pers=0.9885, unc_vol=201.6%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9831, P(2->1)=0.1956 | Steady-State Low/High: 92.0% / 8.0%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning LITE] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'LITE' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'LITE' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_lite.rds
-[DataLoader] Loaded 1733 bars for LITE [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for LITE [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000007, a1=0.0563, b1=0.9179 (pers=0.9741, unc_vol=26.8%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.006896, a1=0.9974, b1=0.0025 (pers=0.9999, unc_vol=13182.9%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9400, P(2->1)=0.9997 | Steady-State Low/High: 94.3% / 5.7%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000007, a1=0.0566, b1=0.9176 (pers=0.9741, unc_vol=26.8%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.006912, a1=0.9985, b1=0.0014 (pers=0.9999, unc_vol=13197.7%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9401, P(2->1)=0.9998 | Steady-State Low/High: 94.3% / 5.7%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning QLD] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'QLD' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'QLD' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_qld.rds
-[DataLoader] Loaded 1733 bars for QLD [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for QLD [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000019, a1=0.0752, b1=0.8851 (pers=0.9602, unc_vol=34.3%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000340, a1=0.1639, b1=0.8337 (pers=0.9977, unc_vol=604.3%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9816, P(2->1)=0.2381 | Steady-State Low/High: 92.8% / 7.2%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000017, a1=0.0590, b1=0.8945 (pers=0.9534, unc_vol=30.4%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000046, a1=0.0543, b1=0.9450 (pers=0.9993, unc_vol=1076.5%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9725, P(2->1)=0.1085 | Steady-State Low/High: 79.8% / 20.2%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning SOXL] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'SOXL' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'SOXL' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_soxl.rds
-[DataLoader] Loaded 1733 bars for SOXL [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for SOXL [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000084, a1=0.0425, b1=0.9260 (pers=0.9685, unc_vol=81.9%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.001195, a1=0.1056, b1=0.8852 (pers=0.9908, unc_vol=573.1%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9813, P(2->1)=0.1616 | Steady-State Low/High: 89.6% / 10.4%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000084, a1=0.0423, b1=0.9261 (pers=0.9684, unc_vol=81.9%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.001196, a1=0.1068, b1=0.8844 (pers=0.9912, unc_vol=585.8%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9814, P(2->1)=0.1581 | Steady-State Low/High: 89.5% / 10.5%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning STX] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'STX' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'STX' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_stx.rds
-[DataLoader] Loaded 1733 bars for STX [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for STX [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000007, a1=0.0442, b1=0.9254 (pers=0.9696, unc_vol=23.6%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.002178, a1=0.8085, b1=0.1845 (pers=0.9930, unc_vol=886.4%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9051, P(2->1)=0.9097 | Steady-State Low/High: 90.6% / 9.4%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000007, a1=0.0447, b1=0.9246 (pers=0.9693, unc_vol=23.7%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.002269, a1=0.8320, b1=0.1606 (pers=0.9925, unc_vol=874.5%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9062, P(2->1)=0.9146 | Steady-State Low/High: 90.7% / 9.3%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning WDC] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'WDC' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'WDC' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_wdc.rds
-[DataLoader] Loaded 1733 bars for WDC [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for WDC [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000011, a1=0.0547, b1=0.9048 (pers=0.9595, unc_vol=26.6%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.001487, a1=0.5156, b1=0.4434 (pers=0.9590, unc_vol=302.2%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.8494, P(2->1)=1.0000 | Steady-State Low/High: 86.9% / 13.1%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000011, a1=0.0550, b1=0.9045 (pers=0.9595, unc_vol=26.6%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.001486, a1=0.5142, b1=0.4445 (pers=0.9586, unc_vol=300.9%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.8499, P(2->1)=1.0000 | Steady-State Low/High: 86.9% / 13.1%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning AVGO] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'AVGO' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'AVGO' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_avgo.rds
-[DataLoader] Loaded 1733 bars for AVGO [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for AVGO [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000011, a1=0.0233, b1=0.9389 (pers=0.9622, unc_vol=27.0%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000058, a1=0.0224, b1=0.9752 (pers=0.9976, unc_vol=246.0%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9715, P(2->1)=0.2464 | Steady-State Low/High: 89.6% / 10.4%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000011, a1=0.0235, b1=0.9387 (pers=0.9622, unc_vol=27.0%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000058, a1=0.0222, b1=0.9754 (pers=0.9976, unc_vol=245.0%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9715, P(2->1)=0.2468 | Steady-State Low/High: 89.6% / 10.4%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning PLTR] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'PLTR' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1546 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'PLTR' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1547 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_pltr.rds
-[DataLoader] Loaded 1545 bars for PLTR [2020-09-30 to 2026-11-23]
+[DataLoader] Loaded 1546 bars for PLTR [2020-09-30 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000029, a1=0.0288, b1=0.9216 (pers=0.9503, unc_vol=38.7%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000925, a1=0.0005, b1=0.8750 (pers=0.8755, unc_vol=136.9%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9155, P(2->1)=0.5798 | Steady-State Low/High: 87.3% / 12.7%
-[Pipeline] Complete. Result: 1489 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000029, a1=0.0290, b1=0.9212 (pers=0.9502, unc_vol=38.6%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000911, a1=0.0003, b1=0.8772 (pers=0.8775, unc_vol=136.9%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9144, P(2->1)=0.5918 | Steady-State Low/High: 87.4% / 12.6%
+[Pipeline] Complete. Result: 1490 valid observation rows across 27 features.
 [Scanning CRWD] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'CRWD' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'CRWD' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_crwd.rds
-[DataLoader] Loaded 1733 bars for CRWD [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for CRWD [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000005, a1=0.0091, b1=0.9769 (pers=0.9860, unc_vol=28.7%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000396, a1=0.0876, b1=0.8469 (pers=0.9345, unc_vol=123.4%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9121, P(2->1)=0.3884 | Steady-State Low/High: 81.5% / 18.5%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000005, a1=0.0091, b1=0.9768 (pers=0.9859, unc_vol=28.7%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000396, a1=0.0883, b1=0.8461 (pers=0.9344, unc_vol=123.4%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9108, P(2->1)=0.3940 | Steady-State Low/High: 81.5% / 18.5%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning PANW] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'PANW' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'PANW' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_panw.rds
-[DataLoader] Loaded 1733 bars for PANW [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for PANW [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000001, a1=0.0046, b1=0.9885 (pers=0.9930, unc_vol=16.5%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000027, a1=0.0062, b1=0.9884 (pers=0.9947, unc_vol=114.0%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9316, P(2->1)=0.3482 | Steady-State Low/High: 83.6% / 16.4%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000067, a1=0.0952, b1=0.6910 (pers=0.7861, unc_vol=28.2%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000520, a1=0.0027, b1=0.8804 (pers=0.8830, unc_vol=105.9%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9167, P(2->1)=0.9557 | Steady-State Low/High: 92.0% / 8.0%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning ANET] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'ANET' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'ANET' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_anet.rds
-[DataLoader] Loaded 1733 bars for ANET [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for ANET [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000005, a1=0.0216, b1=0.9566 (pers=0.9782, unc_vol=24.7%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000891, a1=0.0194, b1=0.8057 (pers=0.8251, unc_vol=113.3%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9377, P(2->1)=0.6615 | Steady-State Low/High: 91.4% / 8.6%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000005, a1=0.0220, b1=0.9558 (pers=0.9779, unc_vol=24.7%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000899, a1=0.0187, b1=0.8040 (pers=0.8228, unc_vol=113.1%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9377, P(2->1)=0.6629 | Steady-State Low/High: 91.4% / 8.6%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning VST] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'XLI' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'XLI' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_xli.rds
-[DataLoader] Loaded 1733 bars for XLI [2020-01-02 to 2026-11-23]
-[DataLoader] Attempting to fetch 'VST' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Loaded 1734 bars for XLI [2020-01-02 to 2026-11-24]
+[DataLoader] Attempting to fetch 'VST' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_vst.rds
-[DataLoader] Loaded 1733 bars for VST [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for VST [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000013, a1=0.0502, b1=0.9100 (pers=0.9602, unc_vol=29.1%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.007387, a1=0.0001, b1=0.0929 (pers=0.0930, unc_vol=143.3%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9705, P(2->1)=0.6385 | Steady-State Low/High: 95.6% / 4.4%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000013, a1=0.0501, b1=0.9101 (pers=0.9602, unc_vol=29.0%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.007429, a1=0.0001, b1=0.0872 (pers=0.0872, unc_vol=143.2%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9704, P(2->1)=0.6388 | Steady-State Low/High: 95.6% / 4.4%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning CEG] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'CEG' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1218 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'CEG' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1219 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_ceg.rds
-[DataLoader] Loaded 1217 bars for CEG [2022-01-19 to 2026-11-23]
+[DataLoader] Loaded 1218 bars for CEG [2022-01-19 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
 [MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000006, a1=0.0254, b1=0.9481 (pers=0.9735, unc_vol=23.6%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000523, a1=0.0906, b1=0.8665 (pers=0.9571, unc_vol=175.4%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9133, P(2->1)=0.8144 | Steady-State Low/High: 90.4% / 9.6%
-[Pipeline] Complete. Result: 1161 valid observation rows across 27 features.
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000520, a1=0.0895, b1=0.8677 (pers=0.9572, unc_vol=175.0%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9134, P(2->1)=0.8158 | Steady-State Low/High: 90.4% / 9.6%
+[Pipeline] Complete. Result: 1162 valid observation rows across 27 features.
 [Scanning GEV] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'GEV' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 669 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'GEV' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 670 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_gev.rds
-[DataLoader] Loaded 668 bars for GEV [2024-03-27 to 2026-11-23]
+[DataLoader] Loaded 669 bars for GEV [2024-03-27 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000234, a1=0.0706, b1=0.5238 (pers=0.5944, unc_vol=38.1%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.002043, a1=0.0001, b1=0.4819 (pers=0.4820, unc_vol=99.7%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.8625, P(2->1)=0.7341 | Steady-State Low/High: 84.2% / 15.8%
-[Pipeline] Complete. Result: 612 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000245, a1=0.0771, b1=0.5010 (pers=0.5781, unc_vol=38.2%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.002009, a1=0.0001, b1=0.4937 (pers=0.4938, unc_vol=100.0%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.8626, P(2->1)=0.7491 | Steady-State Low/High: 84.5% / 15.5%
+[Pipeline] Complete. Result: 613 valid observation rows across 27 features.
 [Scanning VRT] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'VRT' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1734 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'VRT' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1735 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_vrt.rds
-[DataLoader] Loaded 1733 bars for VRT [2020-01-02 to 2026-11-23]
+[DataLoader] Loaded 1734 bars for VRT [2020-01-02 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000005, a1=0.0296, b1=0.9553 (pers=0.9849, unc_vol=30.2%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.001085, a1=0.0002, b1=0.9332 (pers=0.9335, unc_vol=202.7%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9808, P(2->1)=0.5302 | Steady-State Low/High: 96.5% / 3.5%
-[Pipeline] Complete. Result: 1677 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000005, a1=0.0299, b1=0.9549 (pers=0.9849, unc_vol=30.2%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.004417, a1=0.0008, b1=0.7286 (pers=0.7294, unc_vol=202.8%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9807, P(2->1)=0.5338 | Steady-State Low/High: 96.5% / 3.5%
+[Pipeline] Complete. Result: 1678 valid observation rows across 27 features.
 [Scanning CRDO] Fetching data, checking earnings & updating rolling model...
-[DataLoader] Attempting to fetch 'CRDO' from Yahoo Finance (2020-01-01 to 2026-11-25)...
-[DataLoader] Successfully fetched 1212 bars from Yahoo Finance.
+[DataLoader] Attempting to fetch 'CRDO' from Yahoo Finance (2020-01-01 to 2026-11-26)...
+[DataLoader] Successfully fetched 1213 bars from Yahoo Finance.
 [DataLoader] Cached data saved to data/data_crdo.rds
-[DataLoader] Loaded 1211 bars for CRDO [2022-01-27 to 2026-11-23]
+[DataLoader] Loaded 1212 bars for CRDO [2022-01-27 to 2026-11-24]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=7...
 [MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
-[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000198, a1=0.1151, b1=0.7698 (pers=0.8849, unc_vol=65.8%)
-[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.009886, a1=0.0146, b1=0.7938 (pers=0.8084, unc_vol=360.6%)
-[MS-GARCH] Transition Matrix: P(1->1)=0.9811, P(2->1)=0.9990 | Steady-State Low/High: 98.1% / 1.9%
-[Pipeline] Complete. Result: 1155 valid observation rows across 27 features.
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.000021, a1=0.0204, b1=0.9638 (pers=0.9841, unc_vol=57.4%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.010274, a1=0.0120, b1=0.7895 (pers=0.8015, unc_vol=361.2%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9812, P(2->1)=0.9981 | Steady-State Low/High: 98.1% / 1.9%
+[Pipeline] Complete. Result: 1156 valid observation rows across 27 features.
+Warning message:
+In log((x[i, ] - lower)/(upper - x[i, ])) : NaNs produced
 
 ========================================================================================
                MULTI-ASSET SWING TRADING OPPORTUNITY LEADERBOARD
- Macro Gate: DEFENSIVE (Risk-Off) | Max Positions: 2 | Buy Threshold: P(Up) >= 65.0% (Hybrid: 60.0% for RS > +5.0%)
+ Macro Gate: DEFENSIVE (Risk-Off) | Max Positions: 1 | Buy Threshold: P(Up) >= 68.0% (Hybrid: 60.0% for RS > +5.0%)
 ========================================================================================
  Rank Symbol                   Sector   Price  P_Up Score Signal RS_SPY ATR_Ext
-    1   CRWD      Enterprise_Software $208.97 64.8% 0.000   HOLD -14.6%   -0.5x
+    1   CRWD      Enterprise_Software $210.86 63.5% 0.000   HOLD -14.7%   -0.3x
     2   SNDK           Semiconductors  $94.39 61.7% 0.000   HOLD -33.8%   +0.4x
-    3    STX           Semiconductors $520.10 60.8% 0.000   HOLD -13.6%   +1.1x
-    4     MU           Semiconductors $707.70 59.8% 0.000   HOLD -16.1%   +0.9x
-    5   AAPL             MegaCap_Tech $349.08 57.6% 0.000   HOLD  +7.1%   -0.4x
-    6   ANET Cybersecurity_Networking $178.31 56.6% 0.000   HOLD  +6.2%   -0.7x
-    7    VRT             General_Tech $186.35 56.4% 0.000   HOLD  -1.1%   +0.5x
-    8   LITE Cybersecurity_Networking $544.38 55.2% 0.000   HOLD -27.8%   +1.2x
-    9   PANW      Enterprise_Software $353.43 54.2% 0.000   HOLD  -3.9%   +1.6x
-   10    AMD           Semiconductors $453.46 54.0% 0.000   HOLD  -9.0%   -0.6x
-   11    WDC           Semiconductors $297.25 54.0% 0.000   HOLD -10.9%   +1.3x
-   12   NVDA           Semiconductors $165.05 53.6% 0.000   HOLD -18.0%   +2.0x
-   13   SOXL           Semiconductors  $43.21 52.2% 0.000   HOLD -46.6%   +0.7x
-   14   CRDO             General_Tech $122.46 52.0% 0.000   HOLD -13.4%   +0.8x
-   15    SMH           Semiconductors $460.18 50.9% 0.000   HOLD  -9.4%   +0.9x
-   16   TSLA             MegaCap_Tech $385.46 50.2% 0.000   HOLD  +4.1%   +0.8x
-   17    QLD                Index_ETF  $71.91 49.8% 0.000   HOLD -12.7%   +0.5x
-   18    CEG         Power_Industrial $251.72 49.6% 0.000   HOLD  +5.3%   -0.8x
-   19   MSFT             MegaCap_Tech $492.50 49.5% 0.000   HOLD  -1.9%   -0.6x
-   20   PLTR      Enterprise_Software $159.36 49.3% 0.000   HOLD -14.2%   +1.1x
-   21   META             MegaCap_Tech $597.60 49.2% 0.000   HOLD  +0.4%   -0.4x
-   22    GEV         Power_Industrial $756.71 48.2% 0.000   HOLD  -5.9%   +0.4x
-   23   IONQ    Hardware_EmergingTech  $23.34 46.8% 0.000   HOLD -18.5%   -0.4x
-   24   AVGO           Semiconductors $313.55 45.4% 0.000   HOLD  +0.9%   -0.9x
-   25    VST         Power_Industrial $123.87 39.2% 0.000   CASH  -7.0%   +0.3x
+    3    STX           Semiconductors $482.48 60.6% 0.000   HOLD -21.1%   +0.4x
+    4     MU           Semiconductors $629.79 59.6% 0.000   HOLD -25.6%   -0.1x
+    5   AAPL             MegaCap_Tech $354.07 57.4% 0.000   HOLD  +8.6%   +0.1x
+    6   ANET Cybersecurity_Networking $168.56 56.4% 0.000   HOLD  -3.3%   -1.3x
+    7    WDC           Semiconductors $273.95 56.3% 0.000   HOLD -21.5%   +0.5x
+    8    VRT             General_Tech $173.82 56.2% 0.000   HOLD -10.0%   +0.1x
+    9   LITE Cybersecurity_Networking $487.12 55.7% 0.000   HOLD -37.2%   +0.5x
+   10   PANW      Enterprise_Software $352.99 54.4% 0.000   HOLD  -5.5%   +1.2x
+   11   SOXL           Semiconductors  $32.60 54.2% 0.000   HOLD -61.1%   -0.0x
+   12    AMD           Semiconductors $413.27 53.8% 0.000   HOLD -19.6%   -1.2x
+   13   NVDA           Semiconductors $155.38 53.6% 0.000   HOLD -22.1%   +1.3x
+   14   META             MegaCap_Tech $589.82 50.2% 0.000   HOLD  +1.7%   -0.5x
+   15   TSLA             MegaCap_Tech $384.68 50.0% 0.000   HOLD  +1.0%   +0.7x
+   16    CEG         Power_Industrial $244.84 49.4% 0.000   HOLD  +1.2%   -1.0x
+   17   MSFT             MegaCap_Tech $496.13 48.9% 0.000   HOLD  -0.0%   -0.2x
+   18    QLD                Index_ETF  $69.07 48.8% 0.000   HOLD -16.9%   +0.0x
+   19   PLTR      Enterprise_Software $161.18 48.6% 0.000   HOLD -12.3%   +1.2x
+   20    SMH           Semiconductors $426.75 47.3% 0.000   HOLD -16.9%   -0.0x
+   21    GEV         Power_Industrial $720.65 46.8% 0.000   HOLD -12.9%   -0.1x
+   22   IONQ    Hardware_EmergingTech  $22.40 46.6% 0.000   HOLD -25.4%   -0.4x
+   23   AVGO           Semiconductors $301.08 44.0% 0.000   HOLD  -5.4%   -1.3x
+   24    VST         Power_Industrial $120.72 42.0% 0.000   CASH -11.1%   -0.1x
+   25   CRDO             General_Tech $106.46 38.9% 0.000   CASH -29.8%   -0.1x
         Weekly         Earnings               Filter_Note GARCH_Vol P_HighVol
-  -2.8% [BEAR]         None/ETF          Below 65% Cutoff     65.8%     92.2%
- -17.1% [BEAR] 2027-02-15 (82d) BaseRateOnly (0/27 coefs)    116.2%     60.4%
-  -9.4% [BEAR] 2027-01-26 (62d) BaseRateOnly (0/27 coefs)    100.4%     36.3%
-  -7.3% [BEAR] 2026-12-17 (22d) BaseRateOnly (0/27 coefs)    102.3%     84.5%
-  +0.4% [BULL] 2027-01-28 (64d) BaseRateOnly (0/27 coefs)     25.7%     25.1%
-  -2.2% [BEAR] 2027-02-09 (76d) BaseRateOnly (0/27 coefs)     79.6%     37.8%
-  -4.7% [BEAR] 2027-02-10 (77d) BaseRateOnly (0/27 coefs)     91.0%     16.4%
- -12.5% [BEAR] 2027-02-02 (69d)          Below 65% Cutoff    125.5%     18.6%
-  -2.0% [BEAR] 2027-02-16 (83d) BaseRateOnly (0/27 coefs)     70.2%     47.6%
-  -4.9% [BEAR] 2027-02-02 (69d) BaseRateOnly (0/27 coefs)    107.0%     11.8%
-  -6.5% [BEAR] 2027-01-28 (64d)          Below 65% Cutoff     95.1%     34.2%
-  -6.3% [BEAR]         None/ETF BaseRateOnly (0/27 coefs)    106.5%    100.0%
- -34.5% [BEAR]         None/ETF          Below 65% Cutoff    276.8%     80.7%
- -10.9% [BEAR]  2026-12-01 (6d) BaseRateOnly (0/27 coefs)    120.8%     11.4%
-  -4.9% [BEAR]         None/ETF          Below 65% Cutoff     86.6%     99.0%
-  +0.0% [BULL] 2027-01-27 (63d) BaseRateOnly (0/27 coefs)     62.1%     95.9%
-  -5.1% [BEAR]         None/ETF          Below 65% Cutoff     92.5%     75.6%
-  -0.9% [BEAR]         None/ETF BaseRateOnly (0/27 coefs)     56.7%     22.5%
-  -0.6% [BEAR] 2027-01-27 (63d)          Below 65% Cutoff     32.0%      6.4%
-  -3.4% [BEAR] 2027-02-01 (68d)          Below 65% Cutoff     74.1%     95.0%
-  -3.3% [BEAR] 2027-01-27 (63d) BaseRateOnly (0/27 coefs)     59.0%     58.3%
-  -4.2% [BEAR] 2027-01-27 (63d)          Below 65% Cutoff     65.6%     65.3%
- -10.7% [BEAR]         None/ETF BaseRateOnly (0/27 coefs)    120.5%     10.8%
-  -1.7% [BEAR] 2026-12-09 (14d)          Below 65% Cutoff     88.7%     68.3%
-  -2.6% [BEAR]         None/ETF             Bearish Model     67.8%     10.0%
+  -2.7% [BEAR]         None/ETF          Below 68% Cutoff     83.9%     38.4%
+ -17.1% [BEAR] 2027-02-15 (81d) BaseRateOnly (0/27 coefs)    116.2%     60.4%
+ -10.6% [BEAR] 2027-01-26 (61d) BaseRateOnly (0/27 coefs)    108.4%      7.8%
+  -8.9% [BEAR] 2026-12-17 (21d) BaseRateOnly (0/27 coefs)    129.3%     48.8%
+  +0.5% [BULL] 2027-01-28 (63d) BaseRateOnly (0/27 coefs)     26.4%     17.5%
+  -2.7% [BEAR] 2027-02-09 (75d) BaseRateOnly (0/27 coefs)     71.7%     18.7%
+  -7.6% [BEAR] 2027-01-28 (63d)          Below 68% Cutoff    107.8%     10.0%
+  -5.4% [BEAR] 2027-02-10 (76d) BaseRateOnly (0/27 coefs)    101.2%      7.8%
+ -14.6% [BEAR] 2027-02-02 (68d)          Below 68% Cutoff    138.3%      4.7%
+  -2.1% [BEAR] 2027-02-16 (82d) BaseRateOnly (0/27 coefs)     56.3%      4.0%
+ -47.5% [BEAR]         None/ETF BaseRateOnly (0/27 coefs)    318.2%     80.7%
+  -5.9% [BEAR] 2027-02-02 (68d) BaseRateOnly (0/27 coefs)    110.2%     30.7%
+  -7.0% [BEAR]         None/ETF BaseRateOnly (0/27 coefs)    163.5%     97.1%
+  -3.4% [BEAR] 2027-01-27 (62d)          Below 68% Cutoff     47.3%     53.3%
+  +0.0% [BULL] 2027-01-27 (62d) BaseRateOnly (0/27 coefs)     68.3%     14.3%
+  -1.1% [BEAR]         None/ETF BaseRateOnly (0/27 coefs)     58.0%      6.7%
+  -0.6% [BEAR] 2027-01-27 (62d)          Below 68% Cutoff     30.8%      4.3%
+  -5.6% [BEAR]         None/ETF          Below 68% Cutoff     94.1%     81.3%
+  -3.3% [BEAR] 2027-02-01 (67d)          Below 68% Cutoff     95.6%     21.1%
+  -5.7% [BEAR]         None/ETF          Below 68% Cutoff    115.8%     84.8%
+  -4.7% [BEAR] 2027-01-27 (62d)          Below 68% Cutoff     67.2%     22.1%
+ -11.4% [BEAR]         None/ETF BaseRateOnly (0/27 coefs)    130.0%      6.5%
+  -2.0% [BEAR] 2026-12-09 (13d)          Below 68% Cutoff     79.3%     50.2%
+  -2.8% [BEAR]         None/ETF             Bearish Model     71.0%      3.4%
+ -13.3% [BEAR]  2026-12-01 (5d)             Bearish Model    112.3%      2.5%
         Stop_Loss      Take_Profit
-  $191.63 (-8.3%) $234.97 (+12.4%)
+ $188.58 (-10.6%) $244.28 (+15.8%)
   $80.58 (-14.6%) $115.12 (+22.0%)
- $454.31 (-12.6%) $618.78 (+19.0%)
- $616.49 (-12.9%) $844.51 (+19.3%)
-  $337.78 (-3.2%)  $366.03 (+4.9%)
- $160.44 (-10.0%) $205.12 (+15.0%)
- $164.99 (-11.5%) $218.39 (+17.2%)
- $458.30 (-15.8%) $673.49 (+23.7%)
-  $322.15 (-8.9%) $400.35 (+13.3%)
- $392.32 (-13.5%) $545.17 (+20.2%)
- $261.63 (-12.0%) $350.67 (+18.0%)
- $142.91 (-13.4%) $198.26 (+20.1%)
-  $28.14 (-34.9%)  $65.82 (+52.3%)
- $103.83 (-15.2%) $150.41 (+22.8%)
- $409.98 (-10.9%) $535.47 (+16.4%)
-  $355.30 (-7.8%) $430.70 (+11.7%)
-  $63.53 (-11.7%)  $84.49 (+17.5%)
-  $233.74 (-7.1%) $278.69 (+10.7%)
-  $472.67 (-4.0%)  $522.24 (+6.0%)
-  $144.48 (-9.3%) $181.69 (+14.0%)
-  $553.20 (-7.4%) $664.19 (+11.1%)
-  $694.20 (-8.3%) $850.48 (+12.4%)
-  $19.80 (-15.2%)  $28.66 (+22.8%)
- $278.49 (-11.2%) $366.14 (+16.8%)
-  $113.29 (-8.5%) $139.75 (+12.8%)
+ $416.56 (-13.7%) $581.36 (+20.5%)
+ $527.19 (-16.3%) $783.68 (+24.4%)
+  $342.30 (-3.3%)  $371.72 (+5.0%)
+  $153.33 (-9.0%) $191.40 (+13.6%)
+ $236.76 (-13.6%) $329.74 (+20.4%)
+ $151.65 (-12.8%) $207.07 (+19.1%)
+ $402.27 (-17.4%) $614.40 (+26.1%)
+  $327.94 (-7.1%) $390.57 (+10.6%)
+  $19.53 (-40.1%)  $52.21 (+60.1%)
+ $355.89 (-13.9%) $499.34 (+20.8%)
+ $123.38 (-20.6%) $203.38 (+30.9%)
+  $554.70 (-6.0%)  $642.50 (+8.9%)
+  $351.60 (-8.6%) $434.30 (+12.9%)
+  $226.96 (-7.3%) $271.66 (+11.0%)
+  $476.86 (-3.9%)  $525.03 (+5.8%)
+  $60.88 (-11.9%)  $81.35 (+17.8%)
+ $141.77 (-12.0%) $190.29 (+18.1%)
+ $364.46 (-14.6%) $520.18 (+21.9%)
+  $659.60 (-8.5%) $812.22 (+12.7%)
+  $18.73 (-16.4%)  $27.90 (+24.6%)
+ $271.00 (-10.0%) $346.20 (+15.0%)
+  $109.92 (-8.9%) $136.91 (+13.4%)
+  $91.40 (-14.1%) $129.05 (+21.2%)
 
 ========================================================================================
                         MY PORTFOLIO HOLDINGS & CASH MONITOR
@@ -429,21 +430,21 @@
  PEAK EQUITY RECORD:     $10000.00 (Drawdown: -17.70%)
  INVESTED IN SWINGS:     $0.00 (0.0%)
  DEPLOYABLE CASH/HEDGE:  $8230.00 (100.0%)
- AVAILABLE CASH SLOTS:   2 of 2 (Regime Limit: 2)
- ⚠️  [HARD CIRCUIT BREAKER ENGAGED] Account drawdown -17.70% <= -12.0%! Throttling Safe f to 0.14 (45% scale)
+ AVAILABLE CASH SLOTS:   1 of 1 (Regime Limit: 1)
+ ⚠️  [HARD CIRCUIT BREAKER ENGAGED] Account drawdown -17.70% <= -12.0%! Throttling Safe f to 0.07 (45% scale)
  PORTFOLIO HEAT (RISK):  $0.00 of $658.40 max allowed (0.00% of equity, Cap: 8.0%)
 
 ========================================================================================
-              RECOMMENDED ORDERS FOR EMPTY CASH SLOTS (2 AVAILABLE)
+              RECOMMENDED ORDERS FOR EMPTY CASH SLOTS (1 AVAILABLE)
 ========================================================================================
- No unowned symbols currently meet all BUY criteria (P(Up) >= 65.0% [Hybrid RS Leader: 60.0%], Weekly Bullish, RS Leader, Sector Cap).
+ No unowned symbols currently meet all BUY criteria (P(Up) >= 68.0% [Hybrid RS Leader: 60.0%], Weekly Bullish, RS Leader, Sector Cap).
 ----------------------------------------------------------------------------------------
        CORE-SATELLITE CASH ALLOCATION & DEFENSIVE ASSET DEPLOYMENT
 ----------------------------------------------------------------------------------------
  Unallocated Cash:       $8230.00 (100.0% of available capital)
  Macro Gate Status:      DEFENSIVE (Risk-Off) | Fast 20D QQQ Trend Rebounding (Counter-Trend Squeeze Guard -> SGOV)
  🛡️  DEFENSIVE SGOV DEPLOYMENT: 20D QQQ Fast-Trend Counter-Rally Squeeze Guard Active
- Actionable Ticket:      BUY 81.777 shares of SGOV @ ~$100.64 ($8230.04 outlay)
+ Actionable Ticket:      BUY 81.760 shares of SGOV @ ~$100.66 ($8229.96 outlay)
  Strategy Purpose:       Capital preservation in risk-free short-term Treasury yield (SGOV).
                          Eliminates volatility decay and inverse whipsaws while earning risk-free yield.
 ----------------------------------------------------------------------------------------
