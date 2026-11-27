@@ -3,9 +3,43 @@
  MONTHLY STRATEGY HEALTH EVALUATION | SNDK (PAST 30 DAYS)
 ========================================================================
 
-[DataLoader] Loaded 3 bars for SNDK [2026-11-17 to 2026-11-19]
+[DataLoader] Attempting to fetch 'SNDK' from Yahoo Finance (2020-01-01 to 2026-11-27)...
+[DataLoader] Successfully fetched 449 bars from Yahoo Finance.
+[DataLoader] Cached data saved to data/data_sndk.rds
+[DataLoader] Loaded 445 bars for SNDK [2025-02-13 to 2026-11-19]
 [Pipeline] Engineering features with fast_n=20, slow_n=50, look_ahead=5...
-Error in lmMA(price, n = fast_n) : 
-  Input length (3) is shorter than rolling window n (20)
-Calls: build_feature_dataset -> calculate_dual_lmMA -> lmMA
-Execution halted
+[MS-GARCH] Fitting 2-regime Markov-Switching GARCH (sGARCH/norm) via ML...
+[MS-GARCH] Regime 1 (LOW-VOL):  a0=0.001865, a1=0.0057, b1=0.6672 (pers=0.6729, unc_vol=119.9%)
+[MS-GARCH] Regime 2 (HIGH-VOL): a0=0.000504, a1=0.8098, b1=0.1881 (pers=0.9979, unc_vol=781.9%)
+[MS-GARCH] Transition Matrix: P(1->1)=0.9908, P(2->1)=0.0155 | Steady-State Low/High: 62.6% / 37.4%
+[Pipeline] Complete. Result: 391 valid observation rows across 27 features.
+[LogisticModel] Training set: 356 bars (2025-04-25 to 2026-09-24 | 7-day embargo applied)
+[LogisticModel] Testing set:  30 bars (2026-10-02 to 2026-11-12)
+[LogisticModel] Fitting cv.glmnet with alpha=0.50 (ElasticNet + Purged CV)...
+------------------------------------------------------------------------
+ EVALUATION PERIOD: 2026-10-02 to 2026-11-12 (30 Trading Days)
+------------------------------------------------------------------------
+                               Strategy Cumulative_Return Annualized_Return
+ ML Swing Strategy (GARCH Vol-Targeted)           -44.04%           -99.36%
+                 Classic MA Trend Cross            +0.00%            +0.00%
+                     Buy & Hold (Close)           -45.50%           -99.49%
+ Annualized_Vol Sharpe_Ratio Sortino_Ratio Max_Drawdown Calmar_Ratio Win_Rate
+         94.34%        -4.82         -5.37      -49.22%        -2.02    34.5%
+          0.00%         0.00           N/A       -0.00%          N/A     0.0%
+        109.57%        -4.21         -4.80      -52.68%        -1.89    34.5%
+ Profit_Factor
+          0.44
+           N/A
+          0.48
+
+========================================================================
+ STRATEGY HEALTH VERDICT: [UNDERPERFORMING (REVIEW SIZING / MARKET REGIME)]
+========================================================================
+ X Profit Factor fell below 1.0 over this window. Market may be in prolonged non-trending chop.
+ ✓ Maximum Drawdown (-49.22%) remained strictly within normal boundaries.
+========================================================================
+
+null device 
+          1 
+[Chart] Monthly evaluation plot saved to 'output/monthly_review.png'
+
